@@ -13,6 +13,10 @@ services:
   backend:
     image: ${BACKEND_IMAGE:-ghcr.io/v1dr1k/wherefood-backend:latest}
     restart: unless-stopped
+    networks:
+      default:
+        aliases:
+          - wherefood-backend
     environment:
       DATABASE_URL: jdbc:postgresql://postgres:5432/${POSTGRES_DB}
       DATABASE_USER: ${POSTGRES_USER}
