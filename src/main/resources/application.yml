@@ -10,9 +10,3 @@ spring:
   servlet.multipart.max-request-size: 11MB
 app:
   jwt-secret: ${JWT_SECRET:change-this-to-a-32-byte-minimum-production-secret}
-  storage:
-    endpoint: ${S3_ENDPOINT:http://localhost:7480}
-    public-url: ${S3_PUBLIC_URL:http://localhost:7480/wherefood}
-    access-key: ${S3_ACCESS_KEY:wherefood}
-    secret-key: ${S3_SECRET_KEY:wherefood}
-    bucket: ${S3_BUCKET:wherefood}
