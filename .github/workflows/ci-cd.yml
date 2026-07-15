@@ -1,0 +1,27 @@
+name: Backend CI/CD
+on: {push: {branches: [main]}, pull_request: {branches: [main]}}
+permissions: {contents: read, packages: write}
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with: {distribution: temurin, java-version: '21', cache: maven}
+      - run: mvn -B verify
+      - uses: docker/login-action@v3
+        if: github.event_name == 'push'
+        with: {registry: ghcr.io, username: '${{ github.actor }}', password: '${{ secrets.GITHUB_TOKEN }}'}
+      - uses: docker/build-push-action@v6
+        if: github.event_name == 'push'
+        with: {context: ., push: true, tags: 'ghcr.io/${{ github.repository_owner }}/wherefood-backend:latest,ghcr.io/${{ github.repository_owner }}/wherefood-backend:${{ github.sha }}'}
+  deploy:
+    needs: build
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: appleboy/scp-action@v0.1.7
+        with: {host: '${{ secrets.VPS_HOST }}', username: '${{ secrets.VPS_USER }}', key: '${{ secrets.VPS_SSH_KEY }}', source: 'compose.yml', target: '/opt/wherefood'}
+      - uses: appleboy/ssh-action@v1.2.0
+        with: {host: '${{ secrets.VPS_HOST }}', username: '${{ secrets.VPS_USER }}', key: '${{ secrets.VPS_SSH_KEY }}', script: 'cd /opt/wherefood && docker compose pull && docker compose up -d'}

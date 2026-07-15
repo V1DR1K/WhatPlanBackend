@@ -1,0 +1,3 @@
+package com.wherefood.config;
+import com.wherefood.domain.User; import io.jsonwebtoken.*; import io.jsonwebtoken.security.Keys; import org.springframework.beans.factory.annotation.Value; import org.springframework.stereotype.Component; import java.nio.charset.StandardCharsets;
+@Component public class JwtTokens { private final byte[] secret; public JwtTokens(@Value("${app.jwt-secret}")String value){secret=value.getBytes(StandardCharsets.UTF_8);} public String token(User user){return Jwts.builder().subject(user.username).claim("role",user.role.name()).signWith(Keys.hmacShaKeyFor(secret)).compact();} public String username(String token){return Jwts.parser().verifyWith(Keys.hmacShaKeyFor(secret)).build().parseSignedClaims(token).getPayload().getSubject();} }
