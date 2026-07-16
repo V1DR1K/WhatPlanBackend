@@ -16,10 +16,11 @@ public final class Repositories {
  public interface Categories extends JpaRepository<Category, Long> {
   List<Category> findByActiveTrueOrderByName();
  }
+ public interface HighlightTags extends JpaRepository<HighlightTag, Long> { List<HighlightTag> findAllByOrderByNameAsc(); }
 
  public interface Places extends JpaRepository<Place, Long> {
-  @Override @EntityGraph(attributePaths = {"category", "createdBy"}) List<Place> findAll();
-  @EntityGraph(attributePaths = {"category", "createdBy"}) @Query("select p from Place p where p.id=:id") Optional<Place> findDetailedById(@Param("id") Long id);
+  @Override @EntityGraph(attributePaths = {"category", "createdBy", "highlightTags"}) List<Place> findAll();
+  @EntityGraph(attributePaths = {"category", "createdBy", "highlightTags"}) @Query("select p from Place p where p.id=:id") Optional<Place> findDetailedById(@Param("id") Long id);
  }
 
  public interface PlaceMetric {
