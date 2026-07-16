@@ -22,6 +22,7 @@ services:
       DATABASE_USER: ${POSTGRES_USER}
       DATABASE_PASSWORD: ${POSTGRES_PASSWORD}
       JWT_SECRET: ${JWT_SECRET}
+      TMDB_READ_TOKEN: ${TMDB_READ_TOKEN:-}
     depends_on:
       postgres:
         condition: service_healthy
