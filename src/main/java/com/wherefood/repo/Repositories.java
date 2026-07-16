@@ -49,13 +49,21 @@ public final class Repositories {
   @Query("select r.place.id as placeId, avg((r.location + r.heating + r.bathrooms + r.exterior + r.seating + r.service + r.ambiance) / 7.0) as venueAverage from PlaceReview r where r.place.id in :ids group by r.place.id") List<VenueMetric> venueMetrics(@Param("ids") Collection<Long> ids);
  }
 
- public interface PlacePhotos extends JpaRepository<PlacePhoto, Long> {
+  public interface PlacePhotos extends JpaRepository<PlacePhoto, Long> {
   Optional<PlacePhoto> findByPlaceId(Long placeId);
+ }
+
+ public interface FilmPhotos extends JpaRepository<FilmPhoto, Long> {
+  Optional<FilmPhoto> findByFilmId(Long filmId);
  }
 
  public interface WatchPlatforms extends JpaRepository<WatchPlatform, Long> {
   List<WatchPlatform> findByActiveTrueOrderByNameAsc();
   List<WatchPlatform> findAllByOrderByNameAsc();
+ }
+
+ public interface FilmGenreOptions extends JpaRepository<FilmGenreOption, Long> {
+  List<FilmGenreOption> findAllByOrderByNameAsc();
  }
 
  public interface Films extends JpaRepository<Film, Long> {
