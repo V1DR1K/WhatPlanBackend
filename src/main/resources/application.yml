@@ -10,7 +10,4 @@ spring:
   servlet.multipart.max-request-size: 11MB
 management:
   endpoints.web.base-path: /api/actuator
-app:
-  jwt-secret: ${JWT_SECRET:change-this-to-a-32-byte-minimum-production-secret}
-  tmdb:
-    read-token: ${TMDB_READ_TOKEN:}
+app.jwt-secret: ${JWT_SECRET:change-this-to-a-32-byte-minimum-production-secret}

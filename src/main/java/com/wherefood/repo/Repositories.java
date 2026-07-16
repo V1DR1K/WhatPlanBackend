@@ -61,7 +61,6 @@ public final class Repositories {
  public interface Films extends JpaRepository<Film, Long> {
   @Override @EntityGraph(attributePaths = {"platform", "createdBy", "genres"}) List<Film> findAll();
   @EntityGraph(attributePaths = {"platform", "createdBy", "genres"}) @Query("select f from Film f where f.id=:id") Optional<Film> findDetailedById(@Param("id") Long id);
-  Optional<Film> findByTmdbId(Long tmdbId);
  }
 
  public interface FilmReviews extends JpaRepository<FilmReview, Long> {
