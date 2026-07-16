@@ -1,21 +1,26 @@
+name: ta-picks
+
 services:
   frontend:
-    image: ${FRONTEND_IMAGE:-ghcr.io/v1dr1k/wherefood-frontend:latest}
+    image: ${FRONTEND_IMAGE:-ghcr.io/v1dr1k/ta-picks-frontend:latest}
     restart: unless-stopped
     networks:
       default:
       kaza_default:
         aliases:
+          - tapicks-frontend
           - wherefood-frontend
     depends_on:
       backend:
         condition: service_healthy
   backend:
-    image: ${BACKEND_IMAGE:-ghcr.io/v1dr1k/wherefood-backend:latest}
+    image: ${BACKEND_IMAGE:-ghcr.io/v1dr1k/ta-picks-backend:latest}
     restart: unless-stopped
     networks:
       default:
+      kaza_default:
         aliases:
+          - tapicks-backend
           - wherefood-backend
     environment:
       DATABASE_URL: jdbc:postgresql://postgres:5432/${POSTGRES_DB}
@@ -47,6 +52,8 @@ services:
       retries: 10
 volumes:
   postgres_data:
+    external: true
+    name: wherefood_postgres_data
 networks:
   kaza_default:
     external: true

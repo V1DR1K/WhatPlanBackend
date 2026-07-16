@@ -14,7 +14,7 @@ jobs:
         with: {registry: ghcr.io, username: '${{ github.actor }}', password: '${{ secrets.GITHUB_TOKEN }}'}
       - uses: docker/build-push-action@v6
         if: github.event_name == 'push'
-        with: {context: ., push: true, tags: 'ghcr.io/v1dr1k/wherefood-backend:latest,ghcr.io/v1dr1k/wherefood-backend:${{ github.sha }}'}
+        with: {context: ., push: true, tags: 'ghcr.io/v1dr1k/ta-picks-backend:latest,ghcr.io/v1dr1k/ta-picks-backend:${{ github.sha }}'}
   deploy:
     needs: build
     if: github.event_name == 'push'
@@ -22,6 +22,6 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: appleboy/scp-action@v0.1.7
-        with: {host: '${{ secrets.VPS_HOST }}', username: '${{ secrets.VPS_USER }}', key: '${{ secrets.VPS_SSH_KEY }}', source: 'compose.yml', target: '/opt/wherefood'}
+        with: {host: '${{ secrets.VPS_HOST }}', username: '${{ secrets.VPS_USER }}', key: '${{ secrets.VPS_SSH_KEY }}', source: 'compose.yml', target: '/opt/ta-picks'}
       - uses: appleboy/ssh-action@v1.2.0
-        with: {host: '${{ secrets.VPS_HOST }}', username: '${{ secrets.VPS_USER }}', key: '${{ secrets.VPS_SSH_KEY }}', script: 'cd /opt/wherefood && docker compose pull && docker compose up -d'}
+        with: {host: '${{ secrets.VPS_HOST }}', username: '${{ secrets.VPS_USER }}', key: '${{ secrets.VPS_SSH_KEY }}', script: 'docker compose -p wherefood -f /opt/wherefood/compose.yml down --remove-orphans && cd /opt/ta-picks && docker compose -p ta-picks pull && docker compose -p ta-picks up -d --remove-orphans'}
