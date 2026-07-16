@@ -1,26 +1,26 @@
-name: ta-picks
+name: whatplan
 
 services:
   frontend:
-    image: ${FRONTEND_IMAGE:-ghcr.io/v1dr1k/ta-picks-frontend:latest}
+    image: ${FRONTEND_IMAGE:-ghcr.io/v1dr1k/whatplan-frontend:latest}
     restart: unless-stopped
     networks:
       default:
       kaza_default:
         aliases:
-          - tapicks-frontend
+          - whatplan-frontend
           - wherefood-frontend
     depends_on:
       backend:
         condition: service_healthy
   backend:
-    image: ${BACKEND_IMAGE:-ghcr.io/v1dr1k/ta-picks-backend:latest}
+    image: ${BACKEND_IMAGE:-ghcr.io/v1dr1k/whatplan-backend:latest}
     restart: unless-stopped
     networks:
       default:
       kaza_default:
         aliases:
-          - tapicks-backend
+          - whatplan-backend
           - wherefood-backend
     environment:
       DATABASE_URL: jdbc:postgresql://postgres:5432/${POSTGRES_DB}
