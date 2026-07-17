@@ -75,4 +75,14 @@ public final class Repositories {
   public interface FilmReviews extends JpaRepository<FilmReview, Long> {
     @EntityGraph(attributePaths = {"author", "metrics"}) List<FilmReview> findByFilmIdOrderByWatchedOnDescIdDesc(Long filmId);
   }
+
+  public interface HomeRecipes extends JpaRepository<HomeRecipe, Long> {
+    @EntityGraph(attributePaths = {"author", "ingredients"}) List<HomeRecipe> findByHomeOrderByPreparedOnDescIdDesc(Home home);
+    @Override @EntityGraph(attributePaths = {"author", "ingredients"}) Optional<HomeRecipe> findById(Long id);
+  }
+
+  public interface HomeRecipePhotos extends JpaRepository<HomeRecipePhoto, Long> {
+    Optional<HomeRecipePhoto> findByRecipeId(Long recipeId);
+    @EntityGraph(attributePaths = "recipe") List<HomeRecipePhoto> findByRecipeIdIn(Collection<Long> recipeIds);
+  }
 }
