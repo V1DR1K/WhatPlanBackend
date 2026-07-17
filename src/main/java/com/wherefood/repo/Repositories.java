@@ -73,7 +73,7 @@ public final class Repositories {
  }
 
  public interface FilmReviews extends JpaRepository<FilmReview, Long> {
-  @EntityGraph(attributePaths = "author") List<FilmReview> findByFilmIdOrderByAuthorUsername(Long filmId);
+   @EntityGraph(attributePaths = {"author", "metrics"}) List<FilmReview> findByFilmIdOrderByAuthorUsername(Long filmId);
   Optional<FilmReview> findByFilmIdAndAuthorId(Long filmId, Long authorId);
  }
 }
