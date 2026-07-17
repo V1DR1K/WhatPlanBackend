@@ -20,7 +20,7 @@ record HomeRecipeIngredientDto(String name, int grams) {}
 record HomeRecipeDto(Long id, Home home, String name, String recipeUrl, LocalDate preparedOn, MealType mealType, List<HomeRecipeIngredientDto> ingredients, String author, String photoUrl, String thumbnailUrl, Integer photoWidth, Integer photoHeight, Instant createdAt) {}
 
 @RestController
-@RequestMapping("/api/home-recipes")
+@RequestMapping("/api/how-cook")
 public class HomeRecipeApi {
  private final HomeRecipes recipes;
  private final HomeRecipePhotos photos;
@@ -71,7 +71,7 @@ public class HomeRecipeApi {
   for (int index = 0; index < request.ingredients().size(); index++) { HomeRecipeIngredientRequest source = request.ingredients().get(index); HomeRecipeIngredient ingredient = new HomeRecipeIngredient(); ingredient.recipe = recipe; ingredient.name = source.name().trim(); ingredient.grams = source.grams(); ingredient.position = index; recipe.ingredients.add(ingredient); }
  }
  private static HomeRecipeDto recipe(HomeRecipe value, HomeRecipePhoto photo) {
-  return new HomeRecipeDto(value.id, value.home, value.name, value.recipeUrl, value.preparedOn, value.mealType, value.ingredients.stream().map(ingredient -> new HomeRecipeIngredientDto(ingredient.name, ingredient.grams)).toList(), value.author.username, photo == null ? null : "/home-recipes/" + value.id + "/photo", photo == null ? null : "/home-recipes/" + value.id + "/photo?thumbnail=true", photo == null ? null : photo.width, photo == null ? null : photo.height, value.createdAt);
+  return new HomeRecipeDto(value.id, value.home, value.name, value.recipeUrl, value.preparedOn, value.mealType, value.ingredients.stream().map(ingredient -> new HomeRecipeIngredientDto(ingredient.name, ingredient.grams)).toList(), value.author.username, photo == null ? null : "/how-cook/" + value.id + "/photo", photo == null ? null : "/how-cook/" + value.id + "/photo?thumbnail=true", photo == null ? null : photo.width, photo == null ? null : photo.height, value.createdAt);
  }
  private HomeRecipePhoto copyPhoto(HomeRecipe recipe, HomeRecipePhoto source) {
   HomeRecipePhoto copy = new HomeRecipePhoto(); copy.recipe = recipe; copy.imageBase64 = source.imageBase64; copy.thumbnailBase64 = source.thumbnailBase64; copy.width = source.width; copy.height = source.height; copy.createdAt = Instant.now();
