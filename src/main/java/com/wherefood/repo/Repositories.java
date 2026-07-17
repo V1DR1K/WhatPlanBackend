@@ -3,6 +3,7 @@ package com.wherefood.repo;
 import com.wherefood.domain.*;
 import java.time.LocalDate;
 import java.util.*;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.*;
 import org.springframework.data.repository.query.Param;
 
@@ -84,5 +85,36 @@ public final class Repositories {
   public interface HomeRecipePhotos extends JpaRepository<HomeRecipePhoto, Long> {
     Optional<HomeRecipePhoto> findByRecipeId(Long recipeId);
     @EntityGraph(attributePaths = "recipe") List<HomeRecipePhoto> findByRecipeIdIn(Collection<Long> recipeIds);
+  }
+
+  public interface WhyFunCategories extends JpaRepository<WhyFunCategory, Long> {
+   @EntityGraph(attributePaths = "parent") List<WhyFunCategory> findAllByOrderByParentIdAscNameAsc();
+   @EntityGraph(attributePaths = "parent") Optional<WhyFunCategory> findDetailedById(Long id);
+   Optional<WhyFunCategory> findByParentIsNullAndSlug(String slug);
+   Optional<WhyFunCategory> findByParentIdAndSlug(Long parentId, String slug);
+   boolean existsByParentId(Long parentId);
+  }
+
+  public interface WhyFunVenues extends JpaRepository<WhyFunVenue, Long> {
+   @Query("select v from WhyFunVenue v join fetch v.category join fetch v.subcategory join fetch v.createdBy where (:categoryId is null or v.category.id = :categoryId) and (:subcategoryId is null or v.subcategory.id = :subcategoryId) and (:cursor is null or v.id < :cursor) order by v.id desc") List<WhyFunVenue> list(@Param("categoryId") Long categoryId, @Param("subcategoryId") Long subcategoryId, @Param("cursor") Long cursor, Pageable pageable);
+   @EntityGraph(attributePaths = {"category", "subcategory", "createdBy", "schedules"}) @Query("select v from WhyFunVenue v where v.id=:id") Optional<WhyFunVenue> findDetailedById(@Param("id") Long id);
+   long countBySubcategoryId(Long subcategoryId);
+  }
+
+  public interface WhyFunVenuePhotos extends JpaRepository<WhyFunVenuePhoto, Long> {
+   @EntityGraph(attributePaths = "venue") List<WhyFunVenuePhoto> findByVenueIdInOrderByVenueIdAscIdAsc(Collection<Long> venueIds);
+   List<WhyFunVenuePhoto> findByVenueIdOrderByIdAsc(Long venueId);
+   @EntityGraph(attributePaths = {"venue", "venue.createdBy"}) Optional<WhyFunVenuePhoto> findDetailedById(Long id);
+   long countByVenueId(Long venueId);
+  }
+
+  public interface WhyFunReviewSummary {
+   Long getId(); Long getVenueId(); String getAuthor(); Short getRating(); String getComment(); java.time.Instant getUpdatedAt();
+  }
+
+  public interface WhyFunVenueReviews extends JpaRepository<WhyFunVenueReview, Long> {
+   @Query("select r.id as id, r.venue.id as venueId, u.username as author, r.rating as rating, r.comment as comment, r.updatedAt as updatedAt from WhyFunVenueReview r join r.author u where r.venue.id=:venueId order by u.username") List<WhyFunReviewSummary> summariesByVenueId(@Param("venueId") Long venueId);
+   @Query("select r.id as id, r.venue.id as venueId, u.username as author, r.rating as rating, r.comment as comment, r.updatedAt as updatedAt from WhyFunVenueReview r join r.author u where r.venue.id in :venueIds order by r.venue.id asc, u.username") List<WhyFunReviewSummary> summariesByVenueIdIn(@Param("venueIds") Collection<Long> venueIds);
+   @EntityGraph(attributePaths = "author") Optional<WhyFunVenueReview> findByVenueIdAndAuthorId(Long venueId, Long authorId);
   }
 }

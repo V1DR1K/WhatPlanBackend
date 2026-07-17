@@ -41,6 +41,12 @@ public class PhotoStorage {
    photo.recipe = recipe; photo.imageBase64 = data.image(); photo.thumbnailBase64 = data.thumbnail(); photo.width = data.width(); photo.height = data.height(); photo.createdAt = Instant.now();
    return photo;
   }
+  public WhyFunVenuePhoto store(WhyFunVenue venue, MultipartFile upload) throws IOException {
+   ImageData data = imageData(upload);
+   WhyFunVenuePhoto photo = new WhyFunVenuePhoto();
+   photo.venue = venue; photo.imageBase64 = data.image(); photo.thumbnailBase64 = data.thumbnail(); photo.width = data.width(); photo.height = data.height(); photo.createdAt = Instant.now();
+   return photo;
+  }
  private ImageData imageData(MultipartFile upload) throws IOException {
   if (upload.getSize() > 10 * 1024 * 1024) throw new ResponseStatusException(HttpStatus.PAYLOAD_TOO_LARGE, "Máximo 10 MB");
    byte[] source = upload.getBytes();
