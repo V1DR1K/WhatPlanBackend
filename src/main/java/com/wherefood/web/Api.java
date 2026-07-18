@@ -114,14 +114,14 @@ public class Api {
   PlaceVisit visit = active(visits.findDetailedById(id).orElseThrow(() -> notFound("Visita")));
   Item item = new Item(); item.visit = visit; item.createdBy = author; apply(item, new ItemRequest(request.name())); return item(items.save(item));
  }
- @PutMapping("/items/{id}") ItemDto editItem(@PathVariable Long id, @RequestBody @jakarta.validation.Valid ItemRequest request, @AuthenticationPrincipal User author) { Item item = owned(active(items.findById(id).orElseThrow(() -> notFound("Ítem"))), author); apply(item, request); return item(items.save(item)); }
- @DeleteMapping("/items/{id}") @ResponseStatus(HttpStatus.NO_CONTENT) void deleteItem(@PathVariable Long id, @AuthenticationPrincipal User author) { Item item = owned(active(items.findById(id).orElseThrow(() -> notFound("Ítem"))), author); item.deletedAt = Instant.now(); items.save(item); }
+ @PutMapping("/items/{id}") @org.springframework.transaction.annotation.Transactional ItemDto editItem(@PathVariable Long id, @RequestBody @jakarta.validation.Valid ItemRequest request) { Item item = active(items.findById(id).orElseThrow(() -> notFound("Ítem"))); apply(item, request); items.save(item); return item(item); }
+ @DeleteMapping("/items/{id}") @ResponseStatus(HttpStatus.NO_CONTENT) void deleteItem(@PathVariable Long id) { Item item = active(items.findById(id).orElseThrow(() -> notFound("Ítem"))); item.deletedAt = Instant.now(); items.save(item); }
  @PutMapping("/items/{id}/reviews/me") ItemReviewDto saveItemReview(@PathVariable Long id, @RequestBody @jakarta.validation.Valid ItemReviewRequest request, @AuthenticationPrincipal User author) {
   Item item = active(items.findById(id).filter(value -> value.deletedAt == null).orElseThrow(() -> notFound("Ítem")));
   ItemReview review = itemReviews.findByItemIdAndAuthorId(id, author.id).orElseGet(() -> { ItemReview value = new ItemReview(); value.item = item; value.author = author; value.createdAt = Instant.now(); return value; });
   apply(review, request); review.updatedAt = Instant.now(); return itemReview(itemReviews.save(review));
  }
- @PostMapping(value = "/items/{id}/photo", consumes = MediaType.MULTIPART_FORM_DATA_VALUE) @org.springframework.transaction.annotation.Transactional ItemDto upload(@PathVariable Long id, @RequestPart("file") MultipartFile file, @AuthenticationPrincipal User user) throws IOException { Item item = owned(active(items.findById(id).orElseThrow(() -> notFound("Ítem"))), user); photos.findByItemId(id).ifPresent(photos::delete); photos.flush(); ItemPhoto photo = storage.store(item, file); photos.save(photo); return item(item, photo); }
+ @PostMapping(value = "/items/{id}/photo", consumes = MediaType.MULTIPART_FORM_DATA_VALUE) @org.springframework.transaction.annotation.Transactional ItemDto upload(@PathVariable Long id, @RequestPart("file") MultipartFile file) throws IOException { Item item = active(items.findById(id).orElseThrow(() -> notFound("Ítem"))); photos.findByItemId(id).ifPresent(photos::delete); photos.flush(); ItemPhoto photo = storage.store(item, file); photos.save(photo); return item(item, photo); }
 
  private Map<Long, PlaceMetric> metrics(List<Long> ids) { if (ids.isEmpty()) return Map.of(); return items.metrics(ids).stream().collect(java.util.stream.Collectors.toMap(PlaceMetric::getPlaceId, metric -> metric)); }
  private Map<Long, VenueMetric> venueMetrics(List<Long> ids) { if (ids.isEmpty()) return Map.of(); return reviews.venueMetrics(ids).stream().collect(java.util.stream.Collectors.toMap(VenueMetric::getPlaceId, metric -> metric)); }
@@ -160,5 +160,4 @@ public class Api {
  private static Item active(Item item) { active(item.visit.place); return item; }
  private static Place owned(Place place, User user) { if (!place.createdBy.id.equals(user.id)) throw new ResponseStatusException(HttpStatus.FORBIDDEN); return place; }
  private static PlaceVisit owned(PlaceVisit visit, User user) { if (!visit.createdBy.id.equals(user.id)) throw new ResponseStatusException(HttpStatus.FORBIDDEN); return visit; }
- private static Item owned(Item item, User user) { if (!item.createdBy.id.equals(user.id)) throw new ResponseStatusException(HttpStatus.FORBIDDEN); return item; }
 }
