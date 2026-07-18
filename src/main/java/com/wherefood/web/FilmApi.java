@@ -84,8 +84,8 @@ public class FilmApi {
   }
 
   @PutMapping("/films/{filmId}/reviews/{reviewId}") @Transactional FilmReviewDto updateReview(@PathVariable Long filmId, @PathVariable Long reviewId, @RequestBody @Valid FilmReviewRequest request, @AuthenticationPrincipal User author) {
-   FilmReview review = reviews.findById(reviewId).filter(value -> value.film.id.equals(filmId)).orElseThrow(() -> notFound("Reseña"));
-   if (!review.author.id.equals(author.id)) throw new ResponseStatusException(HttpStatus.FORBIDDEN);
+    FilmReview review = reviews.findByIdAndFilmId(reviewId, filmId).orElseThrow(() -> notFound("Reseña"));
+    if (!review.author.id.equals(author.id)) throw new ResponseStatusException(HttpStatus.FORBIDDEN);
    review.rating = request.rating(); review.comment = emptyToNull(request.comment()); review.watchedOn = request.watchedOn() == null ? review.watchedOn : request.watchedOn(); review.metrics.clear(); if (request.metrics() != null) review.metrics.putAll(request.metrics()); review.updatedAt = Instant.now();
    return review(reviews.save(review));
   }

@@ -84,6 +84,7 @@ public final class Repositories {
 
   public interface FilmReviews extends JpaRepository<FilmReview, Long> {
     @EntityGraph(attributePaths = {"author", "metrics"}) List<FilmReview> findByFilmIdOrderByWatchedOnDescIdDesc(Long filmId);
+    @EntityGraph(attributePaths = {"author", "metrics"}) Optional<FilmReview> findByIdAndFilmId(Long id, Long filmId);
   }
 
   public interface HomeRecipes extends JpaRepository<HomeRecipe, Long> {
