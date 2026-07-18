@@ -41,7 +41,7 @@ public final class Repositories {
   public interface Items extends JpaRepository<Item, Long> {
    @Override @EntityGraph(attributePaths = {"createdBy", "visit", "visit.place", "reviews", "reviews.author"}) Optional<Item> findById(Long id);
    @EntityGraph(attributePaths = {"createdBy", "reviews", "reviews.author"}) List<Item> findByVisitIdAndDeletedAtIsNullOrderByIdDesc(Long visitId);
-   @Query("select i.visit.place.id as placeId, count(distinct i) as itemCount, avg(review.taste) as tasteAverage, avg(review.price) as priceAverage from Item i left join i.reviews review where i.visit.place.id in :ids and i.deletedAt is null group by i.visit.place.id") List<PlaceMetric> metrics(@Param("ids") Collection<Long> ids);
+   @Query("select i.visit.place.id as placeId, count(distinct i) as itemCount, coalesce(avg(review.taste), 0.0) as tasteAverage, coalesce(avg(review.price), 0.0) as priceAverage from Item i left join i.reviews review where i.visit.place.id in :ids and i.deletedAt is null group by i.visit.place.id") List<PlaceMetric> metrics(@Param("ids") Collection<Long> ids);
   }
 
   public interface Photos extends JpaRepository<ItemPhoto, Long> {
