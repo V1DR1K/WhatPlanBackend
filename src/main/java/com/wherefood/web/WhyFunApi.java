@@ -183,16 +183,22 @@ public class WhyFunApi {
   }
  }
 
- private static void validateSchedules(List<FunScheduleRequest> values) {
+ static void validateSchedules(List<FunScheduleRequest> values) {
   Map<DayOfWeek, List<FunScheduleRequest>> byDay = values.stream().collect(Collectors.groupingBy(FunScheduleRequest::day));
   for (List<FunScheduleRequest> schedules : byDay.values()) {
    List<FunScheduleRequest> sorted = schedules.stream().sorted(Comparator.comparing(FunScheduleRequest::opensAt)).toList();
    for (int index = 0; index < sorted.size(); index++) {
     FunScheduleRequest current = sorted.get(index);
-    if (!current.opensAt().isBefore(current.closesAt())) throw badRequest("Cada horario debe cerrar después de abrir");
-    if (index > 0 && sorted.get(index - 1).closesAt().isAfter(current.opensAt())) throw badRequest("Los horarios de un mismo día no pueden superponerse");
+    if (current.opensAt().equals(current.closesAt())) throw badRequest("Cada horario debe tener horas de apertura y cierre distintas");
+    if (index > 0 && closesAfter(sorted.get(index - 1)) > current.opensAt().toSecondOfDay()) throw badRequest("Los horarios de un mismo día no pueden superponerse");
    }
   }
+ }
+
+ private static int closesAfter(FunScheduleRequest schedule) {
+  int opensAt = schedule.opensAt().toSecondOfDay();
+  int closesAt = schedule.closesAt().toSecondOfDay();
+  return closesAt > opensAt ? closesAt : closesAt + 86_400;
  }
 
  private static FunCategoryDto category(WhyFunCategory value) { return new FunCategoryDto(value.id, value.parent == null ? null : value.parent.id, value.name, value.slug, value.icon, value.active); }
