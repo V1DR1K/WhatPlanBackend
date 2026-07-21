@@ -84,8 +84,15 @@ public final class Repositories {
  }
 
   public interface FilmReviews extends JpaRepository<FilmReview, Long> {
-    @EntityGraph(attributePaths = {"author", "metrics"}) List<FilmReview> findByFilmIdOrderByWatchedOnDescIdDesc(Long filmId);
-    @EntityGraph(attributePaths = {"author", "metrics"}) Optional<FilmReview> findByIdAndFilmId(Long id, Long filmId);
+    @EntityGraph(attributePaths = {"author", "metrics", "view"}) @Query("select r from FilmReview r where r.film.id=:filmId order by r.view.watchedOn desc, r.id desc") List<FilmReview> findByFilmIdOrderByViewWatchedOnDescIdDesc(@Param("filmId") Long filmId);
+    @EntityGraph(attributePaths = {"author", "metrics", "view"}) Optional<FilmReview> findByIdAndFilmId(Long id, Long filmId);
+    boolean existsByViewIdAndAuthorId(Long viewId, Long authorId);
+  }
+
+  public interface FilmViews extends JpaRepository<FilmView, Long> {
+    List<FilmView> findByFilmIdOrderByWatchedOnDescIdDesc(Long filmId);
+    Optional<FilmView> findByIdAndFilmId(Long id, Long filmId);
+    Optional<FilmView> findByFilmIdAndWatchedOn(Long filmId, LocalDate watchedOn);
   }
 
   public interface HomeRecipes extends JpaRepository<HomeRecipe, Long> {

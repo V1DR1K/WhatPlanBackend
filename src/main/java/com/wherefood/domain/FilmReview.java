@@ -9,6 +9,7 @@ import java.util.*;
 public class FilmReview {
  @Id @GeneratedValue(strategy = GenerationType.IDENTITY) public Long id;
  @ManyToOne(fetch = FetchType.LAZY) @JoinColumn(name = "film_id") public Film film;
+ @ManyToOne(fetch = FetchType.LAZY) @JoinColumn(name = "view_id") public FilmView view;
  @ManyToOne(fetch = FetchType.LAZY) @JoinColumn(name = "author_id") public User author;
  @Column(nullable = false) public short rating;
  public String comment;
@@ -17,7 +18,6 @@ public class FilmReview {
  @MapKeyColumn(name = "metric_key")
  @Column(name = "level", nullable = false)
  public Map<String, Short> metrics = new LinkedHashMap<>();
- public LocalDate watchedOn;
  public Instant createdAt;
  public Instant updatedAt;
 }
