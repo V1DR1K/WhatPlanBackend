@@ -27,6 +27,7 @@ services:
       DATABASE_PASSWORD: ${POSTGRES_PASSWORD}
       SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD}
       JWT_SECRET: ${JWT_SECRET}
+      TMDB_READ_ACCESS_TOKEN: ${TMDB_READ_ACCESS_TOKEN:-}
     depends_on:
       postgres:
         condition: service_healthy

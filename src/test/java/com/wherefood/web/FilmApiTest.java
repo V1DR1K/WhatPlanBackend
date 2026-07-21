@@ -30,7 +30,7 @@ class FilmApiTest {
     when(reviews.findByIdAndFilmId(99L, 42L)).thenReturn(Optional.of(review));
     when(reviews.save(review)).thenReturn(review);
 
-    FilmReviewDto result = new FilmApi(null, reviews, null, null, null, null).updateReview(
+    FilmReviewDto result = new FilmApi(null, reviews, null, null, null, null, null).updateReview(
       42L,
       99L,
       new FilmReviewRequest((short) 5, "Mejor de lo que recordaba", LocalDate.of(2026, 7, 18), Map.of("story", (short) 4)),

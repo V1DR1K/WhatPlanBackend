@@ -8,6 +8,7 @@ import java.util.*;
 @Table(name = "films")
 public class Film {
  @Id @GeneratedValue(strategy = GenerationType.IDENTITY) public Long id;
+ @Column(name = "tmdb_id", unique = true) public Long tmdbId;
  @Column(nullable = false) public String title;
  public String originalTitle;
  @Column(length = 3000) public String synopsis;
