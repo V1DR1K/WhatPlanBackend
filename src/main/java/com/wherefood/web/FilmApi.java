@@ -125,7 +125,7 @@ public class FilmApi {
     List<FilmViewDto> filmViews = views.findByFilmIdOrderByWatchedOnDescWatchedAtDescIdDesc(film.id).stream().map(view -> view(view, reviewsByView.getOrDefault(view.id, List.of()))).toList();
    FilmPhoto photo = filmPhotos.findByFilmId(film.id).orElse(null);
    TmdbMovieDto catalog = catalog(film.tmdbId, detailedTmdb);
-   return new FilmDto(film.id, film.tmdbId, film.title, film.originalTitle, film.synopsis, film.releaseDate, photo == null ? posterUrl(film.posterPath) : photoUrl(film.id, false), photo == null ? null : photoUrl(film.id, true), photo == null ? null : photo.width, photo == null ? null : photo.height, film.genres.stream().map(value -> value.name).sorted(String.CASE_INSENSITIVE_ORDER).toList(), film.platform == null ? null : platform(film.platform), film.watchedCount, film.lastWatchedOn, film.createdBy.username, filmReviews, filmViews, film.createdAt, catalog);
+   return new FilmDto(film.id, film.tmdbId, film.title, film.originalTitle, film.synopsis, film.releaseDate, photo == null ? posterUrl(film.posterPath) : photoUrl(film.id, false, photo.id), photo == null ? null : photoUrl(film.id, true, photo.id), photo == null ? null : photo.width, photo == null ? null : photo.height, film.genres.stream().map(value -> value.name).sorted(String.CASE_INSENSITIVE_ORDER).toList(), film.platform == null ? null : platform(film.platform), film.watchedCount, film.lastWatchedOn, film.createdBy.username, filmReviews, filmViews, film.createdAt, catalog);
   }
   private void apply(Film film, FilmRequest request) {
    if (request.tmdbId() == null) {
@@ -153,7 +153,7 @@ public class FilmApi {
    return catalog != null && catalog.genres().stream().anyMatch(value -> value.equalsIgnoreCase(genre));
   }
   private static String posterUrl(String posterPath) { return posterPath; }
-  private static String photoUrl(Long filmId, boolean thumbnail) { return "/films/" + filmId + "/photo" + (thumbnail ? "?thumbnail=true" : ""); }
+    private static String photoUrl(Long filmId, boolean thumbnail, Long photoId) { return "/films/" + filmId + "/photo?" + (thumbnail ? "thumbnail=true&" : "") + "v=" + photoId; }
   private static String blankToNull(String value) { return value == null || value.isBlank() ? null : value.trim(); }
   private static String emptyToNull(String value) { return value == null || value.isEmpty() ? null : value; }
   private static PlatformDto platform(WatchPlatform value) { return new PlatformDto(value.id, value.name, value.icon, value.active); }

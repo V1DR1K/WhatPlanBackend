@@ -35,6 +35,7 @@ public final class Repositories {
   public interface PlaceVisits extends JpaRepository<PlaceVisit, Long> {
      @EntityGraph(attributePaths = {"place", "createdBy"}) List<PlaceVisit> findByPlaceIdOrderByVisitedOnDescIdDesc(Long placeId);
      @EntityGraph(attributePaths = {"place", "createdBy"}) Optional<PlaceVisit> findByPlaceIdAndVisitedOn(Long placeId, LocalDate visitedOn);
+     boolean existsByPlaceId(Long placeId);
    @EntityGraph(attributePaths = {"place", "createdBy"}) Optional<PlaceVisit> findDetailedById(Long id);
   }
 
@@ -90,8 +91,8 @@ public final class Repositories {
   }
 
   public interface FilmViews extends JpaRepository<FilmView, Long> {
-    List<FilmView> findByFilmIdOrderByWatchedOnDescWatchedAtDescIdDesc(Long filmId);
-    Optional<FilmView> findByIdAndFilmId(Long id, Long filmId);
+    @EntityGraph(attributePaths = "createdBy") List<FilmView> findByFilmIdOrderByWatchedOnDescWatchedAtDescIdDesc(Long filmId);
+    @EntityGraph(attributePaths = "createdBy") Optional<FilmView> findByIdAndFilmId(Long id, Long filmId);
     Optional<FilmView> findByFilmIdAndWatchedOnAndWatchedAt(Long filmId, LocalDate watchedOn, LocalTime watchedAt);
   }
 
