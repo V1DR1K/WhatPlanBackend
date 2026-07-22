@@ -33,8 +33,8 @@ public final class Repositories {
  }
 
   public interface PlaceVisits extends JpaRepository<PlaceVisit, Long> {
-    @EntityGraph(attributePaths = {"place", "createdBy"}) List<PlaceVisit> findByPlaceIdOrderByVisitedOnDescVisitedAtDescIdDesc(Long placeId);
-    @EntityGraph(attributePaths = {"place", "createdBy"}) Optional<PlaceVisit> findByPlaceIdAndVisitedOnAndVisitedAt(Long placeId, LocalDate visitedOn, LocalTime visitedAt);
+     @EntityGraph(attributePaths = {"place", "createdBy"}) List<PlaceVisit> findByPlaceIdOrderByVisitedOnDescIdDesc(Long placeId);
+     @EntityGraph(attributePaths = {"place", "createdBy"}) Optional<PlaceVisit> findByPlaceIdAndVisitedOn(Long placeId, LocalDate visitedOn);
    @EntityGraph(attributePaths = {"place", "createdBy"}) Optional<PlaceVisit> findDetailedById(Long id);
   }
 

@@ -21,7 +21,7 @@ record CategoryDto(Long id, String name, String slug, String icon, boolean activ
 record HighlightTagRequest(@NotBlank String name, @NotBlank String emoji) {}
 record HighlightTagDto(Long id, String name, String emoji) {}
 record PlaceRequest(@NotBlank String name, String address, String sourceUrl, String mapsUrl, @NotNull Long categoryId, List<Long> tagIds) {}
-record VisitRequest(@NotNull LocalDate visitedOn, @NotNull LocalTime visitedAt) {}
+record VisitRequest(@NotNull LocalDate visitedOn) {}
 record ItemRequest(@NotBlank String name) {}
 record ItemReviewRequest(String comment, @Min(1) @Max(5) short taste, @Min(1) @Max(5) short price) {}
 record CreateItemRequest(@NotBlank String name) {}
@@ -29,8 +29,8 @@ record PlaceReviewRequest(String comment, @Min(1) @Max(5) Short location, @Min(1
 record PlaceReviewDto(String author, String comment, Short location, Short heating, Short bathrooms, Short exterior, Short seating, Short service, Short ambiance) {}
 record ItemReviewDto(String author, String comment, short taste, short price, Instant createdAt, Instant updatedAt) {}
 record ItemDto(Long id, String name, String createdBy, String photoUrl, String thumbnailUrl, Integer photoWidth, Integer photoHeight, List<ItemReviewDto> reviews, Instant createdAt) {}
-record PlaceVisitSummaryDto(Long id, LocalDate visitedOn, LocalTime visitedAt, String createdBy, Instant createdAt) {}
-record PlaceVisitDto(Long id, Long placeId, LocalDate visitedOn, LocalTime visitedAt, String createdBy, List<ItemDto> items, Instant createdAt) {}
+record PlaceVisitSummaryDto(Long id, LocalDate visitedOn, String createdBy, Instant createdAt) {}
+record PlaceVisitDto(Long id, Long placeId, LocalDate visitedOn, String createdBy, List<ItemDto> items, Instant createdAt) {}
 record PlaceDto(Long id, String name, String address, String sourceUrl, String mapsUrl, PlaceStatus status, CategoryDto category, List<HighlightTagDto> tags, String author, double rating, double tasteAverage, double priceAverage, double venueAverage, long itemCount, String photoUrl, String thumbnailUrl, Integer photoWidth, Integer photoHeight, List<PlaceReviewDto> reviews, Instant createdAt) {}
 record Slice<T>(List<T> content, Long nextCursor) {}
 
@@ -97,20 +97,20 @@ public class Api {
 
  @GetMapping("/places/{id}/visits") List<PlaceVisitSummaryDto> listVisits(@PathVariable Long id) {
   active(places.findDetailedById(id).orElseThrow(() -> notFound("Lugar")));
-   return visits.findByPlaceIdOrderByVisitedOnDescVisitedAtDescIdDesc(id).stream().map(Api::visitSummary).toList();
+    return visits.findByPlaceIdOrderByVisitedOnDescIdDesc(id).stream().map(Api::visitSummary).toList();
  }
   @PostMapping("/places/{id}/visits") @ResponseStatus(HttpStatus.CREATED) PlaceVisitSummaryDto addVisit(@PathVariable Long id, @RequestBody @jakarta.validation.Valid VisitRequest request, @AuthenticationPrincipal User author) {
    Place place = active(places.findById(id).orElseThrow(() -> notFound("Lugar")));
    validateVisitMoment(request);
-   if (visits.findByPlaceIdAndVisitedOnAndVisitedAt(id, request.visitedOn(), request.visitedAt()).isPresent()) throw new ResponseStatusException(HttpStatus.CONFLICT, "Ya existe una visita para esa fecha y hora");
-   PlaceVisit visit = new PlaceVisit(); visit.place = place; visit.visitedOn = request.visitedOn(); visit.visitedAt = request.visitedAt(); visit.createdBy = author; visit.createdAt = visit.updatedAt = Instant.now(); place.status = PlaceStatus.REVIEWED; places.save(place);
+   if (visits.findByPlaceIdAndVisitedOn(id, request.visitedOn()).isPresent()) throw new ResponseStatusException(HttpStatus.CONFLICT, "Ya existe una visita para esa fecha");
+    PlaceVisit visit = new PlaceVisit(); visit.place = place; visit.visitedOn = request.visitedOn(); visit.createdBy = author; visit.createdAt = visit.updatedAt = Instant.now(); place.status = PlaceStatus.REVIEWED; places.save(place);
    return visitSummary(visits.save(visit));
   }
   @PutMapping("/place-visits/{id}") PlaceVisitSummaryDto editVisit(@PathVariable Long id, @RequestBody @jakarta.validation.Valid VisitRequest request, @AuthenticationPrincipal User author) {
    PlaceVisit visit = owned(active(visits.findDetailedById(id).orElseThrow(() -> notFound("Visita"))), author);
    validateVisitMoment(request);
-   visits.findByPlaceIdAndVisitedOnAndVisitedAt(visit.place.id, request.visitedOn(), request.visitedAt()).filter(other -> !other.id.equals(visit.id)).ifPresent(other -> { throw new ResponseStatusException(HttpStatus.CONFLICT, "Ya existe una visita para esa fecha y hora"); });
-   visit.visitedOn = request.visitedOn(); visit.visitedAt = request.visitedAt(); visit.updatedAt = Instant.now(); return visitSummary(visits.save(visit));
+   visits.findByPlaceIdAndVisitedOn(visit.place.id, request.visitedOn()).filter(other -> !other.id.equals(visit.id)).ifPresent(other -> { throw new ResponseStatusException(HttpStatus.CONFLICT, "Ya existe una visita para esa fecha"); });
+    visit.visitedOn = request.visitedOn(); visit.updatedAt = Instant.now(); return visitSummary(visits.save(visit));
   }
   @DeleteMapping("/place-visits/{id}") @ResponseStatus(HttpStatus.NO_CONTENT) @org.springframework.transaction.annotation.Transactional void deleteVisit(@PathVariable Long id, @AuthenticationPrincipal User author) { visits.delete(owned(active(visits.findDetailedById(id).orElseThrow(() -> notFound("Visita"))), author)); }
  @GetMapping("/place-visits/{id}") PlaceVisitDto getVisit(@PathVariable Long id) { return visit(active(visits.findDetailedById(id).orElseThrow(() -> notFound("Visita")))); }
@@ -150,12 +150,12 @@ public class Api {
   private PlaceVisitDto visit(PlaceVisit visit) {
   List<Item> visitItems = items.findByVisitIdAndDeletedAtIsNullOrderByIdDesc(visit.id);
   Map<Long, ItemPhoto> photoMap = photos.findByItemIdIn(visitItems.stream().map(item -> item.id).toList()).stream().filter(photo -> photo.item != null && photo.item.id != null).collect(java.util.stream.Collectors.toMap(photo -> photo.item.id, photo -> photo, (first, ignored) -> first));
-   return new PlaceVisitDto(visit.id, visit.place.id, visit.visitedOn, visit.visitedAt, visit.createdBy.username, visitItems.stream().map(item -> item(item, photoMap.get(item.id))).toList(), visit.createdAt);
+   return new PlaceVisitDto(visit.id, visit.place.id, visit.visitedOn, visit.createdBy.username, visitItems.stream().map(item -> item(item, photoMap.get(item.id))).toList(), visit.createdAt);
  }
  private ItemDto item(Item item) { return item(item, photos.findByItemId(item.id).orElse(null)); }
   private ItemDto item(Item item, ItemPhoto photo) { return new ItemDto(item.id, item.name, item.createdBy.username, photo == null ? null : itemPhotoUrl(item.id, false), photo == null ? null : itemPhotoUrl(item.id, true), photo == null ? null : photo.width, photo == null ? null : photo.height, item.reviews.stream().sorted(Comparator.comparing(review -> review.author.username)).map(Api::itemReview).toList(), item.createdAt); }
   private static String itemPhotoUrl(Long itemId, boolean thumbnail) { return "/items/" + itemId + "/photo" + (thumbnail ? "?thumbnail=true" : ""); }
-  private static PlaceVisitSummaryDto visitSummary(PlaceVisit visit) { return new PlaceVisitSummaryDto(visit.id, visit.visitedOn, visit.visitedAt, visit.createdBy.username, visit.createdAt); }
+  private static PlaceVisitSummaryDto visitSummary(PlaceVisit visit) { return new PlaceVisitSummaryDto(visit.id, visit.visitedOn, visit.createdBy.username, visit.createdAt); }
  private static ItemReviewDto itemReview(ItemReview review) { return new ItemReviewDto(review.author.username, review.comment, review.taste, review.price, review.createdAt, review.updatedAt); }
  private static PlaceReviewDto review(PlaceReview review) { return new PlaceReviewDto(review.author.username, review.comment, review.location, review.heating, review.bathrooms, review.exterior, review.seating, review.service, review.ambiance); }
  private static CategoryDto category(Category category) { return new CategoryDto(category.id, category.name, category.slug, category.icon, category.active); }

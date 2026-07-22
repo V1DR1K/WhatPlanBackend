@@ -9,7 +9,6 @@ public class PlaceVisit {
  @Id @GeneratedValue(strategy=GenerationType.IDENTITY) public Long id;
  @ManyToOne(fetch=FetchType.LAZY) @JoinColumn(name="place_id", nullable=false) public Place place;
  @Column(name="visited_on", nullable=false) public LocalDate visitedOn;
- @Column(name="visited_at") public LocalTime visitedAt;
  @ManyToOne(fetch=FetchType.LAZY) @JoinColumn(name="created_by", nullable=false) public User createdBy;
  public Instant createdAt;
  public Instant updatedAt;
