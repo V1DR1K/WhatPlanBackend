@@ -107,7 +107,7 @@ public class FilmApi {
 
   @PutMapping("/films/{filmId}/reviews/{reviewId}") @Transactional FilmReviewDto updateReview(@PathVariable Long filmId, @PathVariable Long reviewId, @RequestBody @Valid FilmReviewRequest request, @AuthenticationPrincipal User author) {
     FilmReview review = reviews.findByIdAndFilmId(reviewId, filmId).orElseThrow(() -> notFound("Reseña"));
-    if (!review.author.id.equals(author.id)) throw new ResponseStatusException(HttpStatus.FORBIDDEN);
+    if (author.role != Role.ADMIN && !review.author.id.equals(author.id)) throw new ResponseStatusException(HttpStatus.FORBIDDEN);
   review.rating = request.rating(); review.comment = emptyToNull(request.comment()); review.metrics.clear(); if (request.metrics() != null) review.metrics.putAll(request.metrics()); review.updatedAt = Instant.now();
   return review(reviews.save(review));
  }
@@ -179,7 +179,7 @@ public class FilmApi {
   private static ResponseStatusException notFound(String type) { return new ResponseStatusException(HttpStatus.NOT_FOUND, type + " no encontrada"); }
   private static ResponseStatusException conflict(String detail) { return new ResponseStatusException(HttpStatus.CONFLICT, detail); }
   private void refreshWatchSummary(Film film) { List<FilmView> values = views.findByFilmIdOrderByWatchedOnDescWatchedAtDescIdDesc(film.id); film.watchedCount = values.size(); film.lastWatchedOn = values.isEmpty() ? null : values.getFirst().watchedOn; film.updatedAt = Instant.now(); films.save(film); }
-  private static Film owned(Film film, User user) { if (!film.createdBy.id.equals(user.id)) throw new ResponseStatusException(HttpStatus.FORBIDDEN); return film; }
-  private static FilmView owned(FilmView view, User user) { if (!view.createdBy.id.equals(user.id)) throw new ResponseStatusException(HttpStatus.FORBIDDEN); return view; }
+  private static Film owned(Film film, User user) { if (user.role != Role.ADMIN && !film.createdBy.id.equals(user.id)) throw new ResponseStatusException(HttpStatus.FORBIDDEN); return film; }
+  private static FilmView owned(FilmView view, User user) { if (user.role != Role.ADMIN && !view.createdBy.id.equals(user.id)) throw new ResponseStatusException(HttpStatus.FORBIDDEN); return view; }
   private static void validateViewMoment(FilmViewRequest request) { if (request.watchedOn().isAfter(LocalDate.now())) throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Una vista no puede quedar en el futuro"); }
 }

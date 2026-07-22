@@ -75,6 +75,13 @@ public class HomeRecipeApi {
   return review(reviews.save(review));
  }
 
+ @PutMapping("/{recipeId}/reviews/{reviewId}") @Transactional HomeRecipeReviewDto updateReview(@PathVariable Long recipeId, @PathVariable Long reviewId, @RequestBody @Valid HomeRecipeReviewRequest request, @AuthenticationPrincipal User author) {
+  HomeRecipeReview review = reviews.findById(reviewId).filter(value -> value.recipe.id.equals(recipeId)).orElseThrow(() -> notFound("Reseña"));
+  if (author.role != Role.ADMIN && !review.author.id.equals(author.id)) throw new ResponseStatusException(HttpStatus.FORBIDDEN);
+  review.rating = request.rating(); review.comment = blankToNull(request.comment()); review.updatedAt = Instant.now();
+  return review(reviews.save(review));
+ }
+
  @GetMapping(value = "/{id}/photo", produces = "image/webp") ResponseEntity<byte[]> photo(@PathVariable Long id, @RequestParam(defaultValue = "false") boolean thumbnail) {
   HomeRecipePhoto photo = photos.findByRecipeId(id).orElseThrow(() -> notFound("Foto"));
   return ResponseEntity.ok().cacheControl(CacheControl.maxAge(Duration.ofDays(30)).cachePublic()).contentType(MediaType.valueOf("image/webp")).body(storage.bytes(thumbnail ? photo.thumbnailBase64 : photo.imageBase64));
@@ -109,5 +116,5 @@ public class HomeRecipeApi {
  private static HomeRecipeReviewDto review(HomeRecipeReview value) { return new HomeRecipeReviewDto(value.id, value.author.username, value.rating, value.comment, value.updatedAt); }
   private static ResponseStatusException notFound(String type) { return new ResponseStatusException(HttpStatus.NOT_FOUND, type + " no encontrada"); }
   private static ResponseStatusException conflict(String detail) { return new ResponseStatusException(HttpStatus.CONFLICT, detail); }
-  private static HomeRecipe owned(HomeRecipe recipe, User user) { if (!recipe.author.id.equals(user.id)) throw new ResponseStatusException(HttpStatus.FORBIDDEN); return recipe; }
+ private static HomeRecipe owned(HomeRecipe recipe, User user) { if (user.role != Role.ADMIN && !recipe.author.id.equals(user.id)) throw new ResponseStatusException(HttpStatus.FORBIDDEN); return recipe; }
 }
