@@ -183,20 +183,20 @@ public class Api {
    Map<Long, List<PlaceVisit>> visitsByPlace = allVisits.stream().collect(java.util.stream.Collectors.groupingBy(visit -> visit.place.id, LinkedHashMap::new, java.util.stream.Collectors.toList()));
    List<Long> visitIds = allVisits.stream().map(visit -> visit.id).toList();
    Map<Long, List<PlaceVisitReview>> reviewsByVisit = visitIds.isEmpty() ? Map.of() : visitReviews.findByVisitIdInOrderByVisitIdAscAuthorUsername(visitIds).stream().collect(java.util.stream.Collectors.groupingBy(review -> review.visit.id));
-   Map<Long, List<PlaceReview>> reviewsByPlace = reviews.findByPlaceIdInOrderByPlaceIdAscAuthorUsername(placeIds).stream().collect(java.util.stream.Collectors.groupingBy(review -> review.place.id));
+   Map<Long, List<PlaceReviewDto>> reviewsByPlace = reviews.summariesByPlaceIdIn(placeIds).stream().collect(java.util.stream.Collectors.groupingBy(PlaceReviewSummary::getPlaceId, java.util.stream.Collectors.mapping(Api::review, java.util.stream.Collectors.toList())));
    Map<Long, List<PlaceVisitPhoto>> photosByVisit = visitIds.isEmpty() ? Map.of() : visitPhotos.findByVisitIdInOrderByVisitIdAscPositionAscIdAsc(visitIds).stream().collect(java.util.stream.Collectors.groupingBy(photo -> photo.visit.id));
    Map<Long, PlacePhoto> legacyPhotos = placePhotos.findByPlaceIdIn(placeIds).stream().collect(java.util.stream.Collectors.toMap(photo -> photo.place.id, photo -> photo));
    Map<Long, PlaceSummary> result = new HashMap<>();
    for (Place place : values) {
     List<PlaceVisit> placeVisits = visitsByPlace.getOrDefault(place.id, List.of());
     List<PlaceVisitReview> visitReviewsForPlace = placeVisits.stream().flatMap(visit -> reviewsByVisit.getOrDefault(visit.id, List.of()).stream()).toList();
-    List<PlaceReview> placeReviews = reviewsByPlace.getOrDefault(place.id, List.of());
+    List<PlaceReviewDto> placeReviews = reviewsByPlace.getOrDefault(place.id, List.of());
     PlaceVisitPhoto cover = placeVisits.stream().map(visit -> photosByVisit.getOrDefault(visit.id, List.of()).stream().filter(photo -> photo.id.equals(visit.coverPhotoId)).findFirst().orElseGet(() -> photosByVisit.getOrDefault(visit.id, List.of()).stream().findFirst().orElse(null))).filter(Objects::nonNull).findFirst().orElse(null);
     double rating = visitReviewsForPlace.stream().mapToInt(review -> review.overall).average().orElse(0);
     double taste = visitReviewsForPlace.stream().map(review -> review.taste).filter(Objects::nonNull).mapToInt(Short::intValue).average().orElse(0);
     double price = visitReviewsForPlace.stream().map(review -> review.price).filter(Objects::nonNull).mapToInt(Short::intValue).average().orElse(0);
-    double venue = placeReviews.stream().flatMap(review -> java.util.stream.Stream.of(review.location, review.heating, review.bathrooms, review.exterior, review.seating, review.service, review.ambiance)).filter(Objects::nonNull).mapToInt(Short::intValue).average().orElse(0);
-    result.put(place.id, new PlaceSummary(rating, taste, price, venue, placeVisits.size(), cover, legacyPhotos.get(place.id), placeReviews.stream().map(Api::review).toList()));
+    double venue = placeReviews.stream().flatMap(review -> java.util.stream.Stream.of(review.location(), review.heating(), review.bathrooms(), review.exterior(), review.seating(), review.service(), review.ambiance())).filter(Objects::nonNull).mapToInt(Short::intValue).average().orElse(0);
+    result.put(place.id, new PlaceSummary(rating, taste, price, venue, placeVisits.size(), cover, legacyPhotos.get(place.id), placeReviews));
    }
    return result;
   }
@@ -232,6 +232,7 @@ public class Api {
   private static PlaceVisitPhotoDto visitPhoto(PlaceVisitPhoto photo) { return new PlaceVisitPhotoDto(photo.id, "/place-visit-photos/" + photo.id, "/place-visit-photos/" + photo.id + "?thumbnail=true", photo.width, photo.height, photo.position, photo.createdBy.username, photo.createdAt); }
   private static PlaceVisitReviewDto visitReview(PlaceVisitReview review) { return new PlaceVisitReviewDto(review.id, review.author.username, review.updatedBy.username, review.overall, review.comment, review.taste, review.price, review.createdAt, review.updatedAt); }
   private static PlaceReviewDto review(PlaceReview review) { return new PlaceReviewDto(review.author.username, review.comment, review.location, review.heating, review.bathrooms, review.exterior, review.seating, review.service, review.ambiance); }
+  private static PlaceReviewDto review(PlaceReviewSummary review) { return new PlaceReviewDto(review.getAuthor(), review.getComment(), review.getLocation(), review.getHeating(), review.getBathrooms(), review.getExterior(), review.getSeating(), review.getService(), review.getAmbiance()); }
  private static CategoryDto category(Category category) { return new CategoryDto(category.id, category.name, category.slug, category.icon, category.active); }
  private static HighlightTagDto tag(HighlightTag tag) { return new HighlightTagDto(tag.id, tag.name, tag.emoji); }
  private static void apply(Category category, CategoryRequest request) { category.name = request.name(); category.slug = request.slug(); category.icon = request.icon(); category.active = request.active(); }
