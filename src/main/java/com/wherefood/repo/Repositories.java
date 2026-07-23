@@ -36,6 +36,10 @@ public final class Repositories {
    Long getPlaceId(); String getAuthor(); String getComment(); Short getLocation(); Short getHeating(); Short getBathrooms(); Short getExterior(); Short getSeating(); Short getService(); Short getAmbiance();
   }
 
+  public interface ReviewAuthor {
+   Long getReviewId(); String getAuthor();
+  }
+
     public interface PlaceVisits extends JpaRepository<PlaceVisit, Long> {
        @EntityGraph(attributePaths = {"place", "createdBy", "updatedBy"}) List<PlaceVisit> findByPlaceIdOrderByVisitedOnDescIdDesc(Long placeId);
        @EntityGraph(attributePaths = {"place", "createdBy", "updatedBy"}) List<PlaceVisit> findByPlaceIdInOrderByPlaceIdAscVisitedOnDescIdDesc(Collection<Long> placeIds);
@@ -51,9 +55,10 @@ public final class Repositories {
     long countByVisitId(Long visitId);
    }
 
-    public interface PlaceVisitReviews extends JpaRepository<PlaceVisitReview, Long> {
-     @EntityGraph(attributePaths = {"visit", "visit.place", "author", "updatedBy"}) List<PlaceVisitReview> findByVisitIdOrderByAuthorUsername(Long visitId);
-     @EntityGraph(attributePaths = {"visit", "visit.place", "author", "updatedBy"}) List<PlaceVisitReview> findByVisitIdInOrderByVisitIdAscAuthorUsername(Collection<Long> visitIds);
+   public interface PlaceVisitReviews extends JpaRepository<PlaceVisitReview, Long> {
+    @EntityGraph(attributePaths = {"visit", "visit.place", "author", "updatedBy"}) List<PlaceVisitReview> findByVisitIdOrderByAuthorUsername(Long visitId);
+    @EntityGraph(attributePaths = {"visit", "visit.place", "author", "updatedBy"}) List<PlaceVisitReview> findByVisitIdInOrderByVisitIdAscAuthorUsername(Collection<Long> visitIds);
+    @Query("select r.id as reviewId, author.username as author from PlaceVisitReview r join r.author author where r.visit.id in :visitIds") List<ReviewAuthor> authorsByVisitIdIn(@Param("visitIds") Collection<Long> visitIds);
     @EntityGraph(attributePaths = {"visit", "visit.place", "author", "updatedBy"}) Optional<PlaceVisitReview> findDetailedById(Long id);
     Optional<PlaceVisitReview> findByVisitIdAndAuthorId(Long visitId, Long authorId);
    }
@@ -94,8 +99,9 @@ public final class Repositories {
    List<FilmGenreOption> findAllByNameIn(Collection<String> names);
   }
 
-  public interface ItemReviews extends JpaRepository<ItemReview, Long> {
-   Optional<ItemReview> findByItemIdAndAuthorId(Long itemId, Long authorId);
+   public interface ItemReviews extends JpaRepository<ItemReview, Long> {
+    Optional<ItemReview> findByItemIdAndAuthorId(Long itemId, Long authorId);
+    @Query("select r.id as reviewId, author.username as author from ItemReview r join r.author author where r.item.id in :itemIds") List<ReviewAuthor> authorsByItemIdIn(@Param("itemIds") Collection<Long> itemIds);
   }
 
  public interface Films extends JpaRepository<Film, Long> {
@@ -106,6 +112,7 @@ public final class Repositories {
 
     public interface FilmReviews extends JpaRepository<FilmReview, Long> {
     @EntityGraph(attributePaths = {"author", "metrics", "view"}) @Query("select r from FilmReview r where r.film.id=:filmId order by r.view.watchedOn desc, r.id desc") List<FilmReview> findByFilmIdOrderByViewWatchedOnDescIdDesc(@Param("filmId") Long filmId);
+     @Query("select r.id as reviewId, author.username as author from FilmReview r join r.author author where r.film.id=:filmId") List<ReviewAuthor> authorsByFilmId(@Param("filmId") Long filmId);
      @EntityGraph(attributePaths = {"author", "metrics", "view", "film"}) Optional<FilmReview> findByIdAndFilmId(Long id, Long filmId);
     boolean existsByViewIdAndAuthorId(Long viewId, Long authorId);
   }
@@ -180,6 +187,7 @@ public final class Repositories {
 
    public interface WhyFunVisitReviews extends JpaRepository<WhyFunVisitReview, Long> {
     @EntityGraph(attributePaths = {"author", "updatedBy"}) List<WhyFunVisitReview> findByVisitIdOrderByAuthorUsername(Long visitId);
+    @Query("select r.id as reviewId, author.username as author from WhyFunVisitReview r join r.author author where r.visit.id=:visitId") List<ReviewAuthor> authorsByVisitId(@Param("visitId") Long visitId);
     @EntityGraph(attributePaths = {"visit", "visit.venue", "author", "updatedBy"}) Optional<WhyFunVisitReview> findDetailedById(Long id);
     Optional<WhyFunVisitReview> findByVisitIdAndAuthorId(Long visitId, Long authorId);
    }
@@ -203,6 +211,7 @@ public final class Repositories {
 
    public interface CookingReviews extends JpaRepository<CookingReview, Long> {
     @EntityGraph(attributePaths = {"author", "updatedBy"}) List<CookingReview> findByCookingIdOrderByAuthorUsername(Long cookingId);
+    @Query("select r.id as reviewId, author.username as author from CookingReview r join r.author author where r.cooking.id=:cookingId") List<ReviewAuthor> authorsByCookingId(@Param("cookingId") Long cookingId);
     @EntityGraph(attributePaths = {"cooking", "cooking.recipe", "author", "updatedBy"}) Optional<CookingReview> findDetailedById(Long id);
     Optional<CookingReview> findByCookingIdAndAuthorId(Long cookingId, Long authorId);
    }

@@ -98,14 +98,17 @@ public class HomeRecipeApi {
  }
  private static void apply(Cooking cooking, CookingRequest request) { cooking.home = request.home(); cooking.servings = request.servings(); cooking.cookedOn = request.cookedOn(); cooking.mealType = request.mealType(); }
  private CookingDto cooking(Cooking value) {
-  return new CookingDto(value.id, recipe(value.recipe), value.home, value.servings, value.cookedOn, value.mealType, value.createdBy.username, value.updatedBy.username, reviews.findByCookingIdOrderByAuthorUsername(value.id).stream().map(HomeRecipeApi::review).toList(), value.createdAt, value.updatedAt);
+  List<CookingReview> reviewValues = reviews.findByCookingIdOrderByAuthorUsername(value.id);
+  Map<Long, String> reviewAuthors = reviews.authorsByCookingId(value.id).stream().collect(java.util.stream.Collectors.toMap(ReviewAuthor::getReviewId, ReviewAuthor::getAuthor));
+  return new CookingDto(value.id, recipe(value.recipe), value.home, value.servings, value.cookedOn, value.mealType, value.createdBy.username, value.updatedBy.username, reviewValues.stream().map(review -> review(review, reviewAuthors.get(review.id))).toList(), value.createdAt, value.updatedAt);
  }
  private RecipeDto recipe(Recipe value) {
   RecipePhoto photo = recipePhotos.findByRecipeId(value.id).orElse(null);
   return new RecipeDto(value.id, value.name, value.sourceUrl, photo == null ? null : recipePhotoUrl(value.id, false, photo.id), photo == null ? null : recipePhotoUrl(value.id, true, photo.id), photo == null ? null : Integer.valueOf(photo.width), photo == null ? null : Integer.valueOf(photo.height), value.ingredients.stream().map(ingredient -> new RecipeIngredientDto(ingredient.name, ingredient.quantity, ingredient.unit)).toList(), value.steps.stream().map(step -> new RecipeStepDto(step.instruction)).toList(), value.createdBy.username, value.updatedBy.username, value.createdAt, value.updatedAt);
  }
  private static String recipePhotoUrl(Long recipeId, boolean thumbnail, Long photoId) { return "/how-cook/recipes/" + recipeId + "/photo?" + (thumbnail ? "thumbnail=true&" : "") + "v=" + photoId; }
- private static CookingReviewDto review(CookingReview value) { return new CookingReviewDto(value.id, value.author.username, value.updatedBy.username, value.rating, value.comment, value.createdAt, value.updatedAt); }
+ private static CookingReviewDto review(CookingReview value) { return review(value, value.author.username); }
+ private static CookingReviewDto review(CookingReview value, String author) { return new CookingReviewDto(value.id, author, value.updatedBy.username, value.rating, value.comment, value.createdAt, value.updatedAt); }
  private static void apply(CookingReview review, CookingReviewRequest request) { review.rating = request.rating(); review.comment = blankToNull(request.comment()); }
  private static void validateCookingDate(CookingRequest request) { if (request.cookedOn().isAfter(RosarioClock.today())) throw badRequest("Una preparación no puede quedar en el futuro"); }
  private static String blankToNull(String value) { return value == null || value.isBlank() ? null : value.trim(); }

@@ -218,19 +218,26 @@ public class Api {
   private PlaceVisitDto visit(PlaceVisit visit) { return visit(visit, visitPhotos.findByVisitIdOrderByPositionAscIdAsc(visit.id)); }
   private PlaceVisitDto visit(PlaceVisit visit, List<PlaceVisitPhoto> currentPhotos) {
    List<Item> visitItems = items.findByVisitIdAndDeletedAtIsNullOrderByIdDesc(visit.id);
+   List<Long> itemIds = visitItems.stream().map(item -> item.id).toList();
+   Map<Long, String> itemReviewAuthors = itemIds.isEmpty() ? Map.of() : itemReviews.authorsByItemIdIn(itemIds).stream().collect(java.util.stream.Collectors.toMap(ReviewAuthor::getReviewId, ReviewAuthor::getAuthor));
    Map<Long, ItemPhoto> photoMap = photos.findByItemIdIn(visitItems.stream().map(item -> item.id).toList()).stream().filter(photo -> photo.item != null && photo.item.id != null).collect(java.util.stream.Collectors.toMap(photo -> photo.item.id, photo -> photo, (first, ignored) -> first));
    List<PlaceVisitPhotoDto> resultPhotos = currentPhotos.stream().map(Api::visitPhoto).toList();
    PlaceVisitPhotoDto cover = resultPhotos.stream().filter(photo -> photo.id().equals(visit.coverPhotoId)).findFirst().orElse(resultPhotos.isEmpty() ? null : resultPhotos.getFirst());
-   List<PlaceVisitReviewDto> currentReviews = visitReviews.findByVisitIdOrderByAuthorUsername(visit.id).stream().map(Api::visitReview).toList();
-    return new PlaceVisitDto(visit.id, visit.place.id, visit.visitedOn, visit.createdBy.username, visitItems.stream().map(item -> item(item, photoMap.get(item.id))).toList(), resultPhotos, cover, currentReviews, visit.updatedBy.username, visit.createdAt, visit.updatedAt);
+   List<PlaceVisitReview> reviewValues = visitReviews.findByVisitIdOrderByAuthorUsername(visit.id);
+   Map<Long, String> reviewAuthors = visitReviews.authorsByVisitIdIn(List.of(visit.id)).stream().collect(java.util.stream.Collectors.toMap(ReviewAuthor::getReviewId, ReviewAuthor::getAuthor));
+   List<PlaceVisitReviewDto> currentReviews = reviewValues.stream().map(review -> visitReview(review, reviewAuthors.get(review.id))).toList();
+    return new PlaceVisitDto(visit.id, visit.place.id, visit.visitedOn, visit.createdBy.username, visitItems.stream().map(item -> item(item, photoMap.get(item.id), itemReviewAuthors)).toList(), resultPhotos, cover, currentReviews, visit.updatedBy.username, visit.createdAt, visit.updatedAt);
   }
  private ItemDto item(Item item) { return item(item, photos.findByItemId(item.id).orElse(null)); }
-   private ItemDto item(Item item, ItemPhoto photo) { return new ItemDto(item.id, item.name, item.createdBy.username, photo == null ? null : itemPhotoUrl(item.id, false, photo.id), photo == null ? null : itemPhotoUrl(item.id, true, photo.id), photo == null ? null : Integer.valueOf(photo.width), photo == null ? null : Integer.valueOf(photo.height), item.reviews.stream().sorted(Comparator.comparing(review -> review.author.username)).map(Api::itemReview).toList(), item.createdAt); }
+ private ItemDto item(Item item, ItemPhoto photo) { return item(item, photo, itemReviews.authorsByItemIdIn(List.of(item.id)).stream().collect(java.util.stream.Collectors.toMap(ReviewAuthor::getReviewId, ReviewAuthor::getAuthor))); }
+ private ItemDto item(Item item, ItemPhoto photo, Map<Long, String> reviewAuthors) { return new ItemDto(item.id, item.name, item.createdBy.username, photo == null ? null : itemPhotoUrl(item.id, false, photo.id), photo == null ? null : itemPhotoUrl(item.id, true, photo.id), photo == null ? null : Integer.valueOf(photo.width), photo == null ? null : Integer.valueOf(photo.height), item.reviews.stream().sorted(Comparator.comparing(review -> reviewAuthors.get(review.id), Comparator.nullsLast(String.CASE_INSENSITIVE_ORDER))).map(review -> itemReview(review, reviewAuthors.get(review.id))).toList(), item.createdAt); }
   private static String itemPhotoUrl(Long itemId, boolean thumbnail, Long photoId) { return "/items/" + itemId + "/photo?" + (thumbnail ? "thumbnail=true&" : "") + "v=" + photoId; }
   private static PlaceVisitSummaryDto visitSummary(PlaceVisit visit) { return new PlaceVisitSummaryDto(visit.id, visit.visitedOn, visit.createdBy.username, visit.createdAt); }
-  private static ItemReviewDto itemReview(ItemReview review) { return new ItemReviewDto(review.author.username, review.comment, review.taste, review.price, review.createdAt, review.updatedAt); }
+  private static ItemReviewDto itemReview(ItemReview review) { return itemReview(review, review.author.username); }
+  private static ItemReviewDto itemReview(ItemReview review, String author) { return new ItemReviewDto(author, review.comment, review.taste, review.price, review.createdAt, review.updatedAt); }
   private static PlaceVisitPhotoDto visitPhoto(PlaceVisitPhoto photo) { return new PlaceVisitPhotoDto(photo.id, "/place-visit-photos/" + photo.id, "/place-visit-photos/" + photo.id + "?thumbnail=true", photo.width, photo.height, photo.position, photo.createdBy.username, photo.createdAt); }
-  private static PlaceVisitReviewDto visitReview(PlaceVisitReview review) { return new PlaceVisitReviewDto(review.id, review.author.username, review.updatedBy.username, review.overall, review.comment, review.taste, review.price, review.createdAt, review.updatedAt); }
+  private static PlaceVisitReviewDto visitReview(PlaceVisitReview review) { return visitReview(review, review.author.username); }
+  private static PlaceVisitReviewDto visitReview(PlaceVisitReview review, String author) { return new PlaceVisitReviewDto(review.id, author, review.updatedBy.username, review.overall, review.comment, review.taste, review.price, review.createdAt, review.updatedAt); }
   private static PlaceReviewDto review(PlaceReview review) { return new PlaceReviewDto(review.author.username, review.comment, review.location, review.heating, review.bathrooms, review.exterior, review.seating, review.service, review.ambiance); }
   private static PlaceReviewDto review(PlaceReviewSummary review) { return new PlaceReviewDto(review.getAuthor(), review.getComment(), review.getLocation(), review.getHeating(), review.getBathrooms(), review.getExterior(), review.getSeating(), review.getService(), review.getAmbiance()); }
  private static CategoryDto category(Category category) { return new CategoryDto(category.id, category.name, category.slug, category.icon, category.active); }
