@@ -60,9 +60,11 @@ public class Api {
  @GetMapping("/categories/all") @PreAuthorize("hasRole('ADMIN')") List<CategoryDto> allCategories() { return categories.findAll().stream().map(Api::category).toList(); }
  @PostMapping("/categories") @PreAuthorize("hasRole('ADMIN')") CategoryDto addCategory(@RequestBody @jakarta.validation.Valid CategoryRequest request) { Category category = new Category(); apply(category, request); category.createdAt = Instant.now(); return category(categories.save(category)); }
  @PutMapping("/categories/{id}") @PreAuthorize("hasRole('ADMIN')") CategoryDto updateCategory(@PathVariable Long id, @RequestBody @jakarta.validation.Valid CategoryRequest request) { Category category = categories.findById(id).orElseThrow(() -> notFound("Categoría")); apply(category, request); return category(categories.save(category)); }
+ @DeleteMapping("/categories/{id}") @PreAuthorize("hasRole('ADMIN')") @ResponseStatus(HttpStatus.NO_CONTENT) void deleteCategory(@PathVariable Long id) { Category category = categories.findById(id).orElseThrow(() -> notFound("Categoría")); if (places.existsByCategoryId(id)) throw conflict("No podés borrar un rubro que tiene lugares asociados"); categories.delete(category); }
  @GetMapping("/highlight-tags") List<HighlightTagDto> tags() { return highlightTags.findAllByOrderByNameAsc().stream().map(Api::tag).toList(); }
  @PostMapping("/highlight-tags") @PreAuthorize("hasRole('ADMIN')") HighlightTagDto addTag(@RequestBody @jakarta.validation.Valid HighlightTagRequest request) { HighlightTag tag = new HighlightTag(); apply(tag, request); return tag(highlightTags.save(tag)); }
  @PutMapping("/highlight-tags/{id}") @PreAuthorize("hasRole('ADMIN')") HighlightTagDto updateTag(@PathVariable Long id, @RequestBody @jakarta.validation.Valid HighlightTagRequest request) { HighlightTag tag = highlightTags.findById(id).orElseThrow(() -> notFound("Etiqueta")); apply(tag, request); return tag(highlightTags.save(tag)); }
+ @DeleteMapping("/highlight-tags/{id}") @PreAuthorize("hasRole('ADMIN')") @ResponseStatus(HttpStatus.NO_CONTENT) void deleteTag(@PathVariable Long id) { HighlightTag tag = highlightTags.findById(id).orElseThrow(() -> notFound("Etiqueta")); if (places.existsByHighlightTagsId(id)) throw conflict("No podés borrar una etiqueta asignada a lugares"); highlightTags.delete(tag); }
 
  @GetMapping("/places") Slice<PlaceDto> list(@RequestParam(required = false) Long categoryId, @RequestParam(required = false) Long highlightTagId, @RequestParam(required = false) PlaceStatus status, @RequestParam(required = false) String search, @RequestParam(required = false) String sort, @RequestParam(required = false) Long cursor, @RequestParam(defaultValue = "12") int size) {
    int limit = Math.max(1, Math.min(size, 30));
@@ -261,4 +263,5 @@ public class Api {
   private static PlaceVisit active(PlaceVisit visit) { active(visit.place); return visit; }
   private static Item active(Item item) { active(item.visit.place); return item; }
    private static void validateVisitMoment(VisitRequest request) { if (request.visitedOn().isAfter(RosarioClock.today())) throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Una visita no puede quedar en el futuro"); }
+  private static ResponseStatusException conflict(String detail) { return new ResponseStatusException(HttpStatus.CONFLICT, detail); }
 }

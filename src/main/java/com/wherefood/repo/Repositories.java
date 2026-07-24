@@ -26,6 +26,8 @@ public final class Repositories {
   public interface Places extends JpaRepository<Place, Long> {
   @Override @EntityGraph(attributePaths = {"category", "createdBy", "highlightTags"}) List<Place> findAll();
   @EntityGraph(attributePaths = {"category", "createdBy", "highlightTags"}) @Query("select p from Place p where p.id=:id") Optional<Place> findDetailedById(@Param("id") Long id);
+  boolean existsByCategoryId(Long categoryId);
+  boolean existsByHighlightTagsId(Long tagId);
  }
 
  public interface PlaceMetric {
@@ -119,6 +121,7 @@ public final class Repositories {
   @Override @EntityGraph(attributePaths = {"platform", "createdBy", "genres"}) List<Film> findAll();
   @EntityGraph(attributePaths = {"platform", "createdBy", "genres"}) @Query("select f from Film f where f.id=:id") Optional<Film> findDetailedById(@Param("id") Long id);
   Optional<Film> findByTmdbId(Long tmdbId);
+  boolean existsByPlatformId(Long platformId);
   }
 
   public interface FilmRating { Long getFilmId(); Double getRating(); }
@@ -167,6 +170,7 @@ public final class Repositories {
    @Query("select v from WhyFunVenue v join fetch v.category join fetch v.subcategory join fetch v.createdBy where (:categoryId is null or v.category.id = :categoryId) and (:subcategoryId is null or v.subcategory.id = :subcategoryId) and (:cursor is null or v.id < :cursor) order by v.id desc") List<WhyFunVenue> list(@Param("categoryId") Long categoryId, @Param("subcategoryId") Long subcategoryId, @Param("cursor") Long cursor, Pageable pageable);
     @EntityGraph(attributePaths = {"category", "subcategory", "createdBy"}) @Query("select v from WhyFunVenue v where v.id=:id") Optional<WhyFunVenue> findDetailedById(@Param("id") Long id);
    long countBySubcategoryId(Long subcategoryId);
+   boolean existsByCategoryIdOrSubcategoryId(Long categoryId, Long subcategoryId);
   }
 
      public interface WhyFunVenuePhotos extends JpaRepository<WhyFunVenuePhoto, Long> {
