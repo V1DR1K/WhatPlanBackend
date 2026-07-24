@@ -163,14 +163,18 @@ public final class Repositories {
     long countByVenueId(Long venueId);
    }
 
-  public interface WhyFunReviewSummary {
-   Long getId(); Long getVenueId(); String getAuthor(); Short getRating(); String getComment(); java.time.Instant getUpdatedAt();
-  }
+   public interface WhyFunReviewSummary {
+    Long getId(); Long getVenueId(); String getAuthor(); Short getRating(); String getComment(); java.time.Instant getUpdatedAt();
+   }
+
+   public interface ActivityRating {
+    Long getActivityId(); Double getRating();
+   }
 
    public interface WhyFunVenueReviews extends JpaRepository<WhyFunVenueReview, Long> {
    @Query("select r.id as id, r.venue.id as venueId, u.username as author, r.rating as rating, r.comment as comment, r.updatedAt as updatedAt from WhyFunVenueReview r join r.author u where r.venue.id=:venueId order by u.username") List<WhyFunReviewSummary> summariesByVenueId(@Param("venueId") Long venueId);
-   @Query("select r.id as id, r.venue.id as venueId, u.username as author, r.rating as rating, r.comment as comment, r.updatedAt as updatedAt from WhyFunVenueReview r join r.author u where r.venue.id in :venueIds order by r.venue.id asc, u.username") List<WhyFunReviewSummary> summariesByVenueIdIn(@Param("venueIds") Collection<Long> venueIds);
-   @EntityGraph(attributePaths = "author") Optional<WhyFunVenueReview> findByVenueIdAndAuthorId(Long venueId, Long authorId);
+    @Query("select r.id as id, r.venue.id as venueId, u.username as author, r.rating as rating, r.comment as comment, r.updatedAt as updatedAt from WhyFunVenueReview r join r.author u where r.venue.id in :venueIds order by r.venue.id asc, u.username") List<WhyFunReviewSummary> summariesByVenueIdIn(@Param("venueIds") Collection<Long> venueIds);
+    @EntityGraph(attributePaths = "author") Optional<WhyFunVenueReview> findByVenueIdAndAuthorId(Long venueId, Long authorId);
    }
 
    public interface WhyFunVisits extends JpaRepository<WhyFunVisit, Long> {
@@ -187,6 +191,7 @@ public final class Repositories {
 
    public interface WhyFunVisitReviews extends JpaRepository<WhyFunVisitReview, Long> {
     @EntityGraph(attributePaths = {"author", "updatedBy"}) List<WhyFunVisitReview> findByVisitIdOrderByAuthorUsername(Long visitId);
+    @Query("select r.visit.venue.id as activityId, avg(r.rating) as rating from WhyFunVisitReview r where r.visit.venue.id in :activityIds group by r.visit.venue.id") List<ActivityRating> ratingsByActivityIdIn(@Param("activityIds") Collection<Long> activityIds);
     @Query("select r.id as reviewId, author.username as author from WhyFunVisitReview r join r.author author where r.visit.id=:visitId") List<ReviewAuthor> authorsByVisitId(@Param("visitId") Long visitId);
     @EntityGraph(attributePaths = {"visit", "visit.venue", "author", "updatedBy"}) Optional<WhyFunVisitReview> findDetailedById(Long id);
     Optional<WhyFunVisitReview> findByVisitIdAndAuthorId(Long visitId, Long authorId);

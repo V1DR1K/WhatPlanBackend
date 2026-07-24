@@ -2,6 +2,8 @@ package com.wherefood.web;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.Mockito.mock;
@@ -29,6 +31,8 @@ import java.util.List;
 import java.util.Optional;
 import org.junit.jupiter.api.Test;
 import org.springframework.mock.web.MockMultipartFile;
+import org.springframework.http.HttpStatus;
+import org.springframework.web.server.ResponseStatusException;
 
 class ApiVisitTest {
   @Test
@@ -65,7 +69,7 @@ class ApiVisitTest {
     User tomas = user(7L, "tomas");
     User avril = user(6L, "avril");
     Place place = new Place();
-    place.id = 4L; place.name = "Lugar"; place.status = PlaceStatus.REVIEWED; place.createdBy = tomas; place.category = new com.wherefood.domain.Category();
+    place.id = 4L; place.name = "Lugar"; place.status = PlaceStatus.REVIEWED; place.acceptsReservations = true; place.createdBy = tomas; place.category = new com.wherefood.domain.Category();
     PlaceVisit recent = visit(10L, place, tomas, LocalDate.of(2026, 7, 22));
     PlaceVisit older = visit(9L, place, tomas, LocalDate.of(2026, 7, 15));
     PlaceVisitPhoto photo = new PlaceVisitPhoto();
@@ -83,13 +87,14 @@ class ApiVisitTest {
 
     Api api = new Api(null, null, null, places, visits, null, null, null, placeReviews, placePhotos, visitPhotos, visitReviews, null, null, null);
     PlaceDto result = api.getPlace(4L);
-    PlaceDto listed = api.list(null, null, null, null, 12).content().getFirst();
+    PlaceDto listed = api.list(null, null, null, null, null, null, 12).content().getFirst();
 
-    assertEquals(4.5, result.rating());
+    assertEquals(3.3, result.rating());
     assertEquals(3, result.tasteAverage());
     assertEquals(4, result.priceAverage());
     assertEquals(3, result.venueAverage());
     assertEquals(2, result.itemCount());
+    assertTrue(result.acceptsReservations());
     assertEquals("/place-visit-photos/99", result.photoUrl());
     assertEquals("/place-visit-photos/99?thumbnail=true", result.thumbnailUrl());
     assertEquals("tomas", result.reviews().getFirst().author());
@@ -146,6 +151,18 @@ class ApiVisitTest {
    assertEquals(99L, result.coverPhoto().id());
    assertEquals(1, result.photos().size());
    verify(visitPhotos, times(1)).findByVisitIdOrderByPositionAscIdAsc(10L);
+  }
+
+  @Test
+  void rejectsAVisitPhotoBeyondTheFourPhotoLimit() throws Exception {
+    Places places = mock(Places.class); PlaceVisits visits = mock(PlaceVisits.class); PlaceVisitPhotos visitPhotos = mock(PlaceVisitPhotos.class);
+    User tomas = user(7L, "tomas"); Place place = new Place(); place.id = 4L; place.status = PlaceStatus.REVIEWED; place.createdBy = tomas;
+    PlaceVisit visit = visit(10L, place, tomas, LocalDate.of(2026, 7, 22));
+    when(visits.findDetailedById(10L)).thenReturn(Optional.of(visit)); when(visitPhotos.findByVisitIdOrderByPositionAscIdAsc(10L)).thenReturn(List.of(new PlaceVisitPhoto(), new PlaceVisitPhoto(), new PlaceVisitPhoto(), new PlaceVisitPhoto()));
+
+    ResponseStatusException error = assertThrows(ResponseStatusException.class, () -> new Api(null, null, null, places, visits, null, null, null, null, null, visitPhotos, null, null, null, null).uploadVisitPhoto(10L, new MockMultipartFile("file", "foto.webp", "image/webp", new byte[] {1}), tomas));
+
+    assertEquals(HttpStatus.CONFLICT, error.getStatusCode());
   }
 
   private static PlaceVisit visit(Long id, Place place, User author, LocalDate visitedOn) {

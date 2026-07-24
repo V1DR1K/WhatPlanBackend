@@ -1,0 +1,1 @@
+ALTER TABLE places ADD COLUMN accepts_reservations BOOLEAN NOT NULL DEFAULT FALSE;

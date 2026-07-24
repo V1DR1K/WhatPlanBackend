@@ -18,7 +18,7 @@ record ActivityScheduleRequest(@NotNull DayOfWeek dayOfWeek, @NotNull LocalTime 
 record ActivityScheduleDto(DayOfWeek dayOfWeek, LocalTime opensAt, LocalTime closesAt) {}
 record ActivityRequest(@NotBlank @Size(max = 160) String name, @NotBlank @Size(max = 250) String address, @NotNull Long categoryId, @NotNull Long subcategoryId, List<@Valid ActivityScheduleRequest> schedules) {}
 record ActivityProfilePhotoDto(Long id, String url, String thumbnailUrl, int width, int height, Instant createdAt) {}
-record ActivityDto(Long id, String name, String address, FunCategoryDto category, FunCategoryDto subcategory, List<ActivityScheduleDto> schedules, ActivityProfilePhotoDto profilePhoto, String createdBy, String updatedBy, Instant createdAt, Instant updatedAt) {}
+record ActivityDto(Long id, String name, String address, FunCategoryDto category, FunCategoryDto subcategory, List<ActivityScheduleDto> schedules, ActivityProfilePhotoDto profilePhoto, Double rating, String createdBy, String updatedBy, Instant createdAt, Instant updatedAt) {}
 record ActivityVisitRequest(@NotNull LocalDate scheduledAt) {}
 record ActivityPhotoDto(Long id, String url, String thumbnailUrl, int width, int height, int position, String createdBy, Instant createdAt) {}
 record ActivityReviewRequest(@Min(1) @Max(5) short rating, @Size(max = 1000) String comment) {}
@@ -32,7 +32,7 @@ record ActivityVisitDto(Long id, ActivityDto activity, LocalDate scheduledAt, St
 @RestController
 @RequestMapping("/api/why-fun")
 public class WhyFunActivityApi {
- private static final int MAX_PHOTOS = 12;
+ private static final int MAX_PHOTOS = 4;
  private final WhyFunCategories categories;
  private final WhyFunVenues activities;
  private final WhyFunVenuePhotos activityPhotos;
@@ -46,7 +46,9 @@ public class WhyFunActivityApi {
  }
 
  @GetMapping("/activities") @Transactional(readOnly = true) List<ActivityDto> listActivities(@RequestParam(required = false) Long categoryId, @RequestParam(required = false) Long subcategoryId) {
-  return activities.findAll().stream().filter(value -> categoryId == null || value.category.id.equals(categoryId)).filter(value -> subcategoryId == null || value.subcategory.id.equals(subcategoryId)).sorted(Comparator.comparing((WhyFunVenue value) -> value.name, String.CASE_INSENSITIVE_ORDER).thenComparing(value -> value.id)).map(this::activity).toList();
+  List<WhyFunVenue> values = activities.findAll().stream().filter(value -> categoryId == null || value.category.id.equals(categoryId)).filter(value -> subcategoryId == null || value.subcategory.id.equals(subcategoryId)).toList();
+  Map<Long, Double> ratings = activityRatings(values.stream().map(value -> value.id).toList());
+  return values.stream().sorted(Comparator.comparing((WhyFunVenue value) -> value.name, String.CASE_INSENSITIVE_ORDER).thenComparing(value -> value.id)).map(value -> activity(value, ratings.get(value.id))).toList();
  }
  @GetMapping("/activities/{id}") @Transactional(readOnly = true) ActivityDto getActivity(@PathVariable Long id) { return activity(findActivity(id)); }
  @PostMapping("/activities") @ResponseStatus(HttpStatus.CREATED) @Transactional ActivityDto addActivity(@RequestBody @Valid ActivityRequest request, @AuthenticationPrincipal User author) {
@@ -65,7 +67,7 @@ public class WhyFunActivityApi {
    WhyFunVenuePhoto photo = activityPhotos.save(storage.store(activity, file)); activity.coverPhotoId = photo.id; activity.updatedBy = author; activity.updatedAt = Instant.now(); activities.save(activity); return activity(activity);
   }
 
- @GetMapping("/activities/{id}/visits") @Transactional(readOnly = true) List<ActivityVisitDto> listVisits(@PathVariable Long id) { findActivity(id); return visits.findByVenueIdOrderByScheduledAtDescIdDesc(id).stream().map(this::visit).toList(); }
+ @GetMapping("/activities/{id}/visits") @Transactional(readOnly = true) List<ActivityVisitDto> listVisits(@PathVariable Long id) { WhyFunVenue activity = findActivity(id); ActivityDto dto = activity(activity); return visits.findByVenueIdOrderByScheduledAtDescIdDesc(id).stream().map(visit -> visit(visit, dto)).toList(); }
  @PostMapping("/activities/{id}/visits") @ResponseStatus(HttpStatus.CREATED) @Transactional ActivityVisitDto addVisit(@PathVariable Long id, @RequestBody @Valid ActivityVisitRequest request, @AuthenticationPrincipal User author) {
   WhyFunVisit visit = new WhyFunVisit(); visit.venue = findActivity(id); visit.scheduledAt = request.scheduledAt(); visit.createdBy = visit.updatedBy = author; visit.createdAt = visit.updatedAt = Instant.now(); return visit(visits.save(visit));
  }
@@ -116,14 +118,17 @@ public class WhyFunActivityApi {
   activity.name = request.name().trim(); activity.address = request.address().trim(); activity.category = category; activity.subcategory = subcategory; activity.schedules.clear();
   if (request.schedules() != null) for (ActivityScheduleRequest source : request.schedules()) { if (source.opensAt().equals(source.closesAt())) throw badRequest("El horario de apertura y cierre debe ser distinto"); WhyFunVenueSchedule schedule = new WhyFunVenueSchedule(); schedule.venue = activity; schedule.dayOfWeek = source.dayOfWeek(); schedule.opensAt = source.opensAt(); schedule.closesAt = source.closesAt(); activity.schedules.add(schedule); }
  }
- private ActivityVisitDto visit(WhyFunVisit value) {
+ private ActivityVisitDto visit(WhyFunVisit value) { return visit(value, activity(value.venue)); }
+ private ActivityVisitDto visit(WhyFunVisit value, ActivityDto activity) {
   List<WhyFunVisitPhoto> visitPhotos = photos.findByVisitIdOrderByPositionAscIdAsc(value.id); List<ActivityPhotoDto> resultPhotos = visitPhotos.stream().map(WhyFunActivityApi::photo).toList();
   ActivityPhotoDto cover = resultPhotos.stream().filter(photo -> photo.id().equals(value.coverPhotoId)).findFirst().orElse(resultPhotos.isEmpty() ? null : resultPhotos.getFirst());
   List<WhyFunVisitReview> reviewValues = reviews.findByVisitIdOrderByAuthorUsername(value.id);
   Map<Long, String> reviewAuthors = reviews.authorsByVisitId(value.id).stream().collect(java.util.stream.Collectors.toMap(ReviewAuthor::getReviewId, ReviewAuthor::getAuthor));
-  return new ActivityVisitDto(value.id, activity(value.venue), value.scheduledAt, value.createdBy.username, value.updatedBy.username, cover, resultPhotos, reviewValues.stream().map(review -> review(review, reviewAuthors.get(review.id))).toList(), value.createdAt, value.updatedAt);
+  return new ActivityVisitDto(value.id, activity, value.scheduledAt, value.createdBy.username, value.updatedBy.username, cover, resultPhotos, reviewValues.stream().map(review -> review(review, reviewAuthors.get(review.id))).toList(), value.createdAt, value.updatedAt);
  }
-  private ActivityDto activity(WhyFunVenue value) { return new ActivityDto(value.id, value.name, value.address, category(value.category), category(value.subcategory), value.schedules.stream().sorted(Comparator.comparing((WhyFunVenueSchedule schedule) -> schedule.dayOfWeek).thenComparing(schedule -> schedule.opensAt)).map(schedule -> new ActivityScheduleDto(schedule.dayOfWeek, schedule.opensAt, schedule.closesAt)).toList(), profilePhoto(value).map(WhyFunActivityApi::profilePhoto).orElse(null), value.createdBy.username, value.updatedBy.username, value.createdAt, value.updatedAt); }
+  private ActivityDto activity(WhyFunVenue value) { return activity(value, activityRatings(List.of(value.id)).get(value.id)); }
+  private ActivityDto activity(WhyFunVenue value, Double rating) { return new ActivityDto(value.id, value.name, value.address, category(value.category), category(value.subcategory), value.schedules.stream().sorted(Comparator.comparing((WhyFunVenueSchedule schedule) -> schedule.dayOfWeek).thenComparing(schedule -> schedule.opensAt)).map(schedule -> new ActivityScheduleDto(schedule.dayOfWeek, schedule.opensAt, schedule.closesAt)).toList(), profilePhoto(value).map(WhyFunActivityApi::profilePhoto).orElse(null), rating, value.createdBy.username, value.updatedBy.username, value.createdAt, value.updatedAt); }
+  private Map<Long, Double> activityRatings(Collection<Long> activityIds) { if (activityIds.isEmpty() || reviews == null) return Map.of(); return reviews.ratingsByActivityIdIn(activityIds).stream().collect(java.util.stream.Collectors.toMap(ActivityRating::getActivityId, ActivityRating::getRating)); }
   private Optional<WhyFunVenuePhoto> profilePhoto(WhyFunVenue value) { return value.coverPhotoId == null ? Optional.empty() : activityPhotos.findByIdAndVenueId(value.coverPhotoId, value.id); }
   private static ActivityProfilePhotoDto profilePhoto(WhyFunVenuePhoto value) { return new ActivityProfilePhotoDto(value.id, "/why-fun/activities/" + value.venue.id + "/photo?v=" + value.id, "/why-fun/activities/" + value.venue.id + "/photo?thumbnail=true&v=" + value.id, value.width, value.height, value.createdAt); }
  private static FunCategoryDto category(WhyFunCategory value) { return new FunCategoryDto(value.id, value.parent == null ? null : value.parent.id, value.name, value.slug, value.icon, value.active); }
