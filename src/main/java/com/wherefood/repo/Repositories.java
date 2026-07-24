@@ -19,6 +19,9 @@ public final class Repositories {
  }
   public interface HighlightTags extends JpaRepository<HighlightTag, Long> { List<HighlightTag> findAllByOrderByNameAsc(); }
   public interface SpecialDates extends JpaRepository<SpecialDate, Long> { List<SpecialDate> findAllByOrderByDateAscLabelAscIdAsc(); }
+  public interface Settings extends JpaRepository<GlobalSettings, Integer> {
+   @Modifying @Query(value = "insert into global_settings (id, catalog_page_size) values (1, 5) on conflict (id) do nothing", nativeQuery = true) int insertDefaultIfMissing();
+  }
 
   public interface Places extends JpaRepository<Place, Long> {
   @Override @EntityGraph(attributePaths = {"category", "createdBy", "highlightTags"}) List<Place> findAll();

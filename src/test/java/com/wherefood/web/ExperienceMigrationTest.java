@@ -54,6 +54,15 @@ class ExperienceMigrationTest {
    assertTrue(sql.contains("special_date date not null"));
   }
 
+  @Test
+  void createsAndSeedsTheSingletonGlobalSettings() throws IOException {
+   String sql = migration("V35__add_global_settings.sql");
+   assertTrue(sql.contains("create table global_settings"));
+   assertTrue(sql.contains("catalog_page_size integer not null default 5"));
+   assertTrue(sql.contains("catalog_page_size between 1 and 50"));
+   assertTrue(sql.contains("on conflict (id) do nothing"));
+  }
+
  private static String migration(String name) throws IOException {
   try (InputStream stream = ExperienceMigrationTest.class.getResourceAsStream("/db/migration/" + name)) { return new String(stream.readAllBytes(), StandardCharsets.UTF_8); }
  }

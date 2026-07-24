@@ -18,6 +18,9 @@ creator and `updatedBy` identifies the most recent editor where the resource is 
 - Global calendar: `/api/special-dates` stores exact, non-recurring date labels.
   More than one label may use the same date. Reads require authentication;
   creating, updating, and deleting entries require `ADMIN`.
+- Global settings: authenticated users can `GET /api/settings`, which returns
+  `{ "catalogPageSize": 5 }` by default. `ADMIN` users can `PUT /api/settings`
+  with `catalogPageSize` from 1 through 50.
 
 All collections are ordered by their explicit photo position or their relevant
 experience date. A visit/cooking cover is selected with `PUT .../cover/{photoId}`.
