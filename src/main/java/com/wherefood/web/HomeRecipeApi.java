@@ -67,14 +67,14 @@ public class HomeRecipeApi {
  @GetMapping("/cookings") @Transactional(readOnly = true) List<CookingDto> listCookings(@RequestParam(required = false) Home home, @RequestParam(required = false) Long recipeId) {
   List<Cooking> values = recipeId != null ? cookings.findByRecipeIdOrderByCookedOnDescIdDesc(recipeId) : home != null ? cookings.findByHomeOrderByCookedOnDescIdDesc(home) : cookings.findAll(); return values.stream().map(this::cooking).toList();
  }
- @PostMapping("/recipes/{recipeId}/cookings") @ResponseStatus(HttpStatus.CREATED) @Transactional CookingDto addCooking(@PathVariable Long recipeId, @RequestBody @Valid CookingRequest request, @AuthenticationPrincipal User author) {
-  validateCookingDate(request); Cooking cooking = new Cooking(); cooking.recipe = findRecipe(recipeId); cooking.createdBy = cooking.updatedBy = author; cooking.createdAt = cooking.updatedAt = Instant.now(); apply(cooking, request); return cooking(cookings.save(cooking));
+  @PostMapping("/recipes/{recipeId}/cookings") @ResponseStatus(HttpStatus.CREATED) @Transactional CookingDto addCooking(@PathVariable Long recipeId, @RequestBody @Valid CookingRequest request, @AuthenticationPrincipal User author) {
+   validateCookingDate(request); Recipe recipe = findRecipe(recipeId); Cooking cooking = new Cooking(); cooking.recipe = recipe; cooking.createdBy = cooking.updatedBy = author; cooking.createdAt = cooking.updatedAt = Instant.now(); apply(cooking, request); touch(recipe, author); return cooking(cookings.save(cooking));
  }
  @GetMapping("/cookings/{id}") @Transactional(readOnly = true) CookingDto getCooking(@PathVariable Long id) { return cooking(findCooking(id)); }
  @PutMapping("/cookings/{id}") @Transactional CookingDto updateCooking(@PathVariable Long id, @RequestBody @Valid CookingRequest request, @AuthenticationPrincipal User author) {
-  validateCookingDate(request); Cooking cooking = findCooking(id); apply(cooking, request); cooking.updatedBy = author; cooking.updatedAt = Instant.now(); return cooking(cookings.save(cooking));
+   validateCookingDate(request); Cooking cooking = findCooking(id); apply(cooking, request); cooking.updatedBy = author; cooking.updatedAt = Instant.now(); touch(cooking.recipe, author); return cooking(cookings.save(cooking));
  }
- @DeleteMapping("/cookings/{id}") @ResponseStatus(HttpStatus.NO_CONTENT) void deleteCooking(@PathVariable Long id) { cookings.delete(findCooking(id)); }
+  @DeleteMapping("/cookings/{id}") @ResponseStatus(HttpStatus.NO_CONTENT) @Transactional void deleteCooking(@PathVariable Long id, @AuthenticationPrincipal User author) { Cooking cooking = findCooking(id); cookings.delete(cooking); touch(cooking.recipe, author); }
 
  @PostMapping("/cookings/{id}/reviews") @ResponseStatus(HttpStatus.CREATED) @Transactional CookingReviewDto addReview(@PathVariable Long id, @RequestBody @Valid CookingReviewRequest request, @AuthenticationPrincipal User author) {
   Cooking cooking = findCooking(id); if (reviews.findByCookingIdAndAuthorId(id, author.id).isPresent()) throw conflict("Ya existe una reseña de este autor para la preparación");
@@ -96,8 +96,9 @@ public class HomeRecipeApi {
   for (int position = 0; position < request.ingredients().size(); position++) { RecipeIngredientRequest source = request.ingredients().get(position); RecipeIngredient ingredient = new RecipeIngredient(); ingredient.recipe = recipe; ingredient.name = source.name().trim(); ingredient.quantity = source.quantity(); ingredient.unit = source.unit().trim(); ingredient.position = position; recipe.ingredients.add(ingredient); }
   for (int position = 0; position < request.steps().size(); position++) { RecipeStepRequest source = request.steps().get(position); RecipeStep step = new RecipeStep(); step.recipe = recipe; step.instruction = source.instruction().trim(); step.position = position; recipe.steps.add(step); }
  }
- private static void apply(Cooking cooking, CookingRequest request) { cooking.home = request.home(); cooking.servings = request.servings(); cooking.cookedOn = request.cookedOn(); cooking.mealType = request.mealType(); }
- private CookingDto cooking(Cooking value) {
+  private static void apply(Cooking cooking, CookingRequest request) { cooking.home = request.home(); cooking.servings = request.servings(); cooking.cookedOn = request.cookedOn(); cooking.mealType = request.mealType(); }
+  private void touch(Recipe recipe, User author) { recipe.updatedBy = author; recipe.updatedAt = Instant.now(); recipes.save(recipe); }
+  private CookingDto cooking(Cooking value) {
   List<CookingReview> reviewValues = reviews.findByCookingIdOrderByAuthorUsername(value.id);
   Map<Long, String> reviewAuthors = reviews.authorsByCookingId(value.id).stream().collect(java.util.stream.Collectors.toMap(ReviewAuthor::getReviewId, ReviewAuthor::getAuthor));
   return new CookingDto(value.id, recipe(value.recipe), value.home, value.servings, value.cookedOn, value.mealType, value.createdBy.username, value.updatedBy.username, reviewValues.stream().map(review -> review(review, reviewAuthors.get(review.id))).toList(), value.createdAt, value.updatedAt);

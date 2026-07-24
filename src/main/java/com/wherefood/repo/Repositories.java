@@ -17,9 +17,10 @@ public final class Repositories {
  public interface Categories extends JpaRepository<Category, Long> {
   List<Category> findByActiveTrueOrderByName();
  }
- public interface HighlightTags extends JpaRepository<HighlightTag, Long> { List<HighlightTag> findAllByOrderByNameAsc(); }
+  public interface HighlightTags extends JpaRepository<HighlightTag, Long> { List<HighlightTag> findAllByOrderByNameAsc(); }
+  public interface SpecialDates extends JpaRepository<SpecialDate, Long> { List<SpecialDate> findAllByOrderByDateAscLabelAscIdAsc(); }
 
- public interface Places extends JpaRepository<Place, Long> {
+  public interface Places extends JpaRepository<Place, Long> {
   @Override @EntityGraph(attributePaths = {"category", "createdBy", "highlightTags"}) List<Place> findAll();
   @EntityGraph(attributePaths = {"category", "createdBy", "highlightTags"}) @Query("select p from Place p where p.id=:id") Optional<Place> findDetailedById(@Param("id") Long id);
  }
@@ -167,9 +168,13 @@ public final class Repositories {
     Long getId(); Long getVenueId(); String getAuthor(); Short getRating(); String getComment(); java.time.Instant getUpdatedAt();
    }
 
-   public interface ActivityRating {
-    Long getActivityId(); Double getRating();
-   }
+    public interface ActivityRating {
+     Long getActivityId(); Double getRating();
+    }
+
+    public interface ActivityVisitCount {
+     Long getActivityId(); Long getVisitCount();
+    }
 
    public interface WhyFunVenueReviews extends JpaRepository<WhyFunVenueReview, Long> {
    @Query("select r.id as id, r.venue.id as venueId, u.username as author, r.rating as rating, r.comment as comment, r.updatedAt as updatedAt from WhyFunVenueReview r join r.author u where r.venue.id=:venueId order by u.username") List<WhyFunReviewSummary> summariesByVenueId(@Param("venueId") Long venueId);
@@ -180,7 +185,8 @@ public final class Repositories {
    public interface WhyFunVisits extends JpaRepository<WhyFunVisit, Long> {
     @EntityGraph(attributePaths = {"venue", "venue.category", "venue.subcategory", "createdBy", "updatedBy"}) List<WhyFunVisit> findByVenueIdOrderByScheduledAtDescIdDesc(Long venueId);
     @EntityGraph(attributePaths = {"venue", "venue.category", "venue.subcategory", "venue.schedules", "createdBy", "updatedBy"}) Optional<WhyFunVisit> findDetailedById(Long id);
-    @Override @EntityGraph(attributePaths = {"venue", "venue.category", "venue.subcategory", "createdBy", "updatedBy"}) List<WhyFunVisit> findAll();
+     @Override @EntityGraph(attributePaths = {"venue", "venue.category", "venue.subcategory", "createdBy", "updatedBy"}) List<WhyFunVisit> findAll();
+     @Query("select v.venue.id as activityId, count(v) as visitCount from WhyFunVisit v where v.venue.id in :activityIds group by v.venue.id") List<ActivityVisitCount> countsByActivityIdIn(@Param("activityIds") Collection<Long> activityIds);
    }
 
    public interface WhyFunVisitPhotos extends JpaRepository<WhyFunVisitPhoto, Long> {

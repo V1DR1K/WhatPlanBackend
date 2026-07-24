@@ -23,7 +23,7 @@ record FilmGenreOptionRequest(@NotBlank @Size(max = 80) String name, @NotBlank @
 record FilmGenreOptionDto(Long id, String name, String emoji) {}
 record FilmReviewDto(Long id, String author, short rating, String comment, LocalDate watchedOn, String favoriteCharacter, Map<String, Short> metrics) {}
 record FilmViewDto(Long id, LocalDate watchedOn, String createdBy, String updatedBy, List<FilmReviewDto> reviews, Instant createdAt) {}
-record FilmDto(Long id, Long tmdbId, String title, String originalTitle, String synopsis, LocalDate releaseDate, String posterUrl, String thumbnailUrl, Integer posterWidth, Integer posterHeight, List<String> genres, PlatformDto platform, int watchedCount, LocalDate lastWatchedOn, String author, List<FilmReviewDto> reviews, List<FilmViewDto> views, Instant createdAt, TmdbMovieDto tmdb) {}
+ record FilmDto(Long id, Long tmdbId, String title, String originalTitle, String synopsis, LocalDate releaseDate, String posterUrl, String thumbnailUrl, Integer posterWidth, Integer posterHeight, List<String> genres, PlatformDto platform, int watchedCount, LocalDate lastWatchedOn, String author, List<FilmReviewDto> reviews, List<FilmViewDto> views, Instant createdAt, Instant updatedAt, TmdbMovieDto tmdb) {}
 
 @RestController
 @RequestMapping("/api")
@@ -56,7 +56,7 @@ public class FilmApi {
     .filter(film -> platformId == null || (film.platform != null && film.platform.id.equals(platformId)))
     .filter(film -> watched == null || watched == (film.watchedCount > 0))
     .filter(film -> genre == null || genre.isBlank() || matchesGenre(film, genre))
-    .sorted(Comparator.comparing((Film film) -> film.updatedAt).reversed())
+     .sorted(Comparator.comparing((Film film) -> film.lastWatchedOn, Comparator.nullsLast(Comparator.reverseOrder())).thenComparing(film -> film.updatedAt, Comparator.nullsLast(Comparator.reverseOrder())).thenComparing(film -> film.createdAt, Comparator.nullsLast(Comparator.reverseOrder())).thenComparing(film -> film.id, Comparator.reverseOrder()))
     .map(film -> film(film, false)).toList();
   }
 
@@ -130,7 +130,7 @@ public class FilmApi {
     String thumbnailUrl = photo != null ? photoUrl(film.id, true, photo.id) : null;
     Integer posterWidth = photo == null ? null : Integer.valueOf(photo.width);
     Integer posterHeight = photo == null ? null : Integer.valueOf(photo.height);
-     return new FilmDto(film.id, film.tmdbId, film.title, film.originalTitle, film.synopsis, film.releaseDate, posterUrl, thumbnailUrl, posterWidth, posterHeight, film.genres.stream().map(value -> value.name).sorted(String.CASE_INSENSITIVE_ORDER).toList(), film.platform == null ? null : platform(film.platform), film.watchedCount, film.lastWatchedOn, film.createdBy.username, filmReviews, filmViews, film.createdAt, catalog);
+      return new FilmDto(film.id, film.tmdbId, film.title, film.originalTitle, film.synopsis, film.releaseDate, posterUrl, thumbnailUrl, posterWidth, posterHeight, film.genres.stream().map(value -> value.name).sorted(String.CASE_INSENSITIVE_ORDER).toList(), film.platform == null ? null : platform(film.platform), film.watchedCount, film.lastWatchedOn, film.createdBy.username, filmReviews, filmViews, film.createdAt, film.updatedAt, catalog);
   }
   private void apply(Film film, FilmRequest request) {
    if (request.tmdbId() == null) {

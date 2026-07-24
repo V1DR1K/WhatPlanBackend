@@ -34,7 +34,7 @@ record PlaceVisitPhotoDto(Long id, String url, String thumbnailUrl, int width, i
 record PlaceVisitReviewRequest(@NotNull @Min(1) @Max(5) Short overall, @Size(max = 2000) String comment, @Min(1) @Max(5) Short taste, @Min(1) @Max(5) Short price) {}
 record PlaceVisitReviewDto(Long id, String author, String updatedBy, short overall, String comment, Short taste, Short price, Instant createdAt, Instant updatedAt) {}
 record PlaceVisitDto(Long id, Long placeId, LocalDate visitedOn, String createdBy, List<ItemDto> items, List<PlaceVisitPhotoDto> photos, PlaceVisitPhotoDto coverPhoto, List<PlaceVisitReviewDto> reviews, String updatedBy, Instant createdAt, Instant updatedAt) {}
-record PlaceDto(Long id, String name, String address, String sourceUrl, String mapsUrl, boolean acceptsReservations, PlaceStatus status, CategoryDto category, List<HighlightTagDto> tags, String author, double rating, double tasteAverage, double priceAverage, double venueAverage, long itemCount, String photoUrl, String thumbnailUrl, Integer photoWidth, Integer photoHeight, List<PlaceReviewDto> reviews, Instant createdAt) {}
+ record PlaceDto(Long id, String name, String address, String sourceUrl, String mapsUrl, boolean acceptsReservations, PlaceStatus status, CategoryDto category, List<HighlightTagDto> tags, String author, double rating, double tasteAverage, double priceAverage, double venueAverage, long itemCount, String photoUrl, String thumbnailUrl, Integer photoWidth, Integer photoHeight, List<PlaceReviewDto> reviews, Instant createdAt, Instant updatedAt) {}
 record Slice<T>(List<T> content, Long nextCursor) {}
 
 @RestController
@@ -112,20 +112,20 @@ public class Api {
   active(places.findDetailedById(id).orElseThrow(() -> notFound("Lugar")));
     return visits.findByPlaceIdOrderByVisitedOnDescIdDesc(id).stream().map(Api::visitSummary).toList();
  }
-  @PostMapping("/places/{id}/visits") @ResponseStatus(HttpStatus.CREATED) PlaceVisitSummaryDto addVisit(@PathVariable Long id, @RequestBody @jakarta.validation.Valid VisitRequest request, @AuthenticationPrincipal User author) {
+   @PostMapping("/places/{id}/visits") @ResponseStatus(HttpStatus.CREATED) @org.springframework.transaction.annotation.Transactional PlaceVisitSummaryDto addVisit(@PathVariable Long id, @RequestBody @jakarta.validation.Valid VisitRequest request, @AuthenticationPrincipal User author) {
    Place place = active(places.findById(id).orElseThrow(() -> notFound("Lugar")));
    validateVisitMoment(request);
    if (visits.findByPlaceIdAndVisitedOn(id, request.visitedOn()).isPresent()) throw new ResponseStatusException(HttpStatus.CONFLICT, "Ya existe una visita para esa fecha");
-     PlaceVisit visit = new PlaceVisit(); visit.place = place; visit.visitedOn = request.visitedOn(); visit.createdBy = visit.updatedBy = author; visit.createdAt = visit.updatedAt = Instant.now(); place.status = PlaceStatus.REVIEWED; place.updatedBy = author; places.save(place);
+      PlaceVisit visit = new PlaceVisit(); visit.place = place; visit.visitedOn = request.visitedOn(); visit.createdBy = visit.updatedBy = author; visit.createdAt = visit.updatedAt = Instant.now(); place.status = PlaceStatus.REVIEWED; touch(place, author);
    return visitSummary(visits.save(visit));
   }
-  @PutMapping("/place-visits/{id}") PlaceVisitSummaryDto editVisit(@PathVariable Long id, @RequestBody @jakarta.validation.Valid VisitRequest request, @AuthenticationPrincipal User author) {
+   @PutMapping("/place-visits/{id}") @org.springframework.transaction.annotation.Transactional PlaceVisitSummaryDto editVisit(@PathVariable Long id, @RequestBody @jakarta.validation.Valid VisitRequest request, @AuthenticationPrincipal User author) {
     PlaceVisit visit = active(visits.findDetailedById(id).orElseThrow(() -> notFound("Visita")));
    validateVisitMoment(request);
    visits.findByPlaceIdAndVisitedOn(visit.place.id, request.visitedOn()).filter(other -> !other.id.equals(visit.id)).ifPresent(other -> { throw new ResponseStatusException(HttpStatus.CONFLICT, "Ya existe una visita para esa fecha"); });
-     visit.visitedOn = request.visitedOn(); visit.updatedBy = author; visit.updatedAt = Instant.now(); return visitSummary(visits.save(visit));
+      visit.visitedOn = request.visitedOn(); visit.updatedBy = author; visit.updatedAt = Instant.now(); touch(visit.place, author); return visitSummary(visits.save(visit));
   }
-  @DeleteMapping("/place-visits/{id}") @ResponseStatus(HttpStatus.NO_CONTENT) @org.springframework.transaction.annotation.Transactional void deleteVisit(@PathVariable Long id, @AuthenticationPrincipal User author) { PlaceVisit visit = active(visits.findDetailedById(id).orElseThrow(() -> notFound("Visita"))); Place place = visit.place; visits.delete(visit); if (!visits.existsByPlaceId(place.id)) { place.status = PlaceStatus.PENDING; place.updatedBy = author; places.save(place); } }
+  @DeleteMapping("/place-visits/{id}") @ResponseStatus(HttpStatus.NO_CONTENT) @org.springframework.transaction.annotation.Transactional void deleteVisit(@PathVariable Long id, @AuthenticationPrincipal User author) { PlaceVisit visit = active(visits.findDetailedById(id).orElseThrow(() -> notFound("Visita"))); Place place = visit.place; visits.delete(visit); if (!visits.existsByPlaceId(place.id)) place.status = PlaceStatus.PENDING; touch(place, author); }
  @GetMapping("/place-visits/{id}") PlaceVisitDto getVisit(@PathVariable Long id) { return visit(active(visits.findDetailedById(id).orElseThrow(() -> notFound("Visita")))); }
 
  @PostMapping("/place-visits/{id}/items") ItemDto addItem(@PathVariable Long id, @RequestBody @jakarta.validation.Valid CreateItemRequest request, @AuthenticationPrincipal User author) {
@@ -215,7 +215,7 @@ public class Api {
     String thumbnailUrl = profilePhoto != null ? photoUrl(place.id, true, profilePhoto.id) : cover == null ? null : visitPhotoUrl(cover.id, true);
     Integer width = profilePhoto != null ? Integer.valueOf(profilePhoto.width) : cover == null ? null : Integer.valueOf(cover.width);
     Integer height = profilePhoto != null ? Integer.valueOf(profilePhoto.height) : cover == null ? null : Integer.valueOf(cover.height);
-    return new PlaceDto(place.id, place.name, place.address, place.sourceUrl, place.mapsUrl, place.acceptsReservations, place.status, category(place.category), place.highlightTags.stream().sorted(Comparator.comparing(tag -> tag.name)).map(Api::tag).toList(), place.createdBy.username, round(summary.rating()), round(summary.taste()), round(summary.price()), round(summary.venue()), summary.visitCount(), photoUrl, thumbnailUrl, width, height, summary.reviews(), place.createdAt);
+     return new PlaceDto(place.id, place.name, place.address, place.sourceUrl, place.mapsUrl, place.acceptsReservations, place.status, category(place.category), place.highlightTags.stream().sorted(Comparator.comparing(tag -> tag.name)).map(Api::tag).toList(), place.createdBy.username, round(summary.rating()), round(summary.taste()), round(summary.price()), round(summary.venue()), summary.visitCount(), photoUrl, thumbnailUrl, width, height, summary.reviews(), place.createdAt, place.updatedAt);
   }
   private record PlaceSummary(double rating, double taste, double price, double venue, long visitCount, PlaceVisitPhoto cover, PlacePhoto legacyPhoto, List<PlaceReviewDto> reviews) {}
   private static String photoUrl(Long placeId, boolean thumbnail, Long photoId) { return "/places/" + placeId + "/photo?" + (thumbnail ? "thumbnail=true&" : "") + "v=" + photoId; }
@@ -254,8 +254,9 @@ public class Api {
  private static void apply(HighlightTag tag, HighlightTagRequest request) { tag.name = request.name().trim(); tag.emoji = request.emoji().trim(); }
  private static void apply(Item item, ItemRequest request) { item.name = request.name().trim(); item.updatedAt = Instant.now(); if (item.createdAt == null) item.createdAt = item.updatedAt; }
   private static void apply(ItemReview review, ItemReviewRequest request) { review.comment = request.comment() == null || request.comment().isBlank() ? null : request.comment().trim(); review.taste = request.taste(); review.price = request.price(); }
-  private static void apply(PlaceVisitReview review, PlaceVisitReviewRequest request) { review.overall = request.overall(); review.comment = request.comment() == null || request.comment().isBlank() ? null : request.comment().trim(); review.taste = request.taste(); review.price = request.price(); }
- private static ResponseStatusException notFound(String type) { return new ResponseStatusException(HttpStatus.NOT_FOUND, type + " no encontrado"); }
+   private static void apply(PlaceVisitReview review, PlaceVisitReviewRequest request) { review.overall = request.overall(); review.comment = request.comment() == null || request.comment().isBlank() ? null : request.comment().trim(); review.taste = request.taste(); review.price = request.price(); }
+  private void touch(Place place, User author) { place.updatedBy = author; place.updatedAt = Instant.now(); places.save(place); }
+  private static ResponseStatusException notFound(String type) { return new ResponseStatusException(HttpStatus.NOT_FOUND, type + " no encontrado"); }
  private static Place active(Place place) { if (place.deactivatedAt != null) throw notFound("Lugar"); return place; }
   private static PlaceVisit active(PlaceVisit visit) { active(visit.place); return visit; }
   private static Item active(Item item) { active(item.visit.place); return item; }

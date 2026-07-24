@@ -26,7 +26,7 @@ class HomeRecipeApiTest {
 
    CookingDto result = new HomeRecipeApi(recipes, mock(RecipePhotos.class), cookings, reviews, null).updateCooking(2L, new CookingRequest(Home.AVRIL, 4, LocalDate.of(2026, 7, 21), MealType.ALMUERZO), avril);
 
-  assertEquals(Home.AVRIL, result.home()); assertEquals("avril", result.updatedBy()); verify(cookings).save(cooking);
+   assertEquals(Home.AVRIL, result.home()); assertEquals("avril", result.updatedBy()); verify(cookings).save(cooking); verify(recipes).save(recipe);
  }
 
  @Test

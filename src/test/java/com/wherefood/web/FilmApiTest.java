@@ -127,4 +127,34 @@ class FilmApiTest {
 
    mvc.perform(get("/api/films")).andExpect(status().isOk());
   }
+
+  @Test
+  void listsWatchedFilmsByTheirLatestViewBeforeUnwatchedFilms() {
+    Films films = mock(Films.class);
+    User tomas = new User(); tomas.username = "tomas";
+    Film older = film(1L, tomas, LocalDate.of(2026, 7, 20), Instant.parse("2026-07-23T00:00:00Z"), Instant.parse("2026-07-22T00:00:00Z"));
+    Film latest = film(2L, tomas, LocalDate.of(2026, 7, 23), Instant.parse("2026-07-21T00:00:00Z"), Instant.parse("2026-07-20T00:00:00Z"));
+    Film unwatched = film(3L, tomas, null, Instant.parse("2026-07-25T00:00:00Z"), Instant.parse("2026-07-24T00:00:00Z"));
+    when(films.findAll()).thenReturn(List.of(unwatched, older, latest));
+    FilmApi api = new FilmApi(films, mock(FilmReviews.class), mock(FilmViews.class), null, mock(FilmPhotos.class), null, null, null);
+
+    List<FilmDto> result = api.list(null, null, null);
+
+    assertEquals(List.of(2L, 1L, 3L), result.stream().map(FilmDto::id).toList());
+    assertEquals(LocalDate.of(2026, 7, 23), result.getFirst().lastWatchedOn());
+    assertEquals(Instant.parse("2026-07-21T00:00:00Z"), result.getFirst().updatedAt());
+    assertEquals(List.of(2L, 1L), api.list(null, null, true).stream().map(FilmDto::id).toList());
+  }
+
+  private static Film film(Long id, User author, LocalDate lastWatchedOn, Instant updatedAt, Instant createdAt) {
+    Film value = new Film();
+    value.id = id;
+    value.title = "Film " + id;
+    value.createdBy = author;
+    value.watchedCount = lastWatchedOn == null ? 0 : 1;
+    value.lastWatchedOn = lastWatchedOn;
+    value.updatedAt = updatedAt;
+    value.createdAt = createdAt;
+    return value;
+  }
 }

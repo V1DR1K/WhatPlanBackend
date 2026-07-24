@@ -47,6 +47,13 @@ class ExperienceMigrationTest {
    assertTrue(sql.contains("alter table place_visit_reviews"));
   }
 
+  @Test
+  void createsAReusableSpecialDatesCalendar() throws IOException {
+   String sql = migration("V34__add_special_dates.sql");
+   assertTrue(sql.contains("create table special_dates"));
+   assertTrue(sql.contains("special_date date not null"));
+  }
+
  private static String migration(String name) throws IOException {
   try (InputStream stream = ExperienceMigrationTest.class.getResourceAsStream("/db/migration/" + name)) { return new String(stream.readAllBytes(), StandardCharsets.UTF_8); }
  }

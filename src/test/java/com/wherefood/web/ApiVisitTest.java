@@ -26,6 +26,7 @@ import com.wherefood.repo.Repositories.PlaceVisits;
 import com.wherefood.repo.Repositories.Places;
 import com.wherefood.repo.Repositories.Items;
 import com.wherefood.repo.Repositories.Photos;
+import java.time.Instant;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.Optional;
@@ -59,6 +60,24 @@ class ApiVisitTest {
   }
 
   @Test
+  void updatesTheParentPlaceWhenAVisitChanges() {
+    Places places = mock(Places.class);
+    PlaceVisits visits = mock(PlaceVisits.class);
+    User tomas = user(7L, "tomas");
+    Place place = new Place(); place.id = 4L; place.status = PlaceStatus.REVIEWED; place.updatedAt = LocalDate.of(2026, 7, 1).atStartOfDay(java.time.ZoneOffset.UTC).toInstant();
+    PlaceVisit visit = visit(9L, place, tomas, LocalDate.of(2026, 7, 10));
+    when(visits.findDetailedById(9L)).thenReturn(Optional.of(visit));
+    when(visits.findByPlaceIdAndVisitedOn(4L, LocalDate.of(2026, 7, 12))).thenReturn(Optional.empty());
+    when(visits.save(visit)).thenReturn(visit);
+
+    new Api(null, null, null, places, visits, null, null, null, null, null, null, null, null).editVisit(9L, new VisitRequest(LocalDate.of(2026, 7, 12)), tomas);
+
+    assertEquals(LocalDate.of(2026, 7, 12), visit.visitedOn);
+    assertEquals(tomas, place.updatedBy);
+    verify(places).save(place);
+  }
+
+  @Test
   void derivesPlaceCardsFromVisitReviewsAndTheLatestVisitCover() {
     Places places = mock(Places.class);
     PlaceVisits visits = mock(PlaceVisits.class);
@@ -69,7 +88,7 @@ class ApiVisitTest {
     User tomas = user(7L, "tomas");
     User avril = user(6L, "avril");
     Place place = new Place();
-    place.id = 4L; place.name = "Lugar"; place.status = PlaceStatus.REVIEWED; place.acceptsReservations = true; place.createdBy = tomas; place.category = new com.wherefood.domain.Category();
+    place.id = 4L; place.name = "Lugar"; place.status = PlaceStatus.REVIEWED; place.acceptsReservations = true; place.createdBy = tomas; place.createdAt = Instant.parse("2026-07-01T00:00:00Z"); place.updatedAt = Instant.parse("2026-07-22T00:00:00Z"); place.category = new com.wherefood.domain.Category();
     PlaceVisit recent = visit(10L, place, tomas, LocalDate.of(2026, 7, 22));
     PlaceVisit older = visit(9L, place, tomas, LocalDate.of(2026, 7, 15));
     PlaceVisitPhoto photo = new PlaceVisitPhoto();
@@ -99,6 +118,7 @@ class ApiVisitTest {
     assertEquals("/place-visit-photos/99?thumbnail=true", result.thumbnailUrl());
     assertEquals("tomas", result.reviews().getFirst().author());
    assertEquals(result.rating(), listed.rating());
+    assertEquals(Instant.parse("2026-07-22T00:00:00Z"), listed.updatedAt());
   }
 
   @Test
