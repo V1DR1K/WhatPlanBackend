@@ -63,6 +63,11 @@ class ExperienceMigrationTest {
    assertTrue(sql.contains("on conflict (id) do nothing"));
   }
 
+  @Test
+  void alignsTheGlobalSettingsIdentifierWithItsEntity() throws IOException {
+   assertTrue(migration("V36__fix_global_settings_id_type.sql").contains("alter column id type integer"));
+  }
+
  private static String migration(String name) throws IOException {
   try (InputStream stream = ExperienceMigrationTest.class.getResourceAsStream("/db/migration/" + name)) { return new String(stream.readAllBytes(), StandardCharsets.UTF_8); }
  }
