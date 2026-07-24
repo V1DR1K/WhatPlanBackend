@@ -68,6 +68,10 @@ the next request's `cursor`; it is `null` when there are no more results.
 Catalog DTO media fields contain only URL and dimension metadata. Image bytes
 remain available exclusively from their dedicated photo endpoints.
 
+Cooking-review requests and responses include `complexity` from `1` through
+`5`, alongside `rating`. Existing cooking reviews were initialized with
+`complexity: 1`.
+
 `GET /api/places` also defaults to `date-desc`, which orders places by
 `updatedAt` (then `createdAt`). This makes every active catalog open with the
 most recently modified entry first.

@@ -22,8 +22,8 @@ record CookingRequest(@NotNull Home home, @Min(1) @Max(100) int servings, @NotNu
 record RecipeIngredientDto(String name, BigDecimal quantity, String unit) {}
 record RecipeStepDto(String instruction) {}
 record RecipeDto(Long id, String name, String sourceUrl, String photoUrl, String thumbnailUrl, Integer photoWidth, Integer photoHeight, Double rating, long cookingCount, List<Home> homes, List<RecipeIngredientDto> ingredients, List<RecipeStepDto> steps, String createdBy, String updatedBy, Instant createdAt, Instant updatedAt) {}
-record CookingReviewRequest(@Min(1) @Max(5) short rating, @Size(max = 1000) String comment) {}
-record CookingReviewDto(Long id, String author, String updatedBy, short rating, String comment, Instant createdAt, Instant updatedAt) {}
+record CookingReviewRequest(@Min(1) @Max(5) short rating, @Min(1) @Max(5) short complexity, @Size(max = 1000) String comment) {}
+record CookingReviewDto(Long id, String author, String updatedBy, short rating, short complexity, String comment, Instant createdAt, Instant updatedAt) {}
 record CookingDto(Long id, RecipeDto recipe, Home home, int servings, LocalDate cookedOn, MealType mealType, String createdBy, String updatedBy, List<CookingReviewDto> reviews, Instant createdAt, Instant updatedAt) {}
 
 /**
@@ -147,8 +147,8 @@ public class HomeRecipeApi {
   private record RecipeSummary(long cookingCount, List<Home> homes, Double rating) {}
  private static String recipePhotoUrl(Long recipeId, boolean thumbnail, Long photoId) { return "/how-cook/recipes/" + recipeId + "/photo?" + (thumbnail ? "thumbnail=true&" : "") + "v=" + photoId; }
  private static CookingReviewDto review(CookingReview value) { return review(value, value.author.username); }
- private static CookingReviewDto review(CookingReview value, String author) { return new CookingReviewDto(value.id, author, value.updatedBy.username, value.rating, value.comment, value.createdAt, value.updatedAt); }
- private static void apply(CookingReview review, CookingReviewRequest request) { review.rating = request.rating(); review.comment = blankToNull(request.comment()); }
+  private static CookingReviewDto review(CookingReview value, String author) { return new CookingReviewDto(value.id, author, value.updatedBy.username, value.rating, value.complexity, value.comment, value.createdAt, value.updatedAt); }
+  private static void apply(CookingReview review, CookingReviewRequest request) { review.rating = request.rating(); review.complexity = request.complexity(); review.comment = blankToNull(request.comment()); }
  private static void validateCookingDate(CookingRequest request) { if (request.cookedOn().isAfter(RosarioClock.today())) throw badRequest("Una preparación no puede quedar en el futuro"); }
  private static String blankToNull(String value) { return value == null || value.isBlank() ? null : value.trim(); }
  private static ResponseStatusException notFound(String type) { return new ResponseStatusException(HttpStatus.NOT_FOUND, type + " no encontrada"); }

@@ -11,6 +11,7 @@ public class CookingReview {
  @ManyToOne(fetch = FetchType.LAZY) @JoinColumn(name = "author_id", nullable = false) public User author;
  @ManyToOne(fetch = FetchType.LAZY) @JoinColumn(name = "updated_by", nullable = false) public User updatedBy;
  @Column(nullable = false) public short rating;
+ @Column(nullable = false) public short complexity;
  @Column(length = 1000) public String comment;
  public Instant createdAt;
  public Instant updatedAt;

@@ -30,7 +30,7 @@ class HomeRecipeApiTest {
  }
 
  @Test
- void createsAReusableRecipeDefinition() {
+  void createsAReusableRecipeDefinition() {
   Recipes recipes = mock(Recipes.class); User tomas = user(7L, "tomas"); when(recipes.save(any(Recipe.class))).thenAnswer(invocation -> { Recipe value = invocation.getArgument(0); value.id = 5L; return value; });
 
    RecipeDto result = new HomeRecipeApi(recipes, mock(RecipePhotos.class), null, null, null).addRecipe(new RecipeRequest("Tarta", "https://example.test/tarta", List.of(new RecipeIngredientRequest("Harina", BigDecimal.valueOf(250), "g")), List.of(new RecipeStepRequest("Hornear."))), tomas);
@@ -50,6 +50,16 @@ class HomeRecipeApiTest {
    assertEquals("Harina", result.content().getFirst().ingredients().getFirst().name()); assertEquals("Hornear.", result.content().getFirst().steps().getFirst().instruction());
   assertEquals("position", Recipe.class.getDeclaredField("ingredients").getAnnotation(OrderColumn.class).name());
    assertEquals("position", Recipe.class.getDeclaredField("steps").getAnnotation(OrderColumn.class).name());
+  }
+
+  @Test
+  void updatesCookingReviewComplexity() {
+   CookingReviews reviews = mock(CookingReviews.class); User tomas = user(7L, "tomas"); CookingReview review = new CookingReview(); review.id = 8L; review.author = review.updatedBy = tomas;
+   when(reviews.findDetailedById(8L)).thenReturn(Optional.of(review)); when(reviews.save(review)).thenReturn(review);
+
+   CookingReviewDto result = new HomeRecipeApi(null, null, null, reviews, null).updateReview(8L, new CookingReviewRequest((short) 4, (short) 2, "Quedó bien"), tomas);
+
+   assertEquals(4, result.rating()); assertEquals(2, result.complexity()); assertEquals("Quedó bien", result.comment());
   }
 
   @Test
