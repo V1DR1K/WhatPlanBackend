@@ -51,14 +51,30 @@ public class FilmApi {
   @PutMapping("/film-genres/{id}") @PreAuthorize("hasRole('ADMIN')") FilmGenreOptionDto updateGenre(@PathVariable Long id, @RequestBody @Valid FilmGenreOptionRequest request) { FilmGenreOption value = genreOptions.findById(id).orElseThrow(() -> notFound("Género")); apply(value, request); return genre(genreOptions.save(value)); }
   @DeleteMapping("/film-genres/{id}") @PreAuthorize("hasRole('ADMIN')") @ResponseStatus(HttpStatus.NO_CONTENT) void deleteGenre(@PathVariable Long id) { genreOptions.delete(genreOptions.findById(id).orElseThrow(() -> notFound("Género"))); }
 
- @GetMapping("/films") List<FilmDto> list(@RequestParam(required = false) String genre, @RequestParam(required = false) Long platformId, @RequestParam(required = false) Boolean watched) {
-  return films.findAll().stream()
-    .filter(film -> platformId == null || (film.platform != null && film.platform.id.equals(platformId)))
-    .filter(film -> watched == null || watched == (film.watchedCount > 0))
-    .filter(film -> genre == null || genre.isBlank() || matchesGenre(film, genre))
-     .sorted(Comparator.comparing((Film film) -> film.lastWatchedOn, Comparator.nullsLast(Comparator.reverseOrder())).thenComparing(film -> film.updatedAt, Comparator.nullsLast(Comparator.reverseOrder())).thenComparing(film -> film.createdAt, Comparator.nullsLast(Comparator.reverseOrder())).thenComparing(film -> film.id, Comparator.reverseOrder()))
-    .map(film -> film(film, false)).toList();
-  }
+  @GetMapping("/films") Slice<FilmDto> list(@RequestParam(required = false) String genre, @RequestParam(required = false) Long platformId, @RequestParam(required = false) Boolean watched, @RequestParam(required = false) String search, @RequestParam(required = false) String sort, @RequestParam(required = false) Long cursor, @RequestParam(defaultValue = "5") int size) {
+   int limit = Math.max(1, Math.min(size, 30));
+   String normalizedSearch = search == null || search.isBlank() ? null : search.trim().toLowerCase(Locale.ROOT);
+   List<Film> candidates = films.findAll().stream()
+     .filter(film -> platformId == null || (film.platform != null && film.platform.id.equals(platformId)))
+     .filter(film -> watched == null || watched == (film.watchedCount > 0))
+     .filter(film -> genre == null || genre.isBlank() || matchesGenre(film, genre))
+     .filter(film -> normalizedSearch == null || contains(film.title, normalizedSearch) || contains(film.originalTitle, normalizedSearch)).toList();
+   Map<Long, Double> ratings = filmRatings(candidates.stream().map(film -> film.id).toList());
+   Comparator<Film> dateDescending = Comparator.comparing((Film film) -> film.lastWatchedOn, Comparator.nullsLast(Comparator.reverseOrder())).thenComparing(film -> film.updatedAt, Comparator.nullsLast(Comparator.reverseOrder())).thenComparing(film -> film.createdAt, Comparator.nullsLast(Comparator.reverseOrder())).thenComparing(film -> film.id, Comparator.reverseOrder());
+   Comparator<Film> ordering = switch (sort == null ? "date-desc" : sort.trim().toLowerCase(Locale.ROOT)) {
+    case "date", "date-desc" -> dateDescending;
+    case "date-asc" -> Comparator.comparing((Film film) -> film.lastWatchedOn, Comparator.nullsLast(Comparator.naturalOrder())).thenComparing(film -> film.updatedAt, Comparator.nullsLast(Comparator.naturalOrder())).thenComparing(film -> film.createdAt, Comparator.nullsLast(Comparator.naturalOrder())).thenComparing(film -> film.id, Comparator.reverseOrder());
+    case "rating", "rating-desc" -> Comparator.comparing((Film film) -> ratings.get(film.id), Comparator.nullsLast(Comparator.reverseOrder())).thenComparing(dateDescending);
+    case "rating-asc" -> Comparator.comparing((Film film) -> ratings.get(film.id), Comparator.nullsLast(Comparator.naturalOrder())).thenComparing(dateDescending);
+    default -> throw badRequest("Orden inválido");
+   };
+   long offset = cursor == null ? 0 : Math.max(0, cursor);
+   List<Film> result = candidates.stream().sorted(ordering).skip(offset).limit(limit + 1L).toList();
+   Long next = result.size() > limit ? offset + limit : null;
+   List<Film> page = result.stream().limit(limit).toList();
+   Map<Long, FilmPhotoMetadata> photosByFilm = filmPhotos(page);
+   return new Slice<>(page.stream().map(film -> film(film, false, photosByFilm.get(film.id))).toList(), next);
+   }
 
   @GetMapping("/films/{id}") FilmDto get(@PathVariable Long id) { return film(findFilm(id), true); }
   @GetMapping(value = "/films/{id}/photo", produces = "image/webp") ResponseEntity<byte[]> photo(@PathVariable Long id, @RequestParam(defaultValue = "false") boolean thumbnail) {
@@ -117,19 +133,19 @@ public class FilmApi {
    if (tmdbId == null) return;
    films.findByTmdbId(tmdbId).filter(existing -> !existing.id.equals(currentId)).ifPresent(existing -> { throw new ResponseStatusException(HttpStatus.CONFLICT, "Esa película ya está en WhichFilm"); });
   }
-  private FilmDto film(Film film) { return film(film, true); }
-  private FilmDto film(Film film, boolean detailedTmdb) {
+   private FilmDto film(Film film) { return film(film, true, filmPhotos(List.of(film)).get(film.id)); }
+   private FilmDto film(Film film, boolean detailedTmdb) { return film(film, detailedTmdb, filmPhotos(List.of(film)).get(film.id)); }
+   private FilmDto film(Film film, boolean detailedTmdb, PhotoMetadata photo) {
    List<FilmReview> reviewValues = reviews.findByFilmIdOrderByViewWatchedOnDescIdDesc(film.id);
    Map<Long, String> reviewAuthors = reviews.authorsByFilmId(film.id).stream().collect(java.util.stream.Collectors.toMap(ReviewAuthor::getReviewId, ReviewAuthor::getAuthor));
    List<FilmReviewDto> filmReviews = reviewValues.stream().map(review -> review(review, reviewAuthors.get(review.id))).toList();
    Map<Long, List<FilmReviewDto>> reviewsByView = reviewValues.stream().collect(java.util.stream.Collectors.groupingBy(review -> review.view.id, java.util.stream.Collectors.mapping(review -> review(review, reviewAuthors.get(review.id)), java.util.stream.Collectors.toList())));
     List<FilmViewDto> filmViews = views.findByFilmIdOrderByWatchedOnDescIdDesc(film.id).stream().map(view -> view(view, reviewsByView.getOrDefault(view.id, List.of()))).toList();
-    FilmPhoto photo = filmPhotos.findByFilmId(film.id).orElse(null);
-   TmdbMovieDto catalog = catalog(film.tmdbId, detailedTmdb);
-    String posterUrl = photo != null ? photoUrl(film.id, false, photo.id) : posterUrl(film.posterPath);
-    String thumbnailUrl = photo != null ? photoUrl(film.id, true, photo.id) : null;
-    Integer posterWidth = photo == null ? null : Integer.valueOf(photo.width);
-    Integer posterHeight = photo == null ? null : Integer.valueOf(photo.height);
+    TmdbMovieDto catalog = catalog(film.tmdbId, detailedTmdb);
+     String posterUrl = photo != null ? photoUrl(film.id, false, photo.getId()) : posterUrl(film.posterPath);
+     String thumbnailUrl = photo != null ? photoUrl(film.id, true, photo.getId()) : null;
+     Integer posterWidth = photo == null ? null : photo.getWidth();
+     Integer posterHeight = photo == null ? null : photo.getHeight();
       return new FilmDto(film.id, film.tmdbId, film.title, film.originalTitle, film.synopsis, film.releaseDate, posterUrl, thumbnailUrl, posterWidth, posterHeight, film.genres.stream().map(value -> value.name).sorted(String.CASE_INSENSITIVE_ORDER).toList(), film.platform == null ? null : platform(film.platform), film.watchedCount, film.lastWatchedOn, film.createdBy.username, filmReviews, filmViews, film.createdAt, film.updatedAt, catalog);
   }
   private void apply(Film film, FilmRequest request) {
@@ -145,14 +161,22 @@ public class FilmApi {
     if (source.title() == null) throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "TMDB no devolvió un título para esa película");
     film.tmdbId = source.tmdbId(); film.title = source.title(); film.originalTitle = null; film.synopsis = null; film.releaseDate = null; film.posterPath = null; film.genres.clear();
    }
-  film.platform = request.platformId() == null ? null : platforms.findById(request.platformId()).orElseThrow(() -> notFound("Plataforma"));
+   film.platform = request.platformId() == null ? null : platforms.findById(request.platformId()).orElseThrow(() -> notFound("Plataforma"));
   }
+   private Map<Long, Double> filmRatings(Collection<Long> filmIds) {
+    if (filmIds.isEmpty() || reviews == null) return Map.of();
+    return reviews.ratingsByFilmIdIn(filmIds).stream().collect(java.util.stream.Collectors.toMap(FilmRating::getFilmId, FilmRating::getRating));
+   }
+   private Map<Long, FilmPhotoMetadata> filmPhotos(Collection<Film> values) {
+    if (values.isEmpty() || filmPhotos == null) return Map.of();
+    return filmPhotos.metadataByFilmIdIn(values.stream().map(film -> film.id).toList()).stream().collect(java.util.stream.Collectors.toMap(FilmPhotoMetadata::getFilmId, photo -> photo));
+   }
   private TmdbMovieDto catalog(Long tmdbId, boolean detailed) {
    if (tmdbId == null) return null;
    try { return detailed ? tmdb.details(tmdbId) : tmdb.summary(tmdbId); }
    catch (ResponseStatusException ignored) { return null; }
   }
-  private boolean matchesGenre(Film film, String genre) {
+   private boolean matchesGenre(Film film, String genre) {
    if (film.genres.stream().anyMatch(value -> value.name.equalsIgnoreCase(genre))) return true;
    TmdbMovieDto catalog = catalog(film.tmdbId, false);
    return catalog != null && catalog.genres().stream().anyMatch(value -> value.equalsIgnoreCase(genre));
@@ -171,6 +195,7 @@ public class FilmApi {
     FilmView saved = views.save(view); refreshWatchSummary(film);
     return saved;
    }
+   private static boolean contains(String value, String search) { return value != null && value.toLowerCase(Locale.ROOT).contains(search); }
   private FilmReviewDto saveReview(Film film, FilmView view, FilmReviewRequest request, User author) {
    if (reviews.existsByViewIdAndAuthorId(view.id, author.id)) throw conflict("Ya dejaste tu reseña para esta vista");
     FilmReview review = new FilmReview(); review.film = film; review.view = view; review.author = review.updatedBy = author; review.createdAt = Instant.now();

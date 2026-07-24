@@ -7,10 +7,13 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.wherefood.domain.Film;
+import com.wherefood.domain.FilmGenreOption;
 import com.wherefood.domain.FilmReview;
 import com.wherefood.domain.FilmView;
 import com.wherefood.domain.User;
+import com.wherefood.domain.WatchPlatform;
 import com.wherefood.repo.Repositories.Films;
+import com.wherefood.repo.Repositories.FilmRating;
 import com.wherefood.repo.Repositories.FilmReviews;
 import com.wherefood.repo.Repositories.FilmPhotos;
 import com.wherefood.repo.Repositories.FilmViews;
@@ -138,12 +141,33 @@ class FilmApiTest {
     when(films.findAll()).thenReturn(List.of(unwatched, older, latest));
     FilmApi api = new FilmApi(films, mock(FilmReviews.class), mock(FilmViews.class), null, mock(FilmPhotos.class), null, null, null);
 
-    List<FilmDto> result = api.list(null, null, null);
+    Slice<FilmDto> result = api.list(null, null, null, null, null, null, 5);
 
-    assertEquals(List.of(2L, 1L, 3L), result.stream().map(FilmDto::id).toList());
-    assertEquals(LocalDate.of(2026, 7, 23), result.getFirst().lastWatchedOn());
-    assertEquals(Instant.parse("2026-07-21T00:00:00Z"), result.getFirst().updatedAt());
-    assertEquals(List.of(2L, 1L), api.list(null, null, true).stream().map(FilmDto::id).toList());
+    assertEquals(List.of(2L, 1L, 3L), result.content().stream().map(FilmDto::id).toList());
+    assertEquals(LocalDate.of(2026, 7, 23), result.content().getFirst().lastWatchedOn());
+    assertEquals(Instant.parse("2026-07-21T00:00:00Z"), result.content().getFirst().updatedAt());
+    assertEquals(List.of(2L, 1L), api.list(null, null, true, null, null, null, 5).content().stream().map(FilmDto::id).toList());
+  }
+
+  @Test
+  void paginatesFilteredFilmsUsingTheRequestedSort() {
+    Films films = mock(Films.class); FilmReviews reviews = mock(FilmReviews.class); FilmViews views = mock(FilmViews.class); FilmPhotos photos = mock(FilmPhotos.class);
+    User tomas = new User(); tomas.username = "tomas";
+    WatchPlatform platform = new WatchPlatform(); platform.id = 8L;
+    Film lowerRated = film(1L, tomas, LocalDate.of(2026, 7, 20), Instant.parse("2026-07-22T00:00:00Z"), Instant.parse("2026-07-20T00:00:00Z")); lowerRated.title = "Drama antiguo"; lowerRated.platform = platform; lowerRated.genres.add(genre("Drama"));
+    Film higherRated = film(2L, tomas, LocalDate.of(2026, 7, 21), Instant.parse("2026-07-23T00:00:00Z"), Instant.parse("2026-07-21T00:00:00Z")); higherRated.title = "Drama reciente"; higherRated.platform = platform; higherRated.genres.add(genre("Drama"));
+    Film excluded = film(3L, tomas, null, Instant.parse("2026-07-24T00:00:00Z"), Instant.parse("2026-07-24T00:00:00Z")); excluded.title = "Comedia";
+    when(films.findAll()).thenReturn(List.of(lowerRated, higherRated, excluded));
+    when(reviews.ratingsByFilmIdIn(any())).thenReturn(List.of(rating(1L, 3.0), rating(2L, 5.0)));
+
+    FilmApi api = new FilmApi(films, reviews, views, null, photos, null, null, null);
+    Slice<FilmDto> first = api.list("Drama", 8L, true, "drama", "rating-desc", null, 1);
+    Slice<FilmDto> second = api.list("Drama", 8L, true, "drama", "rating-desc", first.nextCursor(), 1);
+
+    assertEquals(List.of(2L), first.content().stream().map(FilmDto::id).toList());
+    assertEquals(1L, first.nextCursor());
+    assertEquals(List.of(1L), second.content().stream().map(FilmDto::id).toList());
+    assertEquals(null, second.nextCursor());
   }
 
   private static Film film(Long id, User author, LocalDate lastWatchedOn, Instant updatedAt, Instant createdAt) {
@@ -157,4 +181,7 @@ class FilmApiTest {
     value.createdAt = createdAt;
     return value;
   }
+
+  private static FilmGenreOption genre(String name) { FilmGenreOption genre = new FilmGenreOption(); genre.name = name; return genre; }
+  private static FilmRating rating(Long filmId, Double rating) { return new FilmRating() { public Long getFilmId() { return filmId; } public Double getRating() { return rating; } }; }
 }

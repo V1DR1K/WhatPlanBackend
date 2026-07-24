@@ -21,7 +21,7 @@ record RecipeRequest(@NotBlank @Size(max = 160) String name, @Size(max = 1000) S
 record CookingRequest(@NotNull Home home, @Min(1) @Max(100) int servings, @NotNull LocalDate cookedOn, @NotNull MealType mealType) {}
 record RecipeIngredientDto(String name, BigDecimal quantity, String unit) {}
 record RecipeStepDto(String instruction) {}
-record RecipeDto(Long id, String name, String sourceUrl, String photoUrl, String thumbnailUrl, Integer photoWidth, Integer photoHeight, List<RecipeIngredientDto> ingredients, List<RecipeStepDto> steps, String createdBy, String updatedBy, Instant createdAt, Instant updatedAt) {}
+record RecipeDto(Long id, String name, String sourceUrl, String photoUrl, String thumbnailUrl, Integer photoWidth, Integer photoHeight, Double rating, long cookingCount, List<Home> homes, List<RecipeIngredientDto> ingredients, List<RecipeStepDto> steps, String createdBy, String updatedBy, Instant createdAt, Instant updatedAt) {}
 record CookingReviewRequest(@Min(1) @Max(5) short rating, @Size(max = 1000) String comment) {}
 record CookingReviewDto(Long id, String author, String updatedBy, short rating, String comment, Instant createdAt, Instant updatedAt) {}
 record CookingDto(Long id, RecipeDto recipe, Home home, int servings, LocalDate cookedOn, MealType mealType, String createdBy, String updatedBy, List<CookingReviewDto> reviews, Instant createdAt, Instant updatedAt) {}
@@ -43,9 +43,30 @@ public class HomeRecipeApi {
   this.recipes = recipes; this.recipePhotos = recipePhotos; this.cookings = cookings; this.reviews = reviews; this.storage = storage;
  }
 
- @GetMapping("/recipes") @Transactional(readOnly = true) List<RecipeDto> listRecipes(@RequestParam(required = false) String search) {
-  return recipes.findAll().stream().filter(recipe -> search == null || search.isBlank() || recipe.name.toLowerCase(Locale.ROOT).contains(search.trim().toLowerCase(Locale.ROOT))).sorted(Comparator.comparing((Recipe recipe) -> recipe.updatedAt).reversed()).map(this::recipe).toList();
- }
+  @GetMapping("/recipes") @Transactional(readOnly = true) Slice<RecipeDto> listRecipes(@RequestParam(required = false) String search, @RequestParam(required = false) Home home, @RequestParam(required = false) Boolean cooked, @RequestParam(required = false) String sort, @RequestParam(required = false) Long cursor, @RequestParam(defaultValue = "5") int size) {
+   int limit = Math.max(1, Math.min(size, 30));
+   String normalizedSearch = search == null || search.isBlank() ? null : search.trim().toLowerCase(Locale.ROOT);
+   List<Recipe> all = recipes.findAll();
+   Map<Long, RecipeSummary> summaries = recipeSummaries(all.stream().map(recipe -> recipe.id).toList());
+   List<Recipe> candidates = all.stream()
+     .filter(recipe -> normalizedSearch == null || recipe.name.toLowerCase(Locale.ROOT).contains(normalizedSearch))
+     .filter(recipe -> home == null || summaries.get(recipe.id).homes().contains(home))
+     .filter(recipe -> cooked == null || cooked == (summaries.get(recipe.id).cookingCount() > 0)).toList();
+   Comparator<Recipe> dateDescending = Comparator.comparing((Recipe recipe) -> recipe.updatedAt, Comparator.nullsLast(Comparator.reverseOrder())).thenComparing(recipe -> recipe.createdAt, Comparator.nullsLast(Comparator.reverseOrder())).thenComparing(recipe -> recipe.id, Comparator.reverseOrder());
+   Comparator<Recipe> ordering = switch (sort == null ? "date-desc" : sort.trim().toLowerCase(Locale.ROOT)) {
+    case "date", "date-desc" -> dateDescending;
+    case "date-asc" -> Comparator.comparing((Recipe recipe) -> recipe.updatedAt, Comparator.nullsLast(Comparator.naturalOrder())).thenComparing(recipe -> recipe.createdAt, Comparator.nullsLast(Comparator.naturalOrder())).thenComparing(recipe -> recipe.id, Comparator.reverseOrder());
+    case "rating", "rating-desc" -> Comparator.comparing((Recipe recipe) -> summaries.get(recipe.id).rating(), Comparator.nullsLast(Comparator.reverseOrder())).thenComparing(dateDescending);
+    case "rating-asc" -> Comparator.comparing((Recipe recipe) -> summaries.get(recipe.id).rating(), Comparator.nullsLast(Comparator.naturalOrder())).thenComparing(dateDescending);
+    default -> throw badRequest("Orden inválido");
+   };
+   long offset = cursor == null ? 0 : Math.max(0, cursor);
+   List<Recipe> result = candidates.stream().sorted(ordering).skip(offset).limit(limit + 1L).toList();
+   Long next = result.size() > limit ? offset + limit : null;
+   List<Recipe> page = result.stream().limit(limit).toList();
+   Map<Long, RecipePhotoMetadata> photosByRecipe = recipePhotos(page);
+   return new Slice<>(page.stream().map(recipe -> recipe(recipe, summaries.get(recipe.id), photosByRecipe.get(recipe.id))).toList(), next);
+  }
  @GetMapping("/recipes/{id}") @Transactional(readOnly = true) RecipeDto getRecipe(@PathVariable Long id) { return recipe(findRecipe(id)); }
  @PostMapping("/recipes") @ResponseStatus(HttpStatus.CREATED) @Transactional RecipeDto addRecipe(@RequestBody @Valid RecipeRequest request, @AuthenticationPrincipal User author) {
   Recipe recipe = new Recipe(); recipe.createdBy = recipe.updatedBy = author; recipe.createdAt = recipe.updatedAt = Instant.now(); apply(recipe, request); return recipe(recipes.save(recipe));
@@ -103,10 +124,27 @@ public class HomeRecipeApi {
   Map<Long, String> reviewAuthors = reviews.authorsByCookingId(value.id).stream().collect(java.util.stream.Collectors.toMap(ReviewAuthor::getReviewId, ReviewAuthor::getAuthor));
   return new CookingDto(value.id, recipe(value.recipe), value.home, value.servings, value.cookedOn, value.mealType, value.createdBy.username, value.updatedBy.username, reviewValues.stream().map(review -> review(review, reviewAuthors.get(review.id))).toList(), value.createdAt, value.updatedAt);
  }
- private RecipeDto recipe(Recipe value) {
-  RecipePhoto photo = recipePhotos.findByRecipeId(value.id).orElse(null);
-  return new RecipeDto(value.id, value.name, value.sourceUrl, photo == null ? null : recipePhotoUrl(value.id, false, photo.id), photo == null ? null : recipePhotoUrl(value.id, true, photo.id), photo == null ? null : Integer.valueOf(photo.width), photo == null ? null : Integer.valueOf(photo.height), value.ingredients.stream().map(ingredient -> new RecipeIngredientDto(ingredient.name, ingredient.quantity, ingredient.unit)).toList(), value.steps.stream().map(step -> new RecipeStepDto(step.instruction)).toList(), value.createdBy.username, value.updatedBy.username, value.createdAt, value.updatedAt);
- }
+  private RecipeDto recipe(Recipe value) {
+   return recipe(value, recipeSummaries(List.of(value.id)).get(value.id), recipePhotos(List.of(value)).get(value.id));
+  }
+  private RecipeDto recipe(Recipe value, RecipeSummary summary, PhotoMetadata photo) {
+   return new RecipeDto(value.id, value.name, value.sourceUrl, photo == null ? null : recipePhotoUrl(value.id, false, photo.getId()), photo == null ? null : recipePhotoUrl(value.id, true, photo.getId()), photo == null ? null : photo.getWidth(), photo == null ? null : photo.getHeight(), summary.rating(), summary.cookingCount(), summary.homes(), value.ingredients.stream().map(ingredient -> new RecipeIngredientDto(ingredient.name, ingredient.quantity, ingredient.unit)).toList(), value.steps.stream().map(step -> new RecipeStepDto(step.instruction)).toList(), value.createdBy.username, value.updatedBy.username, value.createdAt, value.updatedAt);
+  }
+  private Map<Long, RecipeSummary> recipeSummaries(Collection<Long> recipeIds) {
+   if (recipeIds.isEmpty()) return Map.of();
+   Map<Long, Long> counts = cookings == null ? Map.of() : cookings.cookingCountsByRecipeIdIn(recipeIds).stream().collect(java.util.stream.Collectors.toMap(RecipeCookingCount::getRecipeId, RecipeCookingCount::getCookingCount));
+   Map<Long, EnumSet<Home>> homes = new HashMap<>();
+   if (cookings != null) for (RecipeHome value : cookings.homesByRecipeIdIn(recipeIds)) homes.computeIfAbsent(value.getRecipeId(), ignored -> EnumSet.noneOf(Home.class)).add(value.getHome());
+   Map<Long, Double> ratings = reviews == null ? Map.of() : reviews.ratingsByRecipeIdIn(recipeIds).stream().collect(java.util.stream.Collectors.toMap(RecipeRating::getRecipeId, RecipeRating::getRating));
+   Map<Long, RecipeSummary> result = new HashMap<>();
+   for (Long recipeId : recipeIds) result.put(recipeId, new RecipeSummary(counts.getOrDefault(recipeId, 0L), homes.containsKey(recipeId) ? List.copyOf(homes.get(recipeId)) : List.of(), ratings.get(recipeId)));
+   return result;
+  }
+  private Map<Long, RecipePhotoMetadata> recipePhotos(Collection<Recipe> values) {
+   if (values.isEmpty() || recipePhotos == null) return Map.of();
+   return recipePhotos.metadataByRecipeIdIn(values.stream().map(recipe -> recipe.id).toList()).stream().collect(java.util.stream.Collectors.toMap(RecipePhotoMetadata::getRecipeId, photo -> photo));
+  }
+  private record RecipeSummary(long cookingCount, List<Home> homes, Double rating) {}
  private static String recipePhotoUrl(Long recipeId, boolean thumbnail, Long photoId) { return "/how-cook/recipes/" + recipeId + "/photo?" + (thumbnail ? "thumbnail=true&" : "") + "v=" + photoId; }
  private static CookingReviewDto review(CookingReview value) { return review(value, value.author.username); }
  private static CookingReviewDto review(CookingReview value, String author) { return new CookingReviewDto(value.id, author, value.updatedBy.username, value.rating, value.comment, value.createdAt, value.updatedAt); }

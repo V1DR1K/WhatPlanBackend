@@ -45,12 +45,29 @@ public class WhyFunActivityApi {
   this.categories = categories; this.activities = activities; this.activityPhotos = activityPhotos; this.visits = visits; this.photos = photos; this.reviews = reviews; this.storage = storage;
  }
 
- @GetMapping("/activities") @Transactional(readOnly = true) List<ActivityDto> listActivities(@RequestParam(required = false) Long categoryId, @RequestParam(required = false) Long subcategoryId) {
-   List<WhyFunVenue> values = activities.findAll().stream().filter(value -> categoryId == null || value.category.id.equals(categoryId)).filter(value -> subcategoryId == null || value.subcategory.id.equals(subcategoryId)).toList();
-   Map<Long, Double> ratings = activityRatings(values.stream().map(value -> value.id).toList());
-   Map<Long, Long> visitCounts = activityVisitCounts(values.stream().map(value -> value.id).toList());
-   return values.stream().sorted(Comparator.comparing((WhyFunVenue value) -> value.name, String.CASE_INSENSITIVE_ORDER).thenComparing(value -> value.id)).map(value -> activity(value, ratings.get(value.id), visitCounts.getOrDefault(value.id, 0L))).toList();
- }
+  @GetMapping("/activities") @Transactional(readOnly = true) Slice<ActivityDto> listActivities(@RequestParam(required = false) Long categoryId, @RequestParam(required = false) Long subcategoryId, @RequestParam(required = false) String search, @RequestParam(required = false) Boolean visited, @RequestParam(required = false) String sort, @RequestParam(required = false) Long cursor, @RequestParam(defaultValue = "5") int size) {
+    int limit = Math.max(1, Math.min(size, 30));
+    String normalizedSearch = search == null || search.isBlank() ? null : search.trim().toLowerCase(Locale.ROOT);
+    List<WhyFunVenue> values = activities.findAll().stream().filter(value -> categoryId == null || value.category.id.equals(categoryId)).filter(value -> subcategoryId == null || value.subcategory.id.equals(subcategoryId)).filter(value -> normalizedSearch == null || contains(value.name, normalizedSearch) || contains(value.address, normalizedSearch) || contains(value.category.name, normalizedSearch) || contains(value.subcategory.name, normalizedSearch)).toList();
+    Map<Long, Double> ratings = activityRatings(values.stream().map(value -> value.id).toList());
+    Map<Long, Long> visitCounts = activityVisitCounts(values.stream().map(value -> value.id).toList());
+    List<WhyFunVenue> candidates = values.stream().filter(value -> visited == null || visited == (visitCounts.getOrDefault(value.id, 0L) > 0)).toList();
+    Comparator<WhyFunVenue> dateDescending = Comparator.comparing((WhyFunVenue value) -> value.createdAt, Comparator.nullsLast(Comparator.reverseOrder())).thenComparing(value -> value.id, Comparator.reverseOrder());
+    Comparator<WhyFunVenue> ordering = switch (sort == null ? "name" : sort.trim().toLowerCase(Locale.ROOT)) {
+     case "name" -> Comparator.comparing((WhyFunVenue value) -> value.name, String.CASE_INSENSITIVE_ORDER).thenComparing(value -> value.id);
+     case "date", "date-desc" -> dateDescending;
+     case "date-asc" -> Comparator.comparing((WhyFunVenue value) -> value.createdAt, Comparator.nullsLast(Comparator.naturalOrder())).thenComparing(value -> value.id, Comparator.reverseOrder());
+     case "rating", "rating-desc" -> Comparator.comparing((WhyFunVenue value) -> ratings.get(value.id), Comparator.nullsLast(Comparator.reverseOrder())).thenComparing(dateDescending);
+     case "rating-asc" -> Comparator.comparing((WhyFunVenue value) -> ratings.get(value.id), Comparator.nullsLast(Comparator.naturalOrder())).thenComparing(dateDescending);
+     default -> throw badRequest("Orden inválido");
+    };
+    long offset = cursor == null ? 0 : Math.max(0, cursor);
+    List<WhyFunVenue> result = candidates.stream().sorted(ordering).skip(offset).limit(limit + 1L).toList();
+    Long next = result.size() > limit ? offset + limit : null;
+    List<WhyFunVenue> page = result.stream().limit(limit).toList();
+    Map<Long, PhotoMetadata> profilesById = profilePhotos(page);
+    return new Slice<>(page.stream().map(value -> activity(value, ratings.get(value.id), visitCounts.getOrDefault(value.id, 0L), value.coverPhotoId == null ? null : profilesById.get(value.coverPhotoId))).toList(), next);
+  }
  @GetMapping("/activities/{id}") @Transactional(readOnly = true) ActivityDto getActivity(@PathVariable Long id) { return activity(findActivity(id)); }
  @PostMapping("/activities") @ResponseStatus(HttpStatus.CREATED) @Transactional ActivityDto addActivity(@RequestBody @Valid ActivityRequest request, @AuthenticationPrincipal User author) {
   WhyFunVenue activity = new WhyFunVenue(); activity.createdBy = activity.updatedBy = author; activity.createdAt = activity.updatedAt = Instant.now(); apply(activity, request); return activity(activities.save(activity));
@@ -128,17 +145,24 @@ public class WhyFunActivityApi {
   Map<Long, String> reviewAuthors = reviews.authorsByVisitId(value.id).stream().collect(java.util.stream.Collectors.toMap(ReviewAuthor::getReviewId, ReviewAuthor::getAuthor));
   return new ActivityVisitDto(value.id, activity, value.scheduledAt, value.createdBy.username, value.updatedBy.username, cover, resultPhotos, reviewValues.stream().map(review -> review(review, reviewAuthors.get(review.id))).toList(), value.createdAt, value.updatedAt);
  }
-  private ActivityDto activity(WhyFunVenue value) { return activity(value, activityRatings(List.of(value.id)).get(value.id), activityVisitCounts(List.of(value.id)).getOrDefault(value.id, 0L)); }
-  private ActivityDto activity(WhyFunVenue value, Double rating, long visitCount) { return new ActivityDto(value.id, value.name, value.address, category(value.category), category(value.subcategory), value.schedules.stream().sorted(Comparator.comparing((WhyFunVenueSchedule schedule) -> schedule.dayOfWeek).thenComparing(schedule -> schedule.opensAt)).map(schedule -> new ActivityScheduleDto(schedule.dayOfWeek, schedule.opensAt, schedule.closesAt)).toList(), profilePhoto(value).map(WhyFunActivityApi::profilePhoto).orElse(null), rating, visitCount, value.createdBy.username, value.updatedBy.username, value.createdAt, value.updatedAt); }
+   private ActivityDto activity(WhyFunVenue value) { return activity(value, activityRatings(List.of(value.id)).get(value.id), activityVisitCounts(List.of(value.id)).getOrDefault(value.id, 0L), value.coverPhotoId == null ? null : profilePhotos(List.of(value)).get(value.coverPhotoId)); }
+   private ActivityDto activity(WhyFunVenue value, Double rating, long visitCount, PhotoMetadata profile) { return new ActivityDto(value.id, value.name, value.address, category(value.category), category(value.subcategory), value.schedules.stream().sorted(Comparator.comparing((WhyFunVenueSchedule schedule) -> schedule.dayOfWeek).thenComparing(schedule -> schedule.opensAt)).map(schedule -> new ActivityScheduleDto(schedule.dayOfWeek, schedule.opensAt, schedule.closesAt)).toList(), profile == null ? null : profilePhoto(value.id, profile), rating, visitCount, value.createdBy.username, value.updatedBy.username, value.createdAt, value.updatedAt); }
   private Map<Long, Double> activityRatings(Collection<Long> activityIds) { if (activityIds.isEmpty() || reviews == null) return Map.of(); return reviews.ratingsByActivityIdIn(activityIds).stream().collect(java.util.stream.Collectors.toMap(ActivityRating::getActivityId, ActivityRating::getRating)); }
-  private Map<Long, Long> activityVisitCounts(Collection<Long> activityIds) { if (activityIds.isEmpty() || visits == null) return Map.of(); return visits.countsByActivityIdIn(activityIds).stream().collect(java.util.stream.Collectors.toMap(ActivityVisitCount::getActivityId, ActivityVisitCount::getVisitCount)); }
-  private Optional<WhyFunVenuePhoto> profilePhoto(WhyFunVenue value) { return value.coverPhotoId == null ? Optional.empty() : activityPhotos.findByIdAndVenueId(value.coverPhotoId, value.id); }
-  private static ActivityProfilePhotoDto profilePhoto(WhyFunVenuePhoto value) { return new ActivityProfilePhotoDto(value.id, "/why-fun/activities/" + value.venue.id + "/photo?v=" + value.id, "/why-fun/activities/" + value.venue.id + "/photo?thumbnail=true&v=" + value.id, value.width, value.height, value.createdAt); }
+   private Map<Long, Long> activityVisitCounts(Collection<Long> activityIds) { if (activityIds.isEmpty() || visits == null) return Map.of(); return visits.countsByActivityIdIn(activityIds).stream().collect(java.util.stream.Collectors.toMap(ActivityVisitCount::getActivityId, ActivityVisitCount::getVisitCount)); }
+   private Map<Long, PhotoMetadata> profilePhotos(Collection<WhyFunVenue> values) {
+    if (values.isEmpty() || activityPhotos == null) return Map.of();
+    List<Long> photoIds = values.stream().map(value -> value.coverPhotoId).filter(Objects::nonNull).toList();
+    if (photoIds.isEmpty()) return Map.of();
+    return activityPhotos.metadataByIdIn(photoIds).stream().collect(java.util.stream.Collectors.toMap(PhotoMetadata::getId, photo -> photo));
+   }
+   private Optional<WhyFunVenuePhoto> profilePhoto(WhyFunVenue value) { return value.coverPhotoId == null ? Optional.empty() : activityPhotos.findByIdAndVenueId(value.coverPhotoId, value.id); }
+   private static ActivityProfilePhotoDto profilePhoto(Long activityId, PhotoMetadata value) { return new ActivityProfilePhotoDto(value.getId(), "/why-fun/activities/" + activityId + "/photo?v=" + value.getId(), "/why-fun/activities/" + activityId + "/photo?thumbnail=true&v=" + value.getId(), value.getWidth(), value.getHeight(), value.getCreatedAt()); }
  private static FunCategoryDto category(WhyFunCategory value) { return new FunCategoryDto(value.id, value.parent == null ? null : value.parent.id, value.name, value.slug, value.icon, value.active); }
  private static ActivityPhotoDto photo(WhyFunVisitPhoto value) { return new ActivityPhotoDto(value.id, "/why-fun/activity-visit-photos/" + value.id, "/why-fun/activity-visit-photos/" + value.id + "?thumbnail=true", value.width, value.height, value.position, value.createdBy.username, value.createdAt); }
- private static ActivityReviewDto review(WhyFunVisitReview value) { return review(value, value.author.username); }
+  private static ActivityReviewDto review(WhyFunVisitReview value) { return review(value, value.author.username); }
  private static ActivityReviewDto review(WhyFunVisitReview value, String author) { return new ActivityReviewDto(value.id, author, value.updatedBy.username, value.rating, value.comment, value.createdAt, value.updatedAt); }
- private static void apply(WhyFunVisitReview review, ActivityReviewRequest request) { review.rating = request.rating(); review.comment = request.comment() == null || request.comment().isBlank() ? null : request.comment().trim(); }
+  private static void apply(WhyFunVisitReview review, ActivityReviewRequest request) { review.rating = request.rating(); review.comment = request.comment() == null || request.comment().isBlank() ? null : request.comment().trim(); }
+  private static boolean contains(String value, String search) { return value != null && value.toLowerCase(Locale.ROOT).contains(search); }
  private static ResponseStatusException notFound(String type) { return new ResponseStatusException(HttpStatus.NOT_FOUND, type + " no encontrado"); }
  private static ResponseStatusException badRequest(String detail) { return new ResponseStatusException(HttpStatus.BAD_REQUEST, detail); }
  private static ResponseStatusException conflict(String detail) { return new ResponseStatusException(HttpStatus.CONFLICT, detail); }
