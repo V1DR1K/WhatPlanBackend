@@ -1,5 +1,6 @@
 package com.wherefood.web;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.io.*;
@@ -66,6 +67,25 @@ class ExperienceMigrationTest {
   @Test
   void alignsTheGlobalSettingsIdentifierWithItsEntity() throws IOException {
    assertTrue(migration("V36__fix_global_settings_id_type.sql").contains("alter column id type integer"));
+  }
+
+  @Test
+  void makesSpecialDatesRecurringAndSeedsTheDefaultCalendar() throws IOException {
+   String sql = migration("V37__add_special_date_recurrence.sql");
+   assertTrue(sql.contains("add column recurrence varchar(16)"));
+   assertTrue(sql.contains("set recurrence = 'ONCE'"));
+   assertTrue(sql.contains("chk_special_dates_recurrence"));
+   assertTrue(sql.contains("('ONCE', 'ANNUAL', 'MONTHLY')"));
+   assertTrue(sql.contains("where not exists"));
+   assertEquals(8, sql.split("date '", -1).length - 1);
+   assertTrue(sql.contains("(date '2026-02-14', 'San Valentín', 'ANNUAL')"));
+   assertTrue(sql.contains("(date '2026-10-03', 'Día del Novio', 'ANNUAL')"));
+   assertTrue(sql.contains("(date '2026-06-27', 'Nuestro aniversario', 'ANNUAL')"));
+   assertTrue(sql.contains("(date '2026-06-27', 'Mensuario', 'MONTHLY')"));
+   assertTrue(sql.contains("(date '2026-05-03', 'Primera vez que hablamos', 'ANNUAL')"));
+   assertTrue(sql.contains("(date '2026-05-09', 'Primera cita', 'ANNUAL')"));
+   assertTrue(sql.contains("(date '2005-04-12', 'Cumpleaños de Tomás', 'ANNUAL')"));
+   assertTrue(sql.contains("(date '2004-04-12', 'Cumpleaños de Avril', 'ANNUAL')"));
   }
 
  private static String migration(String name) throws IOException {

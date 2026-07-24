@@ -9,6 +9,7 @@ public class SpecialDate {
  @Id @GeneratedValue(strategy = GenerationType.IDENTITY) public Long id;
  @Column(name = "special_date", nullable = false) public LocalDate date;
  @Column(nullable = false, length = 160) public String label;
+ @Enumerated(EnumType.STRING) @Column(nullable = false, length = 16) public SpecialDateRecurrence recurrence;
  @Column(nullable = false) public Instant createdAt;
  @Column(nullable = false) public Instant updatedAt;
 }

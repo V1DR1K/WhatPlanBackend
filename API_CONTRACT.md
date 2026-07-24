@@ -15,9 +15,12 @@ creator and `updatedBy` identifies the most recent editor where the resource is 
 - WhoCook: reusable `/api/how-cook/recipes` have dated
   `/api/how-cook/recipes/{recipeId}/cookings`; cooking media and reviews are at
   `/api/how-cook/cookings/{id}/photos` and `/reviews`.
-- Global calendar: `/api/special-dates` stores exact, non-recurring date labels.
-  More than one label may use the same date. Reads require authentication;
-  creating, updating, and deleting entries require `ADMIN`.
+- Global calendar: `/api/special-dates` stores date labels with a required
+  `recurrence`: `ONCE` applies only to the exact date, `ANNUAL` applies on the
+  same month/day every year, and `MONTHLY` applies on the same day each month.
+  Requests require `date`, `label`, and `recurrence`; responses include all
+  three fields. More than one label may use the same date. Reads require
+  authentication; creating, updating, and deleting entries require `ADMIN`.
 - Global settings: authenticated users can `GET /api/settings`, which returns
   `{ "catalogPageSize": 5 }` by default. `ADMIN` users can `PUT /api/settings`
   with `catalogPageSize` from 1 through 50.
