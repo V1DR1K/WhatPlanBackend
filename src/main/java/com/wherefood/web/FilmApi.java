@@ -60,10 +60,10 @@ public class FilmApi {
      .filter(film -> genre == null || genre.isBlank() || matchesGenre(film, genre))
      .filter(film -> normalizedSearch == null || contains(film.title, normalizedSearch) || contains(film.originalTitle, normalizedSearch)).toList();
    Map<Long, Double> ratings = filmRatings(candidates.stream().map(film -> film.id).toList());
-   Comparator<Film> dateDescending = Comparator.comparing((Film film) -> film.lastWatchedOn, Comparator.nullsLast(Comparator.reverseOrder())).thenComparing(film -> film.updatedAt, Comparator.nullsLast(Comparator.reverseOrder())).thenComparing(film -> film.createdAt, Comparator.nullsLast(Comparator.reverseOrder())).thenComparing(film -> film.id, Comparator.reverseOrder());
+    Comparator<Film> dateDescending = Comparator.comparing((Film film) -> film.updatedAt, Comparator.nullsLast(Comparator.reverseOrder())).thenComparing(film -> film.createdAt, Comparator.nullsLast(Comparator.reverseOrder())).thenComparing(film -> film.id, Comparator.reverseOrder());
    Comparator<Film> ordering = switch (sort == null ? "date-desc" : sort.trim().toLowerCase(Locale.ROOT)) {
     case "date", "date-desc" -> dateDescending;
-    case "date-asc" -> Comparator.comparing((Film film) -> film.lastWatchedOn, Comparator.nullsLast(Comparator.naturalOrder())).thenComparing(film -> film.updatedAt, Comparator.nullsLast(Comparator.naturalOrder())).thenComparing(film -> film.createdAt, Comparator.nullsLast(Comparator.naturalOrder())).thenComparing(film -> film.id, Comparator.reverseOrder());
+     case "date-asc" -> Comparator.comparing((Film film) -> film.updatedAt, Comparator.nullsLast(Comparator.naturalOrder())).thenComparing(film -> film.createdAt, Comparator.nullsLast(Comparator.naturalOrder())).thenComparing(film -> film.id, Comparator.reverseOrder());
     case "rating", "rating-desc" -> Comparator.comparing((Film film) -> ratings.get(film.id), Comparator.nullsLast(Comparator.reverseOrder())).thenComparing(dateDescending);
     case "rating-asc" -> Comparator.comparing((Film film) -> ratings.get(film.id), Comparator.nullsLast(Comparator.naturalOrder())).thenComparing(dateDescending);
     default -> throw badRequest("Orden inválido");

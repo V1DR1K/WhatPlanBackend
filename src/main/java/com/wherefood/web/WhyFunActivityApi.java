@@ -52,11 +52,11 @@ public class WhyFunActivityApi {
     Map<Long, Double> ratings = activityRatings(values.stream().map(value -> value.id).toList());
     Map<Long, Long> visitCounts = activityVisitCounts(values.stream().map(value -> value.id).toList());
     List<WhyFunVenue> candidates = values.stream().filter(value -> visited == null || visited == (visitCounts.getOrDefault(value.id, 0L) > 0)).toList();
-    Comparator<WhyFunVenue> dateDescending = Comparator.comparing((WhyFunVenue value) -> value.createdAt, Comparator.nullsLast(Comparator.reverseOrder())).thenComparing(value -> value.id, Comparator.reverseOrder());
-    Comparator<WhyFunVenue> ordering = switch (sort == null ? "name" : sort.trim().toLowerCase(Locale.ROOT)) {
+     Comparator<WhyFunVenue> dateDescending = Comparator.comparing((WhyFunVenue value) -> value.updatedAt, Comparator.nullsLast(Comparator.reverseOrder())).thenComparing(value -> value.createdAt, Comparator.nullsLast(Comparator.reverseOrder())).thenComparing(value -> value.id, Comparator.reverseOrder());
+     Comparator<WhyFunVenue> ordering = switch (sort == null ? "date-desc" : sort.trim().toLowerCase(Locale.ROOT)) {
      case "name" -> Comparator.comparing((WhyFunVenue value) -> value.name, String.CASE_INSENSITIVE_ORDER).thenComparing(value -> value.id);
      case "date", "date-desc" -> dateDescending;
-     case "date-asc" -> Comparator.comparing((WhyFunVenue value) -> value.createdAt, Comparator.nullsLast(Comparator.naturalOrder())).thenComparing(value -> value.id, Comparator.reverseOrder());
+      case "date-asc" -> Comparator.comparing((WhyFunVenue value) -> value.updatedAt, Comparator.nullsLast(Comparator.naturalOrder())).thenComparing(value -> value.createdAt, Comparator.nullsLast(Comparator.naturalOrder())).thenComparing(value -> value.id, Comparator.reverseOrder());
      case "rating", "rating-desc" -> Comparator.comparing((WhyFunVenue value) -> ratings.get(value.id), Comparator.nullsLast(Comparator.reverseOrder())).thenComparing(dateDescending);
      case "rating-asc" -> Comparator.comparing((WhyFunVenue value) -> ratings.get(value.id), Comparator.nullsLast(Comparator.naturalOrder())).thenComparing(dateDescending);
      default -> throw badRequest("Orden inválido");

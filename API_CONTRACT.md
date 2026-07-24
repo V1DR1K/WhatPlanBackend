@@ -37,9 +37,8 @@ the next request's `cursor`; it is `null` when there are no more results.
   existing `genre`, `platformId`, and `watched` filters. `search` matches a
   local title or original title. `sort` accepts `rating-desc`, `rating-asc`,
   `date-desc`, and `date-asc` (`rating` and `date` remain aliases for their
-  descending variants). A date is a film's `lastWatchedOn`; the default is
-  `date-desc`, preserving watched films ordered by their latest watch before
-  unwatched films. Ratings are averages of film reviews. Each content item has
+  descending variants). Dates use `updatedAt`; the default is `date-desc`.
+  Ratings are averages of film reviews. Each content item has
   the existing `FilmDto` fields: `id`, `tmdbId`, `title`, `originalTitle`,
   `synopsis`, `releaseDate`, `posterUrl`, `thumbnailUrl`, `posterWidth`,
   `posterHeight`, `genres`, `platform`, `watchedCount`, `lastWatchedOn`,
@@ -61,13 +60,17 @@ the next request's `cursor`; it is `null` when there are no more results.
   selects activities with `visitCount > 0`; `visited=false` selects pending
   activities with `visitCount == 0`. `sort` accepts `rating-desc`,
   `rating-asc`, `date-desc`, and `date-asc` (`rating` and `date` are descending
-  aliases); dates use `createdAt`. The default remains name ascending. Each
+  aliases); dates use `updatedAt`, and the default is `date-desc`. Each
   content item has the existing `ActivityDto` fields: `id`, `name`, `address`,
   `category`, `subcategory`, `schedules`, `profilePhoto`, `rating`,
   `visitCount`, `createdBy`, `updatedBy`, `createdAt`, and `updatedAt`.
 
 Catalog DTO media fields contain only URL and dimension metadata. Image bytes
 remain available exclusively from their dedicated photo endpoints.
+
+`GET /api/places` also defaults to `date-desc`, which orders places by
+`updatedAt` (then `createdAt`). This makes every active catalog open with the
+most recently modified entry first.
 
 All collections are ordered by their explicit photo position or their relevant
 experience date. A visit/cooking cover is selected with `PUT .../cover/{photoId}`.

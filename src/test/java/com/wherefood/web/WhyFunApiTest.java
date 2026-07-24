@@ -50,22 +50,24 @@ class WhyFunApiTest {
    WhyFunCategory category = category(1L, "Arte"); WhyFunCategory subcategory = category(2L, "Museos"); subcategory.parent = category;
    WhyFunVenue best = activity(1L, "Museo de arte", category, subcategory, tomas, "2026-07-23T00:00:00Z");
    WhyFunVenue other = activity(2L, "Museo historico", category, subcategory, tomas, "2026-07-22T00:00:00Z");
-   WhyFunVenue pending = activity(3L, "Teatro", category, subcategory, tomas, "2026-07-21T00:00:00Z");
+    WhyFunVenue pending = activity(3L, "Archivo de arte", category, subcategory, tomas, "2026-07-21T00:00:00Z");
    when(activities.findAll()).thenReturn(List.of(best, other, pending));
    when(reviews.ratingsByActivityIdIn(any())).thenReturn(List.of(rating(1L, 5.0), rating(2L, 3.0)));
    when(visits.countsByActivityIdIn(any())).thenReturn(List.of(count(1L, 2L), count(2L, 1L)));
 
    WhyFunActivityApi api = new WhyFunActivityApi(null, activities, photos, visits, null, reviews, null);
    Slice<ActivityDto> first = api.listActivities(1L, 2L, "museo", true, "rating-desc", null, 1);
-   Slice<ActivityDto> second = api.listActivities(1L, 2L, "museo", true, "rating-desc", first.nextCursor(), 1);
-   Slice<ActivityDto> unvisited = api.listActivities(1L, 2L, null, false, "date-desc", null, 5);
+    Slice<ActivityDto> second = api.listActivities(1L, 2L, "museo", true, "rating-desc", first.nextCursor(), 1);
+    Slice<ActivityDto> unvisited = api.listActivities(1L, 2L, null, false, "date-desc", null, 5);
+    Slice<ActivityDto> defaultOrder = api.listActivities(1L, 2L, null, null, null, null, 5);
 
    assertEquals(List.of(1L), first.content().stream().map(ActivityDto::id).toList());
    assertEquals(1L, first.nextCursor());
    assertEquals(2L, first.content().getFirst().visitCount());
    assertEquals(List.of(2L), second.content().stream().map(ActivityDto::id).toList());
-   assertEquals(null, second.nextCursor());
-   assertEquals(List.of(3L), unvisited.content().stream().map(ActivityDto::id).toList());
+    assertEquals(null, second.nextCursor());
+    assertEquals(List.of(3L), unvisited.content().stream().map(ActivityDto::id).toList());
+    assertEquals(List.of(1L, 2L, 3L), defaultOrder.content().stream().map(ActivityDto::id).toList());
   }
 
   private static WhyFunCategory category(Long id, String name) { WhyFunCategory category = new WhyFunCategory(); category.id = id; category.name = name; category.slug = name.toLowerCase(); category.icon = "x"; return category; }

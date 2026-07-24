@@ -70,11 +70,11 @@ public class Api {
    List<Place> candidates = places.findAll().stream().filter(place -> place.deactivatedAt == null).filter(place -> categoryId == null || place.category.id.equals(categoryId)).filter(place -> highlightTagId == null || place.highlightTags.stream().anyMatch(tag -> tag.id.equals(highlightTagId))).filter(place -> status == null || place.status == status).filter(place -> normalizedSearch == null || place.name.toLowerCase(Locale.ROOT).contains(normalizedSearch) || place.category.name.toLowerCase(Locale.ROOT).contains(normalizedSearch) || place.address != null && place.address.toLowerCase(Locale.ROOT).contains(normalizedSearch)).toList();
    Map<Long, PlaceSummary> summaries = placeSummaries(candidates);
    long offset = cursor == null ? 0 : Math.max(0, cursor);
-   Comparator<Place> ordering = switch (sort == null ? "rating-desc" : sort.trim().toLowerCase(Locale.ROOT)) {
-    case "rating", "rating-desc" -> Comparator.comparingDouble((Place place) -> summaries.get(place.id).rating()).reversed();
-    case "rating-asc" -> Comparator.comparingDouble((Place place) -> summaries.get(place.id).rating());
-    case "date", "date-desc" -> Comparator.comparing((Place place) -> place.createdAt, Comparator.nullsLast(Comparator.reverseOrder()));
-    case "date-asc" -> Comparator.comparing((Place place) -> place.createdAt, Comparator.nullsLast(Comparator.naturalOrder()));
+    Comparator<Place> ordering = switch (sort == null ? "date-desc" : sort.trim().toLowerCase(Locale.ROOT)) {
+     case "rating", "rating-desc" -> Comparator.comparingDouble((Place place) -> summaries.get(place.id).rating()).reversed();
+     case "rating-asc" -> Comparator.comparingDouble((Place place) -> summaries.get(place.id).rating());
+     case "date", "date-desc" -> Comparator.comparing((Place place) -> place.updatedAt, Comparator.nullsLast(Comparator.reverseOrder())).thenComparing(place -> place.createdAt, Comparator.nullsLast(Comparator.reverseOrder()));
+     case "date-asc" -> Comparator.comparing((Place place) -> place.updatedAt, Comparator.nullsLast(Comparator.naturalOrder())).thenComparing(place -> place.createdAt, Comparator.nullsLast(Comparator.naturalOrder()));
     default -> throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Orden inválido");
    };
    List<Place> result = candidates.stream().sorted(ordering.thenComparing(place -> place.id, Comparator.reverseOrder())).skip(offset).limit(limit + 1).toList();

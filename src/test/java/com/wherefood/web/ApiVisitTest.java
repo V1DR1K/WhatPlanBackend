@@ -78,6 +78,29 @@ class ApiVisitTest {
   }
 
   @Test
+  void listsPlacesByTheirLatestModificationByDefault() {
+    Places places = mock(Places.class);
+    PlaceVisits visits = mock(PlaceVisits.class);
+    PlaceVisitPhotos visitPhotos = mock(PlaceVisitPhotos.class);
+    PlaceVisitReviews visitReviews = mock(PlaceVisitReviews.class);
+    PlaceReviews placeReviews = mock(PlaceReviews.class);
+    PlacePhotos placePhotos = mock(PlacePhotos.class);
+    User tomas = user(7L, "tomas");
+    Place older = place(1L, tomas, Instant.parse("2026-07-21T00:00:00Z"));
+    Place recent = place(2L, tomas, Instant.parse("2026-07-23T00:00:00Z"));
+    when(places.findAll()).thenReturn(List.of(older, recent));
+    when(visits.findByPlaceIdInOrderByPlaceIdAscVisitedOnDescIdDesc(any())).thenReturn(List.of());
+    when(visitReviews.findByVisitIdInOrderByVisitIdAscAuthorUsername(any())).thenReturn(List.of());
+    when(placeReviews.summariesByPlaceIdIn(any())).thenReturn(List.of());
+    when(visitPhotos.findByVisitIdInOrderByVisitIdAscPositionAscIdAsc(any())).thenReturn(List.of());
+    when(placePhotos.findByPlaceIdIn(any())).thenReturn(List.of());
+
+    Slice<PlaceDto> result = new Api(null, null, null, places, visits, null, null, null, placeReviews, placePhotos, visitPhotos, visitReviews, null, null, null).list(null, null, null, null, null, null, 5);
+
+    assertEquals(List.of(2L, 1L), result.content().stream().map(PlaceDto::id).toList());
+  }
+
+  @Test
   void derivesPlaceCardsFromVisitReviewsAndTheLatestVisitCover() {
     Places places = mock(Places.class);
     PlaceVisits visits = mock(PlaceVisits.class);
@@ -188,6 +211,12 @@ class ApiVisitTest {
   private static PlaceVisit visit(Long id, Place place, User author, LocalDate visitedOn) {
     PlaceVisit visit = new PlaceVisit();
     visit.id = id; visit.place = place; visit.createdBy = visit.updatedBy = author; visit.visitedOn = visitedOn; return visit;
+  }
+
+  private static Place place(Long id, User author, Instant updatedAt) {
+    Place place = new Place();
+    place.id = id; place.name = "Lugar " + id; place.status = PlaceStatus.PENDING; place.createdBy = author; place.category = new com.wherefood.domain.Category(); place.createdAt = updatedAt.minusSeconds(60); place.updatedAt = updatedAt;
+    return place;
   }
 
   private static PlaceVisitReview review(PlaceVisit visit, User author, short overall, Short taste, Short price) {

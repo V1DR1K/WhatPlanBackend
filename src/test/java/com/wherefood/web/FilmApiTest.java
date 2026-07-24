@@ -132,7 +132,7 @@ class FilmApiTest {
   }
 
   @Test
-  void listsWatchedFilmsByTheirLatestViewBeforeUnwatchedFilms() {
+  void listsFilmsByTheirLatestModification() {
     Films films = mock(Films.class);
     User tomas = new User(); tomas.username = "tomas";
     Film older = film(1L, tomas, LocalDate.of(2026, 7, 20), Instant.parse("2026-07-23T00:00:00Z"), Instant.parse("2026-07-22T00:00:00Z"));
@@ -143,10 +143,9 @@ class FilmApiTest {
 
     Slice<FilmDto> result = api.list(null, null, null, null, null, null, 5);
 
-    assertEquals(List.of(2L, 1L, 3L), result.content().stream().map(FilmDto::id).toList());
-    assertEquals(LocalDate.of(2026, 7, 23), result.content().getFirst().lastWatchedOn());
-    assertEquals(Instant.parse("2026-07-21T00:00:00Z"), result.content().getFirst().updatedAt());
-    assertEquals(List.of(2L, 1L), api.list(null, null, true, null, null, null, 5).content().stream().map(FilmDto::id).toList());
+    assertEquals(List.of(3L, 1L, 2L), result.content().stream().map(FilmDto::id).toList());
+    assertEquals(Instant.parse("2026-07-25T00:00:00Z"), result.content().getFirst().updatedAt());
+    assertEquals(List.of(1L, 2L), api.list(null, null, true, null, null, null, 5).content().stream().map(FilmDto::id).toList());
   }
 
   @Test
