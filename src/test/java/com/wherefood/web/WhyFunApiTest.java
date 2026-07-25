@@ -6,6 +6,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.doAnswer;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.wherefood.domain.*;
@@ -13,6 +15,7 @@ import com.wherefood.repo.Repositories.*;
 import java.lang.reflect.Method;
 import java.time.Instant;
 import java.time.LocalDate;
+import java.time.LocalTime;
 import java.util.List;
 import java.util.Optional;
 import org.junit.jupiter.api.Test;
@@ -68,6 +71,23 @@ class WhyFunApiTest {
     assertEquals(null, second.nextCursor());
     assertEquals(List.of(3L), unvisited.content().stream().map(ActivityDto::id).toList());
     assertEquals(List.of(1L, 2L, 3L), defaultOrder.content().stream().map(ActivityDto::id).toList());
+   }
+
+  @Test
+  void flushesRemovedSchedulesBeforeAddingReplacements() {
+    WhyFunVenues activities = mock(WhyFunVenues.class); WhyFunCategories categories = mock(WhyFunCategories.class);
+    User tomas = new User(); tomas.username = "tomas";
+    WhyFunCategory category = category(1L, "Arte"); WhyFunCategory subcategory = category(2L, "Museos"); subcategory.parent = category;
+    WhyFunVenue activity = activity(4L, "Museo", category, subcategory, tomas, "2026-07-23T00:00:00Z");
+    WhyFunVenueSchedule existing = new WhyFunVenueSchedule(); existing.venue = activity; existing.dayOfWeek = java.time.DayOfWeek.MONDAY; existing.opensAt = LocalTime.of(7, 0); existing.closesAt = LocalTime.of(12, 0); activity.schedules.add(existing);
+    when(activities.findDetailedById(4L)).thenReturn(Optional.of(activity)); when(activities.save(activity)).thenReturn(activity);
+    when(categories.findDetailedById(1L)).thenReturn(Optional.of(category)); when(categories.findDetailedById(2L)).thenReturn(Optional.of(subcategory));
+    doAnswer(invocation -> { assertTrue(activity.schedules.isEmpty()); return null; }).when(activities).flush();
+
+    new WhyFunActivityApi(categories, activities, null, null, null, null, null).updateActivity(4L, new ActivityRequest("Museo", "Centro", 1L, 2L, List.of(new ActivityScheduleRequest(java.time.DayOfWeek.MONDAY, LocalTime.of(7, 0), LocalTime.of(12, 0)))), tomas);
+
+    verify(activities).flush();
+    assertEquals(1, activity.schedules.size());
   }
 
   private static WhyFunCategory category(Long id, String name) { WhyFunCategory category = new WhyFunCategory(); category.id = id; category.name = name; category.slug = name.toLowerCase(); category.icon = "x"; return category; }

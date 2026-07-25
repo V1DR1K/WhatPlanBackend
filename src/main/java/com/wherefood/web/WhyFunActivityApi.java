@@ -134,6 +134,8 @@ public class WhyFunActivityApi {
   if (category.parent != null || !category.active) throw badRequest("Elegí una categoría principal activa");
   if (subcategory.parent == null || !subcategory.parent.id.equals(category.id) || !subcategory.active) throw badRequest("Elegí una subcategoría activa de la categoría seleccionada");
   activity.name = request.name().trim(); activity.address = request.address().trim(); activity.category = category; activity.subcategory = subcategory; activity.schedules.clear();
+   // Flush orphan removals before adding replacements to satisfy the unique schedule key.
+   if (activity.id != null) activities.flush();
   if (request.schedules() != null) for (ActivityScheduleRequest source : request.schedules()) { if (source.opensAt().equals(source.closesAt())) throw badRequest("El horario de apertura y cierre debe ser distinto"); WhyFunVenueSchedule schedule = new WhyFunVenueSchedule(); schedule.venue = activity; schedule.dayOfWeek = source.dayOfWeek(); schedule.opensAt = source.opensAt(); schedule.closesAt = source.closesAt(); activity.schedules.add(schedule); }
   }
   private void touch(WhyFunVenue activity, User author) { activity.updatedBy = author; activity.updatedAt = Instant.now(); activities.save(activity); }
