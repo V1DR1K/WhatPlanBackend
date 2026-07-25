@@ -6,7 +6,7 @@ COPY src src
 RUN mvn -q -DskipTests package
 FROM eclipse-temurin:21-jre-alpine
 WORKDIR /app
-RUN addgroup -S wherefood && adduser -S wherefood -G wherefood
+RUN apk add --no-cache libwebp-tools && addgroup -S wherefood && adduser -S wherefood -G wherefood
 COPY --from=build /workspace/target/*.jar app.jar
 USER wherefood
 EXPOSE 8080

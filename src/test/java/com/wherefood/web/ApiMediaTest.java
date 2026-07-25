@@ -2,6 +2,8 @@ package com.wherefood.web;
 
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
@@ -16,6 +18,12 @@ import java.util.Optional;
 import org.junit.jupiter.api.Test;
 
 class ApiMediaTest {
+ @Test
+ void identifiesWebpBeforeImageIoDecodesIt() {
+  assertTrue(PhotoStorage.isWebp(new byte[] {'R', 'I', 'F', 'F', 0, 0, 0, 0, 'W', 'E', 'B', 'P'}));
+  assertFalse(PhotoStorage.isWebp(new byte[] {'R', 'I', 'F', 'F', 0, 0, 0, 0, 'W', 'E', 'B'}));
+ }
+
  @Test
  void servesTheRequestedItemPhotoVariantAsCacheableWebp() {
   Items items = mock(Items.class);

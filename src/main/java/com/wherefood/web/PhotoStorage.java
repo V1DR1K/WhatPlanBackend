@@ -12,8 +12,11 @@ import javax.imageio.ImageIO;
 import java.awt.image.BufferedImage;
 import java.awt.Graphics2D;
 import java.io.*;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.time.Instant;
 import java.util.Base64;
+import java.util.concurrent.TimeUnit;
 
 @Service
 public class PhotoStorage {
@@ -68,10 +71,33 @@ public class PhotoStorage {
  private ImageData imageData(MultipartFile upload) throws IOException {
   if (upload.getSize() > 10 * 1024 * 1024) throw new ResponseStatusException(HttpStatus.PAYLOAD_TOO_LARGE, "Máximo 10 MB");
    byte[] source = upload.getBytes();
-   BufferedImage image = ImageIO.read(new ByteArrayInputStream(source));
+   BufferedImage image = read(source);
    if (image == null) throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "La foto debe ser una imagen válida");
    image = orient(image, source);
    return new ImageData(Base64.getEncoder().encodeToString(render(image, 1600)),Base64.getEncoder().encodeToString(render(image, 480)),image.getWidth(),image.getHeight());
+  }
+
+  private BufferedImage read(byte[] source) throws IOException {
+   if (!isWebp(source)) return ImageIO.read(new ByteArrayInputStream(source));
+   Path input = Files.createTempFile("wherefood-", ".webp"), output = Files.createTempFile("wherefood-", ".png");
+   try {
+    Files.write(input, source);
+    Files.delete(output);
+    Process process = new ProcessBuilder("dwebp", input.toString(), "-o", output.toString()).redirectOutput(ProcessBuilder.Redirect.DISCARD).redirectError(ProcessBuilder.Redirect.DISCARD).start();
+    if (!process.waitFor(10, TimeUnit.SECONDS)) { process.destroyForcibly(); throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "La foto no pudo procesarse"); }
+    if (process.exitValue() != 0) throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "La foto debe ser una imagen válida");
+    try (InputStream decoded = Files.newInputStream(output)) { return ImageIO.read(decoded); }
+   } catch (InterruptedException exception) {
+    Thread.currentThread().interrupt();
+    throw new IOException("No se pudo procesar la imagen", exception);
+   } finally {
+    Files.deleteIfExists(input);
+    Files.deleteIfExists(output);
+   }
+  }
+
+  static boolean isWebp(byte[] source) {
+   return source.length >= 12 && source[0] == 'R' && source[1] == 'I' && source[2] == 'F' && source[3] == 'F' && source[8] == 'W' && source[9] == 'E' && source[10] == 'B' && source[11] == 'P';
   }
 
   private BufferedImage orient(BufferedImage image, byte[] source) {
