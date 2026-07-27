@@ -19,6 +19,18 @@ public final class Repositories {
  }
   public interface HighlightTags extends JpaRepository<HighlightTag, Long> { List<HighlightTag> findAllByOrderByNameAsc(); }
   public interface SpecialDates extends JpaRepository<SpecialDate, Long> { List<SpecialDate> findAllByOrderByDateAscLabelAscIdAsc(); }
+  public interface SpecialDateOccurrences extends JpaRepository<SpecialDateOccurrence, Long> {
+   @EntityGraph(attributePaths = {"specialDate", "createdBy", "updatedBy"}) Optional<SpecialDateOccurrence> findBySpecialDateIdAndOccurredOn(Long specialDateId, LocalDate occurredOn);
+  }
+  public interface SpecialDateOccurrenceComments extends JpaRepository<SpecialDateOccurrenceComment, Long> {
+   @EntityGraph(attributePaths = {"author", "updatedBy"}) List<SpecialDateOccurrenceComment> findByOccurrenceIdOrderByAuthorUsername(Long occurrenceId);
+   @EntityGraph(attributePaths = {"author", "updatedBy"}) Optional<SpecialDateOccurrenceComment> findByOccurrenceIdAndAuthorId(Long occurrenceId, Long authorId);
+  }
+  public interface SpecialDateOccurrencePhotos extends JpaRepository<SpecialDateOccurrencePhoto, Long> {
+   @EntityGraph(attributePaths = {"occurrence", "occurrence.specialDate", "createdBy"}) List<SpecialDateOccurrencePhoto> findByOccurrenceIdOrderByPositionAscIdAsc(Long occurrenceId);
+   @EntityGraph(attributePaths = {"occurrence", "occurrence.specialDate", "createdBy"}) Optional<SpecialDateOccurrencePhoto> findDetailedById(Long id);
+   long countByOccurrenceId(Long occurrenceId);
+  }
   public interface Settings extends JpaRepository<GlobalSettings, Integer> {
    @Modifying @Query(value = "insert into global_settings (id, catalog_page_size) values (1, 5) on conflict (id) do nothing", nativeQuery = true) int insertDefaultIfMissing();
   }
@@ -47,6 +59,7 @@ public final class Repositories {
   }
 
     public interface PlaceVisits extends JpaRepository<PlaceVisit, Long> {
+        @Override @EntityGraph(attributePaths = {"place", "createdBy", "updatedBy"}) List<PlaceVisit> findAll();
        @EntityGraph(attributePaths = {"place", "createdBy", "updatedBy"}) List<PlaceVisit> findByPlaceIdOrderByVisitedOnDescIdDesc(Long placeId);
        @EntityGraph(attributePaths = {"place", "createdBy", "updatedBy"}) List<PlaceVisit> findByPlaceIdInOrderByPlaceIdAscVisitedOnDescIdDesc(Collection<Long> placeIds);
        @EntityGraph(attributePaths = {"place", "createdBy", "updatedBy"}) Optional<PlaceVisit> findByPlaceIdAndVisitedOn(Long placeId, LocalDate visitedOn);
@@ -135,6 +148,7 @@ public final class Repositories {
   }
 
     public interface FilmViews extends JpaRepository<FilmView, Long> {
+       @Override @EntityGraph(attributePaths = {"film", "createdBy", "updatedBy"}) List<FilmView> findAll();
       @EntityGraph(attributePaths = {"createdBy", "updatedBy"}) List<FilmView> findByFilmIdOrderByWatchedOnDescIdDesc(Long filmId);
       @EntityGraph(attributePaths = {"createdBy", "updatedBy"}) Optional<FilmView> findByIdAndFilmId(Long id, Long filmId);
       Optional<FilmView> findByFilmIdAndWatchedOn(Long filmId, LocalDate watchedOn);
