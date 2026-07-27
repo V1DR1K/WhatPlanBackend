@@ -17,7 +17,7 @@ import org.springframework.web.server.ResponseStatusException;
 
 record RecipeIngredientRequest(@NotBlank @Size(max = 160) String name, @DecimalMin(value = "0.0", inclusive = false) BigDecimal quantity, @NotBlank @Size(max = 30) String unit) {}
 record RecipeStepRequest(@NotBlank @Size(max = 2000) String instruction) {}
-record RecipeRequest(@NotBlank @Size(max = 160) String name, @Size(max = 1000) String sourceUrl, @NotEmpty List<@Valid RecipeIngredientRequest> ingredients, @NotEmpty List<@Valid RecipeStepRequest> steps) {}
+record RecipeRequest(@NotBlank @Size(max = 160) String name, @Size(max = 1000) String sourceUrl, List<@Valid RecipeIngredientRequest> ingredients, List<@Valid RecipeStepRequest> steps) {}
 record CookingRequest(@NotNull Home home, @Min(1) @Max(100) int servings, @NotNull LocalDate cookedOn, @NotNull MealType mealType) {}
 record RecipeIngredientDto(String name, BigDecimal quantity, String unit) {}
 record RecipeStepDto(String instruction) {}
@@ -114,8 +114,10 @@ public class HomeRecipeApi {
  private Cooking findCooking(Long id) { return cookings.findDetailedById(id).orElseThrow(() -> notFound("Preparación")); }
  private void apply(Recipe recipe, RecipeRequest request) {
   recipe.name = request.name().trim(); recipe.sourceUrl = blankToNull(request.sourceUrl()); recipe.ingredients.clear(); recipe.steps.clear();
-  for (int position = 0; position < request.ingredients().size(); position++) { RecipeIngredientRequest source = request.ingredients().get(position); RecipeIngredient ingredient = new RecipeIngredient(); ingredient.recipe = recipe; ingredient.name = source.name().trim(); ingredient.quantity = source.quantity(); ingredient.unit = source.unit().trim(); ingredient.position = position; recipe.ingredients.add(ingredient); }
-  for (int position = 0; position < request.steps().size(); position++) { RecipeStepRequest source = request.steps().get(position); RecipeStep step = new RecipeStep(); step.recipe = recipe; step.instruction = source.instruction().trim(); step.position = position; recipe.steps.add(step); }
+  List<RecipeIngredientRequest> ingredients = request.ingredients() == null ? List.of() : request.ingredients();
+  List<RecipeStepRequest> steps = request.steps() == null ? List.of() : request.steps();
+  for (int position = 0; position < ingredients.size(); position++) { RecipeIngredientRequest source = ingredients.get(position); RecipeIngredient ingredient = new RecipeIngredient(); ingredient.recipe = recipe; ingredient.name = source.name().trim(); ingredient.quantity = source.quantity(); ingredient.unit = source.unit().trim(); ingredient.position = position; recipe.ingredients.add(ingredient); }
+  for (int position = 0; position < steps.size(); position++) { RecipeStepRequest source = steps.get(position); RecipeStep step = new RecipeStep(); step.recipe = recipe; step.instruction = source.instruction().trim(); step.position = position; recipe.steps.add(step); }
  }
   private static void apply(Cooking cooking, CookingRequest request) { cooking.home = request.home(); cooking.servings = request.servings(); cooking.cookedOn = request.cookedOn(); cooking.mealType = request.mealType(); }
   private void touch(Recipe recipe, User author) { recipe.updatedBy = author; recipe.updatedAt = Instant.now(); recipes.save(recipe); }

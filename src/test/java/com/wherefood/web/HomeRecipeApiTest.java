@@ -38,6 +38,15 @@ class HomeRecipeApiTest {
   assertEquals(5L, result.id()); assertEquals("Tarta", result.name()); assertEquals(1, result.ingredients().size()); assertEquals("tomas", result.createdBy());
  }
 
+  @Test
+  void createsARecipeWithoutIngredientsOrSteps() {
+   Recipes recipes = mock(Recipes.class); User tomas = user(7L, "tomas"); when(recipes.save(any(Recipe.class))).thenAnswer(invocation -> { Recipe value = invocation.getArgument(0); value.id = 5L; return value; });
+
+   RecipeDto result = new HomeRecipeApi(recipes, mock(RecipePhotos.class), null, null, null).addRecipe(new RecipeRequest("Tarta", null, List.of(), List.of()), tomas);
+
+   assertEquals(List.of(), result.ingredients()); assertEquals(List.of(), result.steps());
+  }
+
  @Test
  void listsRecipesWithIngredientsAndStepsUsingIndexedCollections() throws NoSuchFieldException {
   Recipes recipes = mock(Recipes.class); User tomas = user(7L, "tomas"); Recipe recipe = new Recipe(); recipe.id = 5L; recipe.name = "Tarta"; recipe.createdBy = recipe.updatedBy = tomas; recipe.updatedAt = Instant.parse("2026-07-23T00:00:00Z");
