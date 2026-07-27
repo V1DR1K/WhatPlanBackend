@@ -27,6 +27,7 @@ import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 class FilmApiTest {
@@ -129,6 +130,20 @@ class FilmApiTest {
     MockMvc mvc = MockMvcBuilders.standaloneSetup(new FilmApi(films, reviews, views, null, filmPhotos, null, null, null)).build();
 
    mvc.perform(get("/api/films")).andExpect(status().isOk());
+  }
+
+  @Test
+  void returnsTmdbRecommendationsForAMovie() throws Exception {
+    TmdbClient tmdb = mock(TmdbClient.class);
+    when(tmdb.recommendations(123L)).thenReturn(List.of(new TmdbMovieDto(456L, "Recomendada", null, null, null, null, null, null, List.of(), null, null, null, null, null, List.of())));
+    MockMvc mvc = MockMvcBuilders.standaloneSetup(new FilmApi(null, null, null, null, null, null, null, tmdb)).build();
+
+    mvc.perform(get("/api/tmdb/movies/123/recommendations"))
+      .andExpect(status().isOk())
+      .andExpect(jsonPath("$[0].tmdbId").value(456))
+      .andExpect(jsonPath("$[0].title").value("Recomendada"));
+
+    verify(tmdb).recommendations(123L);
   }
 
   @Test

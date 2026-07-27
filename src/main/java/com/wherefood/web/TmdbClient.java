@@ -33,6 +33,7 @@ class TmdbClient {
  private final HttpClient http = HttpClient.newHttpClient();
  private final Map<Long, CachedMovie> summaries = new ConcurrentHashMap<>();
  private final Map<Long, CachedMovie> details = new ConcurrentHashMap<>();
+ private final Map<Long, CachedMovies> recommendations = new ConcurrentHashMap<>();
 
  TmdbClient(@Value("${app.tmdb.read-access-token:}") String token, ObjectMapper json) {
   this.token = token;
@@ -67,6 +68,20 @@ class TmdbClient {
   details.put(tmdbId, new CachedMovie(result));
   return result;
  }
+
+ List<TmdbMovieDto> recommendations(long tmdbId) {
+   CachedMovies cached = recommendations.get(tmdbId);
+   if (cached != null && cached.valid()) return cached.movies();
+   JsonNode results = request("/movie/" + tmdbId + "/recommendations?language=es-AR&page=1").path("results");
+   List<TmdbMovieDto> movies = new ArrayList<>();
+   for (JsonNode movie : results) {
+    if (movie.path("id").canConvertToLong()) movies.add(movie(movie, List.of(), null, null, null, List.of()));
+    if (movies.size() == 12) break;
+   }
+   List<TmdbMovieDto> result = List.copyOf(movies);
+   recommendations.put(tmdbId, new CachedMovies(result));
+   return result;
+  }
 
  private JsonNode movie(long tmdbId, boolean includeCredits) {
   JsonNode movie = request("/movie/" + tmdbId + "?language=es-AR" + (includeCredits ? "&append_to_response=credits,videos" : ""));
@@ -130,6 +145,10 @@ class TmdbClient {
 
  private record CachedMovie(TmdbMovieDto movie, Instant expiresAt) {
   CachedMovie(TmdbMovieDto movie) { this(movie, Instant.now().plusSeconds(CACHE_SECONDS)); }
+  boolean valid() { return expiresAt.isAfter(Instant.now()); }
+ }
+ private record CachedMovies(List<TmdbMovieDto> movies, Instant expiresAt) {
+  CachedMovies(List<TmdbMovieDto> movies) { this(movies, Instant.now().plusSeconds(CACHE_SECONDS)); }
   boolean valid() { return expiresAt.isAfter(Instant.now()); }
  }
 }

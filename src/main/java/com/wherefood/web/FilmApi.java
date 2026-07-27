@@ -42,6 +42,7 @@ public class FilmApi {
    }
 
   @GetMapping("/tmdb/movies") List<TmdbMovieDto> searchTmdb(@RequestParam String query) { return tmdb.search(query); }
+  @GetMapping("/tmdb/movies/{tmdbId}/recommendations") List<TmdbMovieDto> recommendations(@PathVariable long tmdbId) { return tmdb.recommendations(tmdbId); }
   @GetMapping("/watch-platforms") List<PlatformDto> activePlatforms() { return platforms.findByActiveTrueOrderByNameAsc().stream().map(FilmApi::platform).toList(); }
  @GetMapping("/watch-platforms/all") @PreAuthorize("hasRole('ADMIN')") List<PlatformDto> allPlatforms() { return platforms.findAllByOrderByNameAsc().stream().map(FilmApi::platform).toList(); }
  @PostMapping("/watch-platforms") @PreAuthorize("hasRole('ADMIN')") PlatformDto addPlatform(@RequestBody @Valid PlatformRequest request) { WatchPlatform value = new WatchPlatform(); apply(value, request); value.createdAt = Instant.now(); return platform(platforms.save(value)); }
