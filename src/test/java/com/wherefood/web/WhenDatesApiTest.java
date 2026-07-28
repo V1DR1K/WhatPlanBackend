@@ -42,7 +42,7 @@ class WhenDatesApiTest {
    PlaceVisit visit = new PlaceVisit(); visit.id = 12L; visit.place = place; visit.visitedOn = LocalDate.of(2026, 2, 14);
    PlaceVisitPhoto first = new PlaceVisitPhoto(); first.id = 24L; first.width = 1200; first.height = 800;
    PlaceVisitPhoto second = new PlaceVisitPhoto(); second.id = 25L; second.width = 800; second.height = 1200;
-   when(specialDates.findAllByOrderByDateAscLabelAscIdAsc()).thenReturn(List.of(anniversary)); when(visits.findAll()).thenReturn(List.of(visit)); when(visitPhotos.findByVisitIdOrderByPositionAscIdAsc(12L)).thenReturn(List.of(first, second));
+   when(specialDates.findById(3L)).thenReturn(Optional.of(anniversary)); when(specialDates.findAllByOrderByDateAscLabelAscIdAsc()).thenReturn(List.of(anniversary)); when(visits.findAll()).thenReturn(List.of(visit)); when(visitPhotos.findByVisitIdOrderByPositionAscIdAsc(12L)).thenReturn(List.of(first, second));
 
     WhenDateEntryDto entry = api(specialDates, visits, placePhotos, visitPhotos).occurrence(3L, LocalDate.of(2026, 2, 14)).entries().getFirst();
 
