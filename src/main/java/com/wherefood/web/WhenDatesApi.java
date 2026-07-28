@@ -16,7 +16,7 @@ import org.springframework.web.server.ResponseStatusException;
 
 record WhenDateLabelDto(Long id, String label, SpecialDateRecurrence recurrence) {}
 record WhenDateSourcePhotoDto(String id, String url, String thumbnailUrl, int width, int height) {}
-record WhenDateEntryDto(String id, String section, Long entityId, Long experienceId, LocalDate date, String title, String detail, String imageUrl, String href, List<WhenDateLabelDto> specialDates, List<WhenDateSourcePhotoDto> sourcePhotos) {}
+record WhenDateEntryDto(String id, String section, Long entityId, Long experienceId, LocalDate date, String title, String detail, String imageUrl, String href, List<WhenDateLabelDto> specialDates, List<WhenDateSourcePhotoDto> sourcePhotos, Map<Long, String> occurrenceCoverUrls) {}
 record SpecialDateOccurrencePhotoDto(Long id, String url, String thumbnailUrl, int width, int height, int position, String createdBy, Instant createdAt) {}
 record SpecialDateOccurrenceCommentDto(Long id, String author, String updatedBy, String comment, Instant createdAt, Instant updatedAt) {}
 record WhenDateOccurrenceDto(Long id, WhenDateLabelDto specialDate, LocalDate occurredOn, List<WhenDateEntryDto> entries, List<SpecialDateOccurrencePhotoDto> photos, SpecialDateOccurrencePhotoDto coverPhoto, List<SpecialDateOccurrenceCommentDto> comments, String createdBy, String updatedBy, Instant createdAt, Instant updatedAt) {}
@@ -96,19 +96,28 @@ public class WhenDatesApi {
    for (FilmView view : filmViews.findAll()) add(result, "FILM", view.id, view.film.id, view.watchedOn, view.film.title, view.film.platform == null ? "Película vista" : view.film.platform.icon + " " + view.film.platform.name, filmImage(view.film), "/films/" + view.film.id, dates, from, to, today, filmSourcePhotos(view.film));
    for (Cooking cooking : cookings.findAll()) add(result, "COOK", cooking.id, cooking.recipe.id, cooking.cookedOn, cooking.recipe.name, cooking.home == Home.TOMAS ? "Casa de Tomás" : "Casa de Avril", recipeImage(cooking.recipe), "/how-cook/" + cooking.recipe.id, dates, from, to, today, recipeSourcePhotos(cooking.recipe));
    for (WhyFunVisit visit : funVisits.findAll()) add(result, "FUN", visit.id, visit.venue.id, visit.scheduledAt, visit.venue.name, visit.venue.address, funImage(visit), "/why-fun/" + visit.venue.id, dates, from, to, today, funSourcePhotos(visit));
-  return result.stream().sorted(Comparator.comparing(WhenDateEntryDto::date).reversed().thenComparing(WhenDateEntryDto::section).thenComparing(WhenDateEntryDto::experienceId)).toList();
+   Map<String, String> coverUrls = occurrenceCoverUrls(result, from, to);
+   return result.stream().map(entry -> entry(entry, coverUrls)).sorted(Comparator.comparing(WhenDateEntryDto::date).reversed().thenComparing(WhenDateEntryDto::section).thenComparing(WhenDateEntryDto::experienceId)).toList();
  }
 
   private void add(List<WhenDateEntryDto> result, String section, Long experienceId, Long entityId, LocalDate date, String title, String detail, String imageUrl, String href, List<SpecialDate> dates, LocalDate from, LocalDate to, LocalDate today, List<WhenDateSourcePhotoDto> sourcePhotos) {
-   if (date == null || date.isAfter(today) || date.isBefore(from) || date.isAfter(to)) return; List<WhenDateLabelDto> matches = dates.stream().filter(value -> matches(value, date)).map(WhenDatesApi::label).toList(); if (!matches.isEmpty()) result.add(new WhenDateEntryDto(section + ":" + experienceId, section, entityId, experienceId, date, title, detail, imageUrl, href, matches, sourcePhotos));
+    if (date == null || date.isAfter(today) || date.isBefore(from) || date.isAfter(to)) return; List<WhenDateLabelDto> matches = dates.stream().filter(value -> matches(value, date)).map(WhenDatesApi::label).toList(); if (!matches.isEmpty()) result.add(new WhenDateEntryDto(section + ":" + experienceId, section, entityId, experienceId, date, title, detail, imageUrl, href, matches, sourcePhotos, Map.of()));
  }
 
- private WhenDateOccurrenceDto occurrenceDto(SpecialDate specialDate, LocalDate occurredOn, SpecialDateOccurrence occurrence) {
+  private WhenDateOccurrenceDto occurrenceDto(SpecialDate specialDate, LocalDate occurredOn, SpecialDateOccurrence occurrence) {
   if (occurrence == null) return new WhenDateOccurrenceDto(null, label(specialDate), occurredOn, entries(occurredOn, occurredOn, specialDate.id), List.of(), null, List.of(), null, null, null, null);
   List<SpecialDateOccurrencePhotoDto> occurrencePhotos = photos.findByOccurrenceIdOrderByPositionAscIdAsc(occurrence.id).stream().map(WhenDatesApi::photo).toList(); SpecialDateOccurrencePhotoDto cover = occurrencePhotos.stream().filter(value -> value.id().equals(occurrence.coverPhotoId)).findFirst().orElse(null);
   List<SpecialDateOccurrenceCommentDto> occurrenceComments = comments.findByOccurrenceIdOrderByAuthorUsername(occurrence.id).stream().map(WhenDatesApi::comment).toList();
   return new WhenDateOccurrenceDto(occurrence.id, label(specialDate), occurredOn, entries(occurredOn, occurredOn, specialDate.id), occurrencePhotos, cover, occurrenceComments, occurrence.createdBy.username, occurrence.updatedBy.username, occurrence.createdAt, occurrence.updatedAt);
- }
+  }
+
+  private Map<String, String> occurrenceCoverUrls(List<WhenDateEntryDto> entries, LocalDate from, LocalDate to) {
+   List<Long> specialDateIds = entries.stream().flatMap(entry -> entry.specialDates().stream()).map(WhenDateLabelDto::id).distinct().toList();
+   if (specialDateIds.isEmpty()) return Map.of();
+   return occurrences.findBySpecialDateIdInAndOccurredOnBetween(specialDateIds, from, to).stream().filter(occurrence -> occurrence.coverPhotoId != null).collect(java.util.stream.Collectors.toMap(occurrence -> coverKey(occurrence.specialDate.id, occurrence.occurredOn), occurrence -> "/when-dates/photos/" + occurrence.coverPhotoId));
+  }
+  private static WhenDateEntryDto entry(WhenDateEntryDto value, Map<String, String> coverUrls) { Map<Long, String> entryCovers = new HashMap<>(); for (WhenDateLabelDto label : value.specialDates()) { String coverUrl = coverUrls.get(coverKey(label.id(), value.date())); if (coverUrl != null) entryCovers.put(label.id(), coverUrl); } return new WhenDateEntryDto(value.id(), value.section(), value.entityId(), value.experienceId(), value.date(), value.title(), value.detail(), value.imageUrl(), value.href(), value.specialDates(), value.sourcePhotos(), entryCovers); }
+  private static String coverKey(Long specialDateId, LocalDate occurredOn) { return specialDateId + ":" + occurredOn; }
 
  private SpecialDateOccurrence ensureOccurrence(SpecialDate specialDate, LocalDate occurredOn, User author) {
   validateOccurrence(specialDate, occurredOn); return occurrences.findBySpecialDateIdAndOccurredOn(specialDate.id, occurredOn).orElseGet(() -> { SpecialDateOccurrence value = new SpecialDateOccurrence(); value.specialDate = specialDate; value.occurredOn = occurredOn; value.createdBy = value.updatedBy = author; value.createdAt = value.updatedAt = Instant.now(); return occurrences.save(value); });
