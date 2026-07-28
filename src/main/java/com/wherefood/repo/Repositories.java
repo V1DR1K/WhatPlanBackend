@@ -20,9 +20,10 @@ public final class Repositories {
   public interface HighlightTags extends JpaRepository<HighlightTag, Long> { List<HighlightTag> findAllByOrderByNameAsc(); }
   public interface SpecialDates extends JpaRepository<SpecialDate, Long> { List<SpecialDate> findAllByOrderByDateAscLabelAscIdAsc(); }
    public interface SpecialDateOccurrences extends JpaRepository<SpecialDateOccurrence, Long> {
-    @EntityGraph(attributePaths = {"specialDate", "createdBy", "updatedBy"}) Optional<SpecialDateOccurrence> findBySpecialDateIdAndOccurredOn(Long specialDateId, LocalDate occurredOn);
-    @EntityGraph(attributePaths = {"specialDate", "createdBy", "updatedBy"}) List<SpecialDateOccurrence> findBySpecialDateIdInAndOccurredOnBetween(Collection<Long> specialDateIds, LocalDate from, LocalDate to);
-   }
+     @EntityGraph(attributePaths = {"specialDate", "createdBy", "updatedBy"}) Optional<SpecialDateOccurrence> findBySpecialDateIdAndOccurredOn(Long specialDateId, LocalDate occurredOn);
+     @EntityGraph(attributePaths = {"specialDate", "createdBy", "updatedBy"}) List<SpecialDateOccurrence> findBySpecialDateIdInAndOccurredOnBetween(Collection<Long> specialDateIds, LocalDate from, LocalDate to);
+     @EntityGraph(attributePaths = {"specialDate", "createdBy", "updatedBy"}) List<SpecialDateOccurrence> findAllByOrderByOccurredOnDescIdDesc();
+    }
   public interface SpecialDateOccurrenceComments extends JpaRepository<SpecialDateOccurrenceComment, Long> {
    @EntityGraph(attributePaths = {"author", "updatedBy"}) List<SpecialDateOccurrenceComment> findByOccurrenceIdOrderByAuthorUsername(Long occurrenceId);
    @EntityGraph(attributePaths = {"author", "updatedBy"}) Optional<SpecialDateOccurrenceComment> findByOccurrenceIdAndAuthorId(Long occurrenceId, Long authorId);

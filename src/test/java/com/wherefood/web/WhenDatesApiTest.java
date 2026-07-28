@@ -1,7 +1,6 @@
 package com.wherefood.web;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
@@ -23,15 +22,16 @@ class WhenDatesApiTest {
  void includesAnnualMatchesAndExcludesFutureExperiences() {
   SpecialDates specialDates = mock(SpecialDates.class); PlaceVisits visits = mock(PlaceVisits.class); PlacePhotos placePhotos = mock(PlacePhotos.class);
   SpecialDate anniversary = new SpecialDate(); anniversary.id = 3L; anniversary.label = "Aniversario"; anniversary.date = LocalDate.of(2020, 2, 14); anniversary.recurrence = SpecialDateRecurrence.ANNUAL;
-  Place place = new Place(); place.id = 8L; place.name = "La cena"; place.address = "Rosario";
-  PlaceVisit matching = new PlaceVisit(); matching.id = 12L; matching.place = place; matching.visitedOn = LocalDate.of(2026, 2, 14);
-  PlaceVisit future = new PlaceVisit(); future.id = 13L; future.place = place; future.visitedOn = LocalDate.of(2026, 12, 14);
-   PlaceVisitPhotos visitPhotos = mock(PlaceVisitPhotos.class);
-   when(specialDates.findAllByOrderByDateAscLabelAscIdAsc()).thenReturn(List.of(anniversary)); when(visits.findAll()).thenReturn(List.of(matching, future)); when(placePhotos.findByPlaceId(8L)).thenReturn(Optional.empty()); when(visitPhotos.findByVisitIdOrderByPositionAscIdAsc(anyLong())).thenReturn(List.of());
+   Place place = new Place(); place.id = 8L; place.name = "La cena"; place.address = "Rosario";
+   PlaceVisit matching = new PlaceVisit(); matching.id = 12L; matching.place = place; matching.visitedOn = LocalDate.of(2026, 2, 14);
+   PlaceVisit matchingAgain = new PlaceVisit(); matchingAgain.id = 14L; matchingAgain.place = place; matchingAgain.visitedOn = LocalDate.of(2026, 2, 14);
+   PlaceVisit future = new PlaceVisit(); future.id = 13L; future.place = place; future.visitedOn = LocalDate.of(2026, 12, 14);
+    PlaceVisitPhotos visitPhotos = mock(PlaceVisitPhotos.class);
+    when(specialDates.findAllByOrderByDateAscLabelAscIdAsc()).thenReturn(List.of(anniversary)); when(visits.findAll()).thenReturn(List.of(matching, matchingAgain, future)); when(placePhotos.findByPlaceId(8L)).thenReturn(Optional.empty()); when(visitPhotos.findByVisitIdOrderByPositionAscIdAsc(anyLong())).thenReturn(List.of());
 
-   Slice<WhenDateEntryDto> result = api(specialDates, visits, placePhotos, visitPhotos).list("2026-02", null, null, 12);
+    Slice<WhenDateOccurrenceSummaryDto> result = api(specialDates, visits, placePhotos, visitPhotos).list(null, null, 12);
 
-  assertEquals(1, result.content().size()); assertEquals("La cena", result.content().getFirst().title()); assertEquals("Aniversario", result.content().getFirst().specialDates().getFirst().label());
+   assertEquals(1, result.content().size()); assertEquals("Aniversario", result.content().getFirst().specialDate().label()); assertEquals(2, result.content().getFirst().experienceCount());
   }
 
   @Test
@@ -44,7 +44,7 @@ class WhenDatesApiTest {
    PlaceVisitPhoto second = new PlaceVisitPhoto(); second.id = 25L; second.width = 800; second.height = 1200;
    when(specialDates.findAllByOrderByDateAscLabelAscIdAsc()).thenReturn(List.of(anniversary)); when(visits.findAll()).thenReturn(List.of(visit)); when(visitPhotos.findByVisitIdOrderByPositionAscIdAsc(12L)).thenReturn(List.of(first, second));
 
-   WhenDateEntryDto entry = api(specialDates, visits, placePhotos, visitPhotos).list("2026-02", null, null, 12).content().getFirst();
+    WhenDateEntryDto entry = api(specialDates, visits, placePhotos, visitPhotos).occurrence(3L, LocalDate.of(2026, 2, 14)).entries().getFirst();
 
    assertEquals(2, entry.sourcePhotos().size()); assertEquals("/place-visit-photos/24", entry.sourcePhotos().getFirst().url()); assertEquals("/place-visit-photos/25?thumbnail=true", entry.sourcePhotos().get(1).thumbnailUrl());
   }
@@ -56,12 +56,24 @@ class WhenDatesApiTest {
    Place place = new Place(); place.id = 8L; place.name = "La cena"; place.address = "Rosario";
    PlaceVisit visit = new PlaceVisit(); visit.id = 12L; visit.place = place; visit.visitedOn = LocalDate.of(2026, 2, 14);
    SpecialDateOccurrence occurrence = new SpecialDateOccurrence(); occurrence.specialDate = anniversary; occurrence.occurredOn = visit.visitedOn; occurrence.coverPhotoId = 91L;
-   when(specialDates.findAllByOrderByDateAscLabelAscIdAsc()).thenReturn(List.of(anniversary)); when(visits.findAll()).thenReturn(List.of(visit)); when(visitPhotos.findByVisitIdOrderByPositionAscIdAsc(12L)).thenReturn(List.of()); when(occurrences.findBySpecialDateIdInAndOccurredOnBetween(any(), any(), any())).thenReturn(List.of(occurrence));
+    when(specialDates.findAllByOrderByDateAscLabelAscIdAsc()).thenReturn(List.of(anniversary)); when(visits.findAll()).thenReturn(List.of(visit)); when(visitPhotos.findByVisitIdOrderByPositionAscIdAsc(12L)).thenReturn(List.of()); when(occurrences.findAllByOrderByOccurredOnDescIdDesc()).thenReturn(List.of(occurrence));
 
-   WhenDateEntryDto entry = api(specialDates, visits, placePhotos, visitPhotos, occurrences).list("2026-02", null, null, 12).content().getFirst();
+    WhenDateOccurrenceSummaryDto entry = api(specialDates, visits, placePhotos, visitPhotos, occurrences).list(null, null, 12).content().getFirst();
 
-   assertEquals("/when-dates/photos/91", entry.occurrenceCoverUrls().get(3L));
-  }
+    assertEquals("/when-dates/photos/91", entry.imageUrl());
+   }
+
+   @Test
+   void includesStandaloneOccurrencesWithoutMatchingExperiences() {
+    SpecialDates specialDates = mock(SpecialDates.class); PlaceVisits visits = mock(PlaceVisits.class); PlacePhotos placePhotos = mock(PlacePhotos.class); PlaceVisitPhotos visitPhotos = mock(PlaceVisitPhotos.class); SpecialDateOccurrences occurrences = mock(SpecialDateOccurrences.class);
+    SpecialDate birthday = new SpecialDate(); birthday.id = 5L; birthday.label = "Cumplemes"; birthday.date = LocalDate.of(2020, 6, 9); birthday.recurrence = SpecialDateRecurrence.MONTHLY;
+    SpecialDateOccurrence occurrence = new SpecialDateOccurrence(); occurrence.specialDate = birthday; occurrence.occurredOn = LocalDate.of(2026, 6, 9);
+    when(specialDates.findAllByOrderByDateAscLabelAscIdAsc()).thenReturn(List.of(birthday)); when(visits.findAll()).thenReturn(List.of()); when(occurrences.findAllByOrderByOccurredOnDescIdDesc()).thenReturn(List.of(occurrence));
+
+    WhenDateOccurrenceSummaryDto result = api(specialDates, visits, placePhotos, visitPhotos, occurrences).list(null, null, 12).content().getFirst();
+
+    assertEquals("Cumplemes", result.specialDate().label()); assertEquals(0, result.experienceCount()); assertEquals(LocalDate.of(2026, 6, 9), result.occurredOn());
+   }
 
   private static WhenDatesApi api(SpecialDates specialDates, PlaceVisits visits, PlacePhotos placePhotos, PlaceVisitPhotos visitPhotos) {
    return api(specialDates, visits, placePhotos, visitPhotos, mock(SpecialDateOccurrences.class));
