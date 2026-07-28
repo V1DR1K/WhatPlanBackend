@@ -88,7 +88,12 @@ class ExperienceMigrationTest {
    assertTrue(sql.contains("(date '2004-04-12', 'Cumpleaños de Avril', 'ANNUAL')"));
   }
 
- private static String migration(String name) throws IOException {
+  @Test
+  void backfillsMissingLegacySpecialDateRecurrences() throws IOException {
+   assertTrue(migration("V40__backfill_special_date_recurrence.sql").contains("set recurrence = 'ONCE' where recurrence is null"));
+  }
+
+  private static String migration(String name) throws IOException {
   try (InputStream stream = ExperienceMigrationTest.class.getResourceAsStream("/db/migration/" + name)) { return new String(stream.readAllBytes(), StandardCharsets.UTF_8); }
  }
 }

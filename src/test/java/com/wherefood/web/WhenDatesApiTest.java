@@ -72,7 +72,20 @@ class WhenDatesApiTest {
 
     WhenDateOccurrenceSummaryDto result = api(specialDates, visits, placePhotos, visitPhotos, occurrences).list(null, null, 12).content().getFirst();
 
-    assertEquals("Cumplemes", result.specialDate().label()); assertEquals(0, result.experienceCount()); assertEquals(LocalDate.of(2026, 6, 9), result.occurredOn());
+   assertEquals("Cumplemes", result.specialDate().label()); assertEquals(0, result.experienceCount()); assertEquals(LocalDate.of(2026, 6, 9), result.occurredOn());
+   }
+
+   @Test
+   void treatsLegacyDatesWithoutRecurrenceAsOneOffs() {
+    SpecialDates specialDates = mock(SpecialDates.class); PlaceVisits visits = mock(PlaceVisits.class); PlacePhotos placePhotos = mock(PlacePhotos.class); PlaceVisitPhotos visitPhotos = mock(PlaceVisitPhotos.class);
+    SpecialDate legacy = new SpecialDate(); legacy.id = 6L; legacy.label = "Fecha histórica"; legacy.date = LocalDate.of(2025, 7, 28);
+    Place place = new Place(); place.id = 8L; place.name = "La cena"; place.address = "Rosario";
+    PlaceVisit visit = new PlaceVisit(); visit.id = 12L; visit.place = place; visit.visitedOn = legacy.date;
+    when(specialDates.findAllByOrderByDateAscLabelAscIdAsc()).thenReturn(List.of(legacy)); when(visits.findAll()).thenReturn(List.of(visit)); when(placePhotos.findByPlaceId(8L)).thenReturn(Optional.empty()); when(visitPhotos.findByVisitIdOrderByPositionAscIdAsc(12L)).thenReturn(List.of());
+
+    WhenDateOccurrenceSummaryDto result = api(specialDates, visits, placePhotos, visitPhotos).list(null, null, 12).content().getFirst();
+
+    assertEquals(SpecialDateRecurrence.ONCE, result.specialDate().recurrence());
    }
 
   private static WhenDatesApi api(SpecialDates specialDates, PlaceVisits visits, PlacePhotos placePhotos, PlaceVisitPhotos visitPhotos) {
