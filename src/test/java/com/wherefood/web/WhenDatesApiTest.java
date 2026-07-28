@@ -85,7 +85,21 @@ class WhenDatesApiTest {
 
     WhenDateOccurrenceSummaryDto result = api(specialDates, visits, placePhotos, visitPhotos).list(null, null, 12).content().getFirst();
 
-    assertEquals(SpecialDateRecurrence.ONCE, result.specialDate().recurrence());
+   assertEquals(SpecialDateRecurrence.ONCE, result.specialDate().recurrence());
+   }
+
+   @Test
+   void ignoresLegacyDatesWithoutDatesWhenMatchingExperiences() {
+    SpecialDates specialDates = mock(SpecialDates.class); PlaceVisits visits = mock(PlaceVisits.class); PlacePhotos placePhotos = mock(PlacePhotos.class); PlaceVisitPhotos visitPhotos = mock(PlaceVisitPhotos.class);
+    SpecialDate invalid = new SpecialDate(); invalid.id = 6L; invalid.label = "Fecha incompleta"; invalid.recurrence = SpecialDateRecurrence.ONCE;
+    SpecialDate valid = new SpecialDate(); valid.id = 7L; valid.label = "Fecha válida"; valid.date = LocalDate.of(2025, 7, 28); valid.recurrence = SpecialDateRecurrence.ONCE;
+    Place place = new Place(); place.id = 8L; place.name = "La cena"; place.address = "Rosario";
+    PlaceVisit visit = new PlaceVisit(); visit.id = 12L; visit.place = place; visit.visitedOn = valid.date;
+    when(specialDates.findAllByOrderByDateAscLabelAscIdAsc()).thenReturn(List.of(invalid, valid)); when(visits.findAll()).thenReturn(List.of(visit)); when(placePhotos.findByPlaceId(8L)).thenReturn(Optional.empty()); when(visitPhotos.findByVisitIdOrderByPositionAscIdAsc(12L)).thenReturn(List.of());
+
+    WhenDateOccurrenceSummaryDto result = api(specialDates, visits, placePhotos, visitPhotos).list(null, null, 12).content().getFirst();
+
+    assertEquals("Fecha válida", result.specialDate().label());
    }
 
   private static WhenDatesApi api(SpecialDates specialDates, PlaceVisits visits, PlacePhotos placePhotos, PlaceVisitPhotos visitPhotos) {
