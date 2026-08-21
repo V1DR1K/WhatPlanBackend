@@ -3,6 +3,7 @@ package com.wherefood.config;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
+import org.springframework.security.config.annotation.web.configuration.WebSecurityCustomizer;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.web.SecurityFilterChain;
@@ -13,6 +14,11 @@ import jakarta.servlet.http.HttpServletResponse;
 @Configuration
 @EnableMethodSecurity
 public class SecurityConfig {
+    @Bean
+    WebSecurityCustomizer publicFilmReads() {
+        return web -> web.ignoring().requestMatchers(new AntPathRequestMatcher("/api/films/**", "GET"));
+    }
+
     @Bean
     SecurityFilterChain security(HttpSecurity http, CentralJwtFilter filter) throws Exception {
         return http.csrf(csrf -> csrf.disable())
