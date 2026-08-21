@@ -10,9 +10,10 @@ import org.springframework.data.repository.query.Param;
 public final class Repositories {
  private Repositories() {}
 
- public interface Users extends JpaRepository<User, Long> {
-  Optional<User> findByUsername(String username);
- }
+  public interface Users extends JpaRepository<User, Long> {
+   Optional<User> findByUsernameIgnoreCase(String username);
+   Optional<User> findByAuthUserId(java.util.UUID authUserId);
+  }
 
  public interface Categories extends JpaRepository<Category, Long> {
   List<Category> findByActiveTrueOrderByName();
@@ -87,6 +88,13 @@ public final class Repositories {
   public interface Items extends JpaRepository<Item, Long> {
    @Override @EntityGraph(attributePaths = {"createdBy", "visit", "visit.place", "reviews", "reviews.author"}) Optional<Item> findById(Long id);
    @EntityGraph(attributePaths = {"createdBy", "reviews", "reviews.author"}) List<Item> findByVisitIdAndDeletedAtIsNullOrderByIdDesc(Long visitId);
+   @EntityGraph(attributePaths = {"createdBy", "visit", "visit.place", "reviews", "reviews.author"})
+   @Query("select i from Item i where i.visit.place.id = :placeId and i.deletedAt is null order by i.id desc")
+   List<Item> findCatalogByPlaceId(@Param("placeId") Long placeId);
+   @EntityGraph(attributePaths = {"createdBy", "visit", "visit.place", "reviews", "reviews.author"})
+   @Query("select i from Item i where i.visit.place.id = :placeId and i.visit.visitedOn = :visitDate and i.deletedAt is null order by i.id desc")
+   List<Item> findCatalogByPlaceIdAndVisitDate(@Param("placeId") Long placeId, @Param("visitDate") LocalDate visitDate);
+   @Query("select distinct i.visit.visitedOn from Item i where i.visit.place.id = :placeId and i.deletedAt is null order by i.visit.visitedOn desc") List<LocalDate> findItemDatesByPlaceId(@Param("placeId") Long placeId);
    @Query("select i.visit.place.id as placeId, count(distinct i) as itemCount, coalesce(avg(review.taste), 0.0) as tasteAverage, coalesce(avg(review.price), 0.0) as priceAverage from Item i left join i.reviews review where i.visit.place.id in :ids and i.deletedAt is null group by i.visit.place.id") List<PlaceMetric> metrics(@Param("ids") Collection<Long> ids);
   }
 
@@ -182,9 +190,9 @@ public final class Repositories {
   }
 
   public interface WhyFunVenues extends JpaRepository<WhyFunVenue, Long> {
-    @Override @EntityGraph(attributePaths = {"category", "subcategory", "createdBy"}) List<WhyFunVenue> findAll();
+     @Override @EntityGraph(attributePaths = {"category", "subcategory", "createdBy", "schedules"}) List<WhyFunVenue> findAll();
    @Query("select v from WhyFunVenue v join fetch v.category join fetch v.subcategory join fetch v.createdBy where (:categoryId is null or v.category.id = :categoryId) and (:subcategoryId is null or v.subcategory.id = :subcategoryId) and (:cursor is null or v.id < :cursor) order by v.id desc") List<WhyFunVenue> list(@Param("categoryId") Long categoryId, @Param("subcategoryId") Long subcategoryId, @Param("cursor") Long cursor, Pageable pageable);
-    @EntityGraph(attributePaths = {"category", "subcategory", "createdBy"}) @Query("select v from WhyFunVenue v where v.id=:id") Optional<WhyFunVenue> findDetailedById(@Param("id") Long id);
+     @EntityGraph(attributePaths = {"category", "subcategory", "createdBy", "schedules"}) @Query("select v from WhyFunVenue v where v.id=:id") Optional<WhyFunVenue> findDetailedById(@Param("id") Long id);
    long countBySubcategoryId(Long subcategoryId);
    boolean existsByCategoryIdOrSubcategoryId(Long categoryId, Long subcategoryId);
   }

@@ -38,7 +38,7 @@ class ApiMediaTest {
   when(items.findById(42L)).thenReturn(Optional.of(item));
   when(photos.findByItemId(42L)).thenReturn(Optional.of(photo));
 
-  var response = new Api(null, null, null, null, null, items, photos, null, null, null, null, new PhotoStorage(), null).itemPhoto(42L, true);
+   var response = new Api(null, null, null, null, null, items, photos, null, null, null, null, null, new PhotoStorage()).itemPhoto(42L, true);
 
   assertEquals("image/webp", response.getHeaders().getContentType().toString());
   assertArrayEquals(new byte[] {4, 5}, response.getBody());

@@ -1,7 +1,31 @@
 package com.wherefood.config;
-import com.wherefood.domain.*; import com.wherefood.repo.Repositories.Users; import io.jsonwebtoken.*; import io.jsonwebtoken.security.Keys; import jakarta.servlet.*; import jakarta.servlet.http.*; import org.springframework.beans.factory.annotation.*; import org.springframework.boot.CommandLineRunner; import org.springframework.context.annotation.*; import org.springframework.security.authentication.*; import org.springframework.security.config.annotation.web.builders.*; import org.springframework.security.config.http.*; import org.springframework.security.core.*; import org.springframework.security.core.authority.*; import org.springframework.security.core.context.SecurityContextHolder; import org.springframework.security.crypto.bcrypt.*; import org.springframework.security.crypto.password.*; import org.springframework.security.web.*; import org.springframework.security.web.authentication.*; import org.springframework.stereotype.Component; import org.springframework.web.filter.OncePerRequestFilter; import java.io.*; import java.nio.charset.*; import java.util.*;
-@Configuration @org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity public class SecurityConfig {
- @Bean PasswordEncoder passwordEncoder(){return new BCryptPasswordEncoder();} @Bean SecurityFilterChain security(HttpSecurity h, JwtFilter f)throws Exception{return h.csrf(c->c.disable()).httpBasic(c->c.disable()).formLogin(c->c.disable()).sessionManagement(s->s.sessionCreationPolicy(SessionCreationPolicy.STATELESS)).authorizeHttpRequests(a->a.requestMatchers("/api/auth/**","/api/actuator/**").permitAll().requestMatchers(org.springframework.http.HttpMethod.GET,"/api/categories","/api/places","/api/places/*","/api/places/*/visits","/api/places/*/photo","/api/place-visits/*","/api/place-visit-photos/*","/api/items/*/photo","/api/films","/api/films/*","/api/films/*/photo","/api/how-cook/recipes","/api/how-cook/recipes/*","/api/how-cook/recipes/*/photo","/api/how-cook/cookings","/api/how-cook/cookings/*","/api/why-fun/categories","/api/why-fun/plans","/api/why-fun/plans/*","/api/why-fun/photos/*","/api/why-fun/activities","/api/why-fun/activities/*","/api/why-fun/activities/*/photo","/api/why-fun/activities/*/visits","/api/why-fun/activity-visits/*","/api/why-fun/activity-visit-photos/*","/api/when-dates/photos/*").permitAll().anyRequest().authenticated()).addFilterBefore(f,UsernamePasswordAuthenticationFilter.class).build();}
- @Bean CommandLineRunner seed(Users users,PasswordEncoder encoder){return a->{ seed(users,encoder,"avril","avril",com.wherefood.domain.Role.ADMIN); seed(users,encoder,"tomas","tomas",com.wherefood.domain.Role.ADMIN);};} private void seed(Users r,PasswordEncoder e,String n,String p,com.wherefood.domain.Role role){User u=r.findByUsername(n).orElseGet(()->{User value=new User();value.username=n;value.passwordHash=e.encode(p);return value;});u.role=role;r.save(u);}
+
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
+import org.springframework.security.config.annotation.web.builders.HttpSecurity;
+import org.springframework.security.config.http.SessionCreationPolicy;
+import org.springframework.security.web.SecurityFilterChain;
+import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
+import jakarta.servlet.http.HttpServletResponse;
+
+@Configuration
+@EnableMethodSecurity
+public class SecurityConfig {
+    @Bean
+    SecurityFilterChain security(HttpSecurity http, CentralJwtFilter filter) throws Exception {
+        return http.csrf(csrf -> csrf.disable())
+                .httpBasic(basic -> basic.disable())
+                .formLogin(login -> login.disable())
+                .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
+                .exceptionHandling(errors -> errors
+                        .authenticationEntryPoint((request, response, exception) -> response.sendError(HttpServletResponse.SC_UNAUTHORIZED))
+                        .accessDeniedHandler((request, response, exception) -> response.sendError(HttpServletResponse.SC_FORBIDDEN)))
+                .authorizeHttpRequests(auth -> auth
+                        .requestMatchers("/api/auth/login", "/api/auth/refresh", "/api/auth/logout", "/api/actuator/**").permitAll()
+                        .requestMatchers(org.springframework.http.HttpMethod.GET, "/api/categories", "/api/highlight-tags", "/api/places", "/api/places/*", "/api/places/*/visits", "/api/places/*/item-dates", "/api/places/*/photo", "/api/place-visits/*", "/api/place-visit-photos/*", "/api/items", "/api/items/*/photo", "/api/films", "/api/films/*", "/api/films/*/photo", "/api/watch-platforms", "/api/film-genres", "/api/how-cook/recipes", "/api/how-cook/recipes/*", "/api/how-cook/recipes/*/photo", "/api/how-cook/cookings", "/api/how-cook/cookings/*", "/api/why-fun/categories", "/api/why-fun/plans", "/api/why-fun/plans/*", "/api/why-fun/photos/*", "/api/why-fun/activities", "/api/why-fun/activities/*", "/api/why-fun/activities/*/photo", "/api/why-fun/activities/*/visits", "/api/why-fun/activity-visits/*", "/api/why-fun/activity-visit-photos/*", "/api/when-dates/photos/*").permitAll()
+                        .anyRequest().authenticated())
+                .addFilterBefore(filter, UsernamePasswordAuthenticationFilter.class)
+                .build();
+    }
 }
-@Component class JwtFilter extends OncePerRequestFilter { private final JwtTokens jwt; private final Users users; JwtFilter(JwtTokens j,Users u){jwt=j;users=u;} protected void doFilterInternal(HttpServletRequest q,HttpServletResponse s,FilterChain c)throws ServletException,IOException{String h=q.getHeader("Authorization");if(h!=null&&h.startsWith("Bearer "))try{User u=users.findByUsername(jwt.username(h.substring(7))).orElseThrow();var auth=new UsernamePasswordAuthenticationToken(u,null,List.of(new SimpleGrantedAuthority("ROLE_"+u.role)));SecurityContextHolder.getContext().setAuthentication(auth);}catch(Exception ignored){} c.doFilter(q,s);} }

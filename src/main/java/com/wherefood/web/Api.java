@@ -14,8 +14,6 @@ import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.*;
 import org.springframework.web.server.ResponseStatusException;
 
-record LoginRequest(@NotBlank String username, @NotBlank String password) {}
-record AuthResponse(String token, String username, String role) {}
 record CategoryRequest(@NotBlank String name, @NotBlank String slug, @NotBlank String icon, boolean active) {}
 record CategoryDto(Long id, String name, String slug, String icon, boolean active) {}
 record HighlightTagRequest(@NotBlank String name, @NotBlank String emoji) {}
@@ -29,6 +27,7 @@ record PlaceReviewRequest(String comment, @Min(1) @Max(5) Short location, @Min(1
 record PlaceReviewDto(String author, String comment, Short location, Short heating, Short bathrooms, Short exterior, Short seating, Short service, Short ambiance) {}
 record ItemReviewDto(String author, String comment, short taste, short price, Instant createdAt, Instant updatedAt) {}
 record ItemDto(Long id, String name, String createdBy, String photoUrl, String thumbnailUrl, Integer photoWidth, Integer photoHeight, List<ItemReviewDto> reviews, Instant createdAt) {}
+record ItemCatalogDto(Long id, String name, String comment, short taste, short price, String author, String photoUrl, String thumbnailUrl, Integer photoWidth, Integer photoHeight, LocalDate visitDate, Instant createdAt, List<ItemReviewDto> reviews) {}
 record PlaceVisitSummaryDto(Long id, LocalDate visitedOn, String createdBy, Instant createdAt) {}
 record PlaceVisitPhotoDto(Long id, String url, String thumbnailUrl, int width, int height, int position, String createdBy, Instant createdAt) {}
 record PlaceVisitReviewRequest(@NotNull @Min(1) @Max(5) Short overall, @Size(max = 2000) String comment, @Min(1) @Max(5) Short taste, @Min(1) @Max(5) Short price) {}
@@ -41,20 +40,14 @@ record Slice<T>(List<T> content, Long nextCursor) {}
 @RequestMapping("/api")
 public class Api {
  private static final int MAX_VISIT_PHOTOS = 4;
- private final Users users; private final Categories categories; private final HighlightTags highlightTags; private final Places places; private final PlaceVisits visits; private final Items items; private final Photos photos; private final ItemReviews itemReviews; private final PlaceReviews reviews; private final PlacePhotos placePhotos; private final PlaceVisitPhotos visitPhotos; private final PlaceVisitReviews visitReviews; private final JwtTokens jwt; private final PhotoStorage storage; private final org.springframework.security.crypto.password.PasswordEncoder encoder;
+ private final Users users; private final Categories categories; private final HighlightTags highlightTags; private final Places places; private final PlaceVisits visits; private final Items items; private final Photos photos; private final ItemReviews itemReviews; private final PlaceReviews reviews; private final PlacePhotos placePhotos; private final PlaceVisitPhotos visitPhotos; private final PlaceVisitReviews visitReviews; private final PhotoStorage storage;
 
-  public Api(Users users, Categories categories, HighlightTags highlightTags, Places places, PlaceVisits visits, Items items, Photos photos, ItemReviews itemReviews, PlaceReviews reviews, PlacePhotos placePhotos, JwtTokens jwt, PhotoStorage storage, org.springframework.security.crypto.password.PasswordEncoder encoder) {
-   this(users, categories, highlightTags, places, visits, items, photos, itemReviews, reviews, placePhotos, null, null, jwt, storage, encoder);
-  }
-  @org.springframework.beans.factory.annotation.Autowired public Api(Users users, Categories categories, HighlightTags highlightTags, Places places, PlaceVisits visits, Items items, Photos photos, ItemReviews itemReviews, PlaceReviews reviews, PlacePhotos placePhotos, PlaceVisitPhotos visitPhotos, PlaceVisitReviews visitReviews, JwtTokens jwt, PhotoStorage storage, org.springframework.security.crypto.password.PasswordEncoder encoder) {
-   this.users = users; this.categories = categories; this.highlightTags = highlightTags; this.places = places; this.visits = visits; this.items = items; this.photos = photos; this.itemReviews = itemReviews; this.reviews = reviews; this.placePhotos = placePhotos; this.visitPhotos = visitPhotos; this.visitReviews = visitReviews; this.jwt = jwt; this.storage = storage; this.encoder = encoder;
-  }
-
- @PostMapping("/auth/login") AuthResponse login(@RequestBody @jakarta.validation.Valid LoginRequest request) {
-  User user = users.findByUsername(request.username().toLowerCase()).orElseThrow(() -> new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Credenciales inválidas"));
-  if (!encoder.matches(request.password(), user.passwordHash)) throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Credenciales inválidas");
-  return new AuthResponse(jwt.token(user), user.username, user.role.name());
- }
+   @org.springframework.beans.factory.annotation.Autowired public Api(Users users, Categories categories, HighlightTags highlightTags, Places places, PlaceVisits visits, Items items, Photos photos, ItemReviews itemReviews, PlaceReviews reviews, PlacePhotos placePhotos, PlaceVisitPhotos visitPhotos, PlaceVisitReviews visitReviews, PhotoStorage storage) {
+    this.users = users; this.categories = categories; this.highlightTags = highlightTags; this.places = places; this.visits = visits; this.items = items; this.photos = photos; this.itemReviews = itemReviews; this.reviews = reviews; this.placePhotos = placePhotos; this.visitPhotos = visitPhotos; this.visitReviews = visitReviews; this.storage = storage;
+   }
+   public Api(Users users, Categories categories, HighlightTags highlightTags, Places places, PlaceVisits visits, Items items, Photos photos, ItemReviews itemReviews, PlaceReviews reviews, PlacePhotos placePhotos, PlaceVisitPhotos visitPhotos, PlaceVisitReviews visitReviews, Object ignoredJwt, PhotoStorage storage, Object ignoredEncoder) {
+    this(users, categories, highlightTags, places, visits, items, photos, itemReviews, reviews, placePhotos, visitPhotos, visitReviews, storage);
+   }
 
  @GetMapping("/categories") List<CategoryDto> categories() { return categories.findByActiveTrueOrderByName().stream().map(Api::category).toList(); }
  @GetMapping("/categories/all") @PreAuthorize("hasRole('ADMIN')") List<CategoryDto> allCategories() { return categories.findAll().stream().map(Api::category).toList(); }
@@ -110,10 +103,20 @@ public class Api {
    Place place = active(places.findDetailedById(id).orElseThrow(() -> notFound("Lugar"))); placePhotos.findByPlaceId(id).ifPresent(placePhotos::delete); placePhotos.flush(); place.updatedBy = user; place.updatedAt = Instant.now(); places.save(place); placePhotos.save(storage.store(place, file)); return place(place);
  }
 
- @GetMapping("/places/{id}/visits") List<PlaceVisitSummaryDto> listVisits(@PathVariable Long id) {
-  active(places.findDetailedById(id).orElseThrow(() -> notFound("Lugar")));
-    return visits.findByPlaceIdOrderByVisitedOnDescIdDesc(id).stream().map(Api::visitSummary).toList();
- }
+  @GetMapping("/places/{id}/visits") List<PlaceVisitSummaryDto> listVisits(@PathVariable Long id) {
+    active(places.findDetailedById(id).orElseThrow(() -> notFound("Lugar")));
+     return visits.findByPlaceIdOrderByVisitedOnDescIdDesc(id).stream().map(Api::visitSummary).toList();
+  }
+   @GetMapping("/places/{id}/item-dates") List<LocalDate> itemDates(@PathVariable Long id) {
+     active(places.findDetailedById(id).orElseThrow(() -> notFound("Lugar")));
+     return items.findItemDatesByPlaceId(id);
+   }
+   @GetMapping("/items") Slice<ItemCatalogDto> listItems(@RequestParam Long placeId, @RequestParam(required = false) LocalDate visitDate, @RequestParam(defaultValue = "30") int size) {
+     active(places.findDetailedById(placeId).orElseThrow(() -> notFound("Lugar")));
+     int limit = Math.max(1, Math.min(size, 100));
+      List<Item> catalog = visitDate == null ? items.findCatalogByPlaceId(placeId) : items.findCatalogByPlaceIdAndVisitDate(placeId, visitDate);
+      return new Slice<>(catalog.stream().limit(limit).map(this::catalogItem).toList(), null);
+   }
    @PostMapping("/places/{id}/visits") @ResponseStatus(HttpStatus.CREATED) @org.springframework.transaction.annotation.Transactional PlaceVisitSummaryDto addVisit(@PathVariable Long id, @RequestBody @jakarta.validation.Valid VisitRequest request, @AuthenticationPrincipal User author) {
    Place place = active(places.findById(id).orElseThrow(() -> notFound("Lugar")));
    validateVisitMoment(request);
@@ -238,8 +241,13 @@ public class Api {
    List<PlaceVisitReviewDto> currentReviews = reviewValues.stream().map(review -> visitReview(review, reviewAuthors.get(review.id))).toList();
     return new PlaceVisitDto(visit.id, visit.place.id, visit.visitedOn, visit.createdBy.username, visitItems.stream().map(item -> item(item, photoMap.get(item.id), itemReviewAuthors)).toList(), resultPhotos, cover, currentReviews, visit.updatedBy.username, visit.createdAt, visit.updatedAt);
   }
- private ItemDto item(Item item) { return item(item, photos.findByItemId(item.id).orElse(null)); }
- private ItemDto item(Item item, ItemPhoto photo) { return item(item, photo, itemReviews.authorsByItemIdIn(List.of(item.id)).stream().collect(java.util.stream.Collectors.toMap(ReviewAuthor::getReviewId, ReviewAuthor::getAuthor))); }
+  private ItemDto item(Item item) { return item(item, photos.findByItemId(item.id).orElse(null)); }
+  private ItemDto item(Item item, ItemPhoto photo) { return item(item, photo, itemReviews.authorsByItemIdIn(List.of(item.id)).stream().collect(java.util.stream.Collectors.toMap(ReviewAuthor::getReviewId, ReviewAuthor::getAuthor))); }
+  private ItemCatalogDto catalogItem(Item item) {
+    ItemReview review = item.reviews.stream().findFirst().orElse(null);
+    ItemPhoto photo = photos.findByItemId(item.id).orElse(null);
+    return new ItemCatalogDto(item.id, item.name, review == null ? null : review.comment, review == null ? (short) 0 : review.taste, review == null ? (short) 0 : review.price, item.createdBy.username, photo == null ? null : itemPhotoUrl(item.id, false, photo.id), photo == null ? null : itemPhotoUrl(item.id, true, photo.id), photo == null ? null : photo.width, photo == null ? null : photo.height, item.visit.visitedOn, item.createdAt, item.reviews.stream().sorted(Comparator.comparing(value -> value.author.username, String.CASE_INSENSITIVE_ORDER)).map(Api::itemReview).toList());
+  }
  private ItemDto item(Item item, ItemPhoto photo, Map<Long, String> reviewAuthors) { return new ItemDto(item.id, item.name, item.createdBy.username, photo == null ? null : itemPhotoUrl(item.id, false, photo.id), photo == null ? null : itemPhotoUrl(item.id, true, photo.id), photo == null ? null : Integer.valueOf(photo.width), photo == null ? null : Integer.valueOf(photo.height), item.reviews.stream().sorted(Comparator.comparing(review -> reviewAuthors.get(review.id), Comparator.nullsLast(String.CASE_INSENSITIVE_ORDER))).map(review -> itemReview(review, reviewAuthors.get(review.id))).toList(), item.createdAt); }
   private static String itemPhotoUrl(Long itemId, boolean thumbnail, Long photoId) { return "/items/" + itemId + "/photo?" + (thumbnail ? "thumbnail=true&" : "") + "v=" + photoId; }
   private static PlaceVisitSummaryDto visitSummary(PlaceVisit visit) { return new PlaceVisitSummaryDto(visit.id, visit.visitedOn, visit.createdBy.username, visit.createdAt); }
