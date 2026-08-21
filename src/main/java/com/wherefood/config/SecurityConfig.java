@@ -7,6 +7,7 @@ import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
+import org.springframework.security.web.util.matcher.AntPathRequestMatcher;
 import jakarta.servlet.http.HttpServletResponse;
 
 @Configuration
@@ -23,7 +24,8 @@ public class SecurityConfig {
                         .accessDeniedHandler((request, response, exception) -> response.sendError(HttpServletResponse.SC_FORBIDDEN)))
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers("/api/auth/login", "/api/auth/refresh", "/api/auth/logout", "/api/actuator/**").permitAll()
-                        .requestMatchers(org.springframework.http.HttpMethod.GET, "/api/categories", "/api/highlight-tags", "/api/places", "/api/places/*", "/api/places/*/visits", "/api/places/*/item-dates", "/api/places/*/photo", "/api/place-visits/*", "/api/place-visit-photos/*", "/api/items", "/api/items/*/photo", "/api/films/**", "/api/watch-platforms", "/api/film-genres", "/api/how-cook/recipes", "/api/how-cook/recipes/*", "/api/how-cook/recipes/*/photo", "/api/how-cook/cookings", "/api/how-cook/cookings/*", "/api/why-fun/categories", "/api/why-fun/plans", "/api/why-fun/plans/*", "/api/why-fun/photos/*", "/api/why-fun/activities", "/api/why-fun/activities/*", "/api/why-fun/activities/*/photo", "/api/why-fun/activities/*/visits", "/api/why-fun/activity-visits/*", "/api/why-fun/activity-visit-photos/*", "/api/when-dates/photos/*").permitAll()
+                        .requestMatchers(new AntPathRequestMatcher("/api/films/**", "GET")).permitAll()
+                        .requestMatchers(org.springframework.http.HttpMethod.GET, "/api/categories", "/api/highlight-tags", "/api/places", "/api/places/*", "/api/places/*/visits", "/api/places/*/item-dates", "/api/places/*/photo", "/api/place-visits/*", "/api/place-visit-photos/*", "/api/items", "/api/items/*/photo", "/api/watch-platforms", "/api/film-genres", "/api/how-cook/recipes", "/api/how-cook/recipes/*", "/api/how-cook/recipes/*/photo", "/api/how-cook/cookings", "/api/how-cook/cookings/*", "/api/why-fun/categories", "/api/why-fun/plans", "/api/why-fun/plans/*", "/api/why-fun/photos/*", "/api/why-fun/activities", "/api/why-fun/activities/*", "/api/why-fun/activities/*/photo", "/api/why-fun/activities/*/visits", "/api/why-fun/activity-visits/*", "/api/why-fun/activity-visit-photos/*", "/api/when-dates/photos/*").permitAll()
                         .anyRequest().authenticated())
                 .addFilterBefore(filter, UsernamePasswordAuthenticationFilter.class)
                 .build();
