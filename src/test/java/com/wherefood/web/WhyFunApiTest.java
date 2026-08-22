@@ -90,6 +90,20 @@ class WhyFunApiTest {
     assertEquals(1, activity.schedules.size());
   }
 
+  @Test
+  void preservesLineBreaksInAnActivityReview() {
+    WhyFunVenues activities = mock(WhyFunVenues.class); WhyFunVisits visits = mock(WhyFunVisits.class); WhyFunVisitReviews reviews = mock(WhyFunVisitReviews.class);
+    User tomas = new User(); tomas.id = 7L; tomas.username = "tomas";
+    WhyFunVenue activity = new WhyFunVenue(); activity.id = 4L;
+    WhyFunVisit visit = new WhyFunVisit(); visit.id = 10L; visit.venue = activity; visit.createdBy = visit.updatedBy = tomas;
+    when(visits.findDetailedById(10L)).thenReturn(Optional.of(visit)); when(reviews.findByVisitIdAndAuthorId(10L, 7L)).thenReturn(Optional.empty());
+    when(reviews.save(any(WhyFunVisitReview.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+    ActivityReviewDto result = new WhyFunActivityApi(null, activities, null, visits, null, reviews, null).addReview(10L, new ActivityReviewRequest((short) 5, "Muy buena\n\nPara repetir\n"), tomas);
+
+    assertEquals("Muy buena\n\nPara repetir\n", result.comment());
+  }
+
   private static WhyFunCategory category(Long id, String name) { WhyFunCategory category = new WhyFunCategory(); category.id = id; category.name = name; category.slug = name.toLowerCase(); category.icon = "x"; return category; }
   private static WhyFunVenue activity(Long id, String name, WhyFunCategory category, WhyFunCategory subcategory, User author, String createdAt) { WhyFunVenue activity = new WhyFunVenue(); activity.id = id; activity.name = name; activity.address = "Centro"; activity.category = category; activity.subcategory = subcategory; activity.createdBy = activity.updatedBy = author; activity.createdAt = activity.updatedAt = Instant.parse(createdAt); return activity; }
   private static PhotoMetadata photo(Long id, Integer width, Integer height) { return new PhotoMetadata() { public Long getId() { return id; } public Integer getWidth() { return width; } public Integer getHeight() { return height; } public Instant getCreatedAt() { return Instant.parse("2026-07-23T00:00:00Z"); } }; }

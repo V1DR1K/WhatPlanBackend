@@ -163,7 +163,7 @@ public class WhyFunActivityApi {
  private static ActivityPhotoDto photo(WhyFunVisitPhoto value) { return new ActivityPhotoDto(value.id, "/why-fun/activity-visit-photos/" + value.id, "/why-fun/activity-visit-photos/" + value.id + "?thumbnail=true", value.width, value.height, value.position, value.createdBy.username, value.createdAt); }
   private static ActivityReviewDto review(WhyFunVisitReview value) { return review(value, value.author.username); }
  private static ActivityReviewDto review(WhyFunVisitReview value, String author) { return new ActivityReviewDto(value.id, author, value.updatedBy.username, value.rating, value.comment, value.createdAt, value.updatedAt); }
-  private static void apply(WhyFunVisitReview review, ActivityReviewRequest request) { review.rating = request.rating(); review.comment = request.comment() == null || request.comment().isBlank() ? null : request.comment().trim(); }
+   private static void apply(WhyFunVisitReview review, ActivityReviewRequest request) { review.rating = request.rating(); review.comment = request.comment() == null || request.comment().isBlank() ? null : request.comment(); }
   private static boolean contains(String value, String search) { return value != null && value.toLowerCase(Locale.ROOT).contains(search); }
  private static ResponseStatusException notFound(String type) { return new ResponseStatusException(HttpStatus.NOT_FOUND, type + " no encontrado"); }
  private static ResponseStatusException badRequest(String detail) { return new ResponseStatusException(HttpStatus.BAD_REQUEST, detail); }

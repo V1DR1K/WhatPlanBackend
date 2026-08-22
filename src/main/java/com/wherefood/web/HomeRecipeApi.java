@@ -152,7 +152,7 @@ public class HomeRecipeApi {
   private static CookingReviewDto review(CookingReview value, String author) { return new CookingReviewDto(value.id, author, value.updatedBy.username, value.rating, value.complexity, value.taste, value.comment, value.createdAt, value.updatedAt); }
   private static void apply(CookingReview review, CookingReviewRequest request) { review.rating = request.rating(); review.complexity = request.complexity(); review.taste = request.taste(); review.comment = blankToNull(request.comment()); }
  private static void validateCookingDate(CookingRequest request) { if (request.cookedOn().isAfter(RosarioClock.today())) throw badRequest("Una preparación no puede quedar en el futuro"); }
- private static String blankToNull(String value) { return value == null || value.isBlank() ? null : value.trim(); }
+  private static String blankToNull(String value) { return value == null || value.isBlank() ? null : value; }
  private static ResponseStatusException notFound(String type) { return new ResponseStatusException(HttpStatus.NOT_FOUND, type + " no encontrada"); }
  private static ResponseStatusException badRequest(String detail) { return new ResponseStatusException(HttpStatus.BAD_REQUEST, detail); }
  private static ResponseStatusException conflict(String detail) { return new ResponseStatusException(HttpStatus.CONFLICT, detail); }

@@ -82,12 +82,13 @@ class FilmApiTest {
     FilmReviewDto result = new FilmApi(films, reviews, views, null, null, null, null, null).addReview(
       42L,
       88L,
-      new FilmReviewRequest((short) 5, "La volvería a ver", null, null, Map.of("story", (short) 4)),
-      avril
-    );
+       new FilmReviewRequest((short) 5, "La volvería a ver\n\nLa recomiendo\n", null, null, Map.of("story", (short) 4)),
+       avril
+     );
 
     assertEquals("avril", result.author());
     assertEquals(LocalDate.of(2026, 7, 19), result.watchedOn());
+    assertEquals("La volvería a ver\n\nLa recomiendo\n", result.comment());
     assertEquals(1, film.watchedCount);
     verify(reviews).save(any(FilmReview.class));
   }

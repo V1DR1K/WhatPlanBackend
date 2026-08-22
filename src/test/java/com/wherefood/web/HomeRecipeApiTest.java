@@ -66,9 +66,9 @@ class HomeRecipeApiTest {
    CookingReviews reviews = mock(CookingReviews.class); User tomas = user(7L, "tomas"); CookingReview review = new CookingReview(); review.id = 8L; review.author = review.updatedBy = tomas;
    when(reviews.findDetailedById(8L)).thenReturn(Optional.of(review)); when(reviews.save(review)).thenReturn(review);
 
-   CookingReviewDto result = new HomeRecipeApi(null, null, null, reviews, null).updateReview(8L, new CookingReviewRequest((short) 4, (short) 2, (short) 5, "Quedó bien"), tomas);
+    CookingReviewDto result = new HomeRecipeApi(null, null, null, reviews, null).updateReview(8L, new CookingReviewRequest((short) 4, (short) 2, (short) 5, "Quedó bien\n\nLa repetiría\n"), tomas);
 
-   assertEquals(4, result.rating()); assertEquals(2, result.complexity()); assertEquals(5, result.taste()); assertEquals("Quedó bien", result.comment());
+    assertEquals(4, result.rating()); assertEquals(2, result.complexity()); assertEquals(5, result.taste()); assertEquals("Quedó bien\n\nLa repetiría\n", result.comment());
   }
 
   @Test

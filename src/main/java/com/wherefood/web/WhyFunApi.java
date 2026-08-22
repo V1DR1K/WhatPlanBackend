@@ -83,7 +83,7 @@ public class WhyFunApi {
  private static FunPhotoDto photo(WhyFunVenuePhoto value) { return new FunPhotoDto(value.id, "/why-fun/photos/" + value.id, "/why-fun/photos/" + value.id + "?thumbnail=true", value.width, value.height); }
  private static FunReviewDto review(WhyFunVenueReview value) { return new FunReviewDto(value.id, value.author.username, value.rating, value.comment, value.updatedAt); }
  private static FunReviewDto review(WhyFunReviewSummary value) { return new FunReviewDto(value.getId(), value.getAuthor(), value.getRating(), value.getComment(), value.getUpdatedAt()); }
- private static String blankToNull(String value) { return value == null || value.isBlank() ? null : value.trim(); }
+  private static String blankToNull(String value) { return value == null || value.isBlank() ? null : value; }
  private static String slugFor(String value) { return Normalizer.normalize(value.trim().toLowerCase(Locale.ROOT), Normalizer.Form.NFD).replaceAll("\\p{M}", "").replaceAll("[^a-z0-9]+", "-").replaceAll("(^-|-$)", ""); }
  private static double round(double value) { return Math.round(value * 10) / 10d; }
  private static ResponseStatusException notFound(String type) { return new ResponseStatusException(HttpStatus.NOT_FOUND, type + " no encontrado"); }

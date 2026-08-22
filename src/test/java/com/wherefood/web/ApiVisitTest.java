@@ -60,6 +60,19 @@ class ApiVisitTest {
   }
 
   @Test
+  void preservesLineBreaksInAPlaceVisitReview() {
+    Places places = mock(Places.class); PlaceVisits visits = mock(PlaceVisits.class); PlaceVisitReviews visitReviews = mock(PlaceVisitReviews.class);
+    User tomas = user(7L, "tomas"); Place place = place(4L, tomas, Instant.parse("2026-07-23T00:00:00Z")); place.status = PlaceStatus.REVIEWED;
+    PlaceVisit visit = visit(10L, place, tomas, LocalDate.of(2026, 7, 22));
+    when(visits.findDetailedById(10L)).thenReturn(Optional.of(visit)); when(visitReviews.findByVisitIdAndAuthorId(10L, 7L)).thenReturn(Optional.empty());
+    when(visitReviews.save(any(PlaceVisitReview.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+    PlaceVisitReviewDto result = new Api(null, null, null, places, visits, null, null, null, null, null, null, visitReviews, null).addVisitReview(10L, new PlaceVisitReviewRequest((short) 5, "Primera línea\n\nSegunda línea\n", (short) 4, null), tomas);
+
+    assertEquals("Primera línea\n\nSegunda línea\n", result.comment());
+  }
+
+  @Test
   void updatesTheParentPlaceWhenAVisitChanges() {
     Places places = mock(Places.class);
     PlaceVisits visits = mock(PlaceVisits.class);
