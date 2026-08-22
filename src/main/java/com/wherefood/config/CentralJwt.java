@@ -13,13 +13,17 @@ import org.springframework.stereotype.Component;
 @Component
 public class CentralJwt {
     private final RSAPublicKey publicKey;
+    private final String issuer;
 
-    public CentralJwt(@Value("${app.auth-public-key-pem}") String pem) {
+    public CentralJwt(@Value("${app.auth-public-key-pem}") String pem,
+                      @Value("${app.auth-issuer:central-auth-service}") String issuer) {
         this.publicKey = parsePublicKey(pem);
+        this.issuer = issuer;
     }
 
     public UUID subject(String token) {
-        Claims claims = Jwts.parser().verifyWith(publicKey).build().parseSignedClaims(token).getPayload();
+        Claims claims = Jwts.parser().verifyWith(publicKey).requireIssuer(issuer).build()
+                .parseSignedClaims(token).getPayload();
         return UUID.fromString(claims.getSubject());
     }
 

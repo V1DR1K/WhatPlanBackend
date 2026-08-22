@@ -2,7 +2,6 @@ package com.wherefood.config;
 
 import com.wherefood.domain.User;
 import com.wherefood.repo.Repositories.Users;
-import io.jsonwebtoken.JwtException;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
@@ -26,15 +25,22 @@ public class CentralJwtFilter extends OncePerRequestFilter {
     }
 
     @Override
+    protected boolean shouldNotFilterErrorDispatch() {
+        return false;
+    }
+
+    @Override
     protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain chain)
             throws ServletException, IOException {
         String header = request.getHeader("Authorization");
-        if (header != null && header.startsWith("Bearer ")) {
+        if (header != null && header.regionMatches(true, 0, "Bearer ", 0, 7)) {
             try {
-                User user = users.findByAuthUserId(jwt.subject(header.substring(7))).orElseThrow();
+                String token = header.substring(7).trim();
+                if (token.isBlank()) throw new IllegalArgumentException("Bearer token is empty");
+                User user = users.findByAuthUserId(jwt.subject(token)).orElseThrow();
                 SecurityContextHolder.getContext().setAuthentication(new UsernamePasswordAuthenticationToken(
                         user, null, List.of(new SimpleGrantedAuthority("ROLE_" + user.role.name()))));
-            } catch (JwtException | IllegalArgumentException | java.util.NoSuchElementException ignored) {
+            } catch (RuntimeException ignored) {
                 SecurityContextHolder.clearContext();
             }
         }

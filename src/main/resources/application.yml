@@ -14,5 +14,6 @@ management:
   endpoints.web.base-path: /api/actuator
 app.auth-service-url: ${AUTH_SERVICE_URL:http://auth-service:8080}
 app.auth-public-key-pem: ${AUTH_PUBLIC_KEY_PEM:}
+app.auth-issuer: ${AUTH_JWT_ISSUER:central-auth-service}
 app.auth-default-role: ${AUTH_DEFAULT_ROLE:USER}
 app.tmdb.read-access-token: ${TMDB_READ_ACCESS_TOKEN:}
