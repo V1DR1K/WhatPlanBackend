@@ -16,7 +16,7 @@ public class CentralJwt {
     private final String issuer;
 
     public CentralJwt(@Value("${app.auth-public-key-pem}") String pem,
-                      @Value("${app.auth-issuer:central-auth-service}") String issuer) {
+                      @Value("${app.auth-issuer}") String issuer) {
         this.publicKey = parsePublicKey(pem);
         this.issuer = issuer;
     }

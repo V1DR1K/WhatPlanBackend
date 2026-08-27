@@ -3,6 +3,7 @@ package com.wherefood.web;
 import java.time.Instant;
 import java.util.Map;
 import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.dao.OptimisticLockingFailureException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.ExceptionHandler;
@@ -14,6 +15,12 @@ public class ApiExceptionHandler {
     ResponseEntity<ApiError> conflict(DataIntegrityViolationException ignored) {
         return ResponseEntity.status(HttpStatus.CONFLICT)
                 .body(new ApiError("CONFLICT", "El registro entra en conflicto con datos existentes.", null, Instant.now()));
+    }
+
+    @ExceptionHandler(OptimisticLockingFailureException.class)
+    ResponseEntity<ApiError> concurrentUpdate(OptimisticLockingFailureException ignored) {
+        return ResponseEntity.status(HttpStatus.CONFLICT)
+                .body(new ApiError("CONCURRENT_UPDATE", "El registro fue modificado por otra operación.", null, Instant.now()));
     }
 
     record ApiError(String code, String detail, Map<String, String> fields, Instant timestamp) {}

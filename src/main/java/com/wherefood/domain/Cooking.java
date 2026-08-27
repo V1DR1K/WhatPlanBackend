@@ -7,6 +7,7 @@ import java.time.*;
 @Table(name = "cookings")
 public class Cooking {
  @Id @GeneratedValue(strategy = GenerationType.IDENTITY) public Long id;
+ @Version public long version;
  @ManyToOne(fetch = FetchType.LAZY) @JoinColumn(name = "recipe_id", nullable = false) public Recipe recipe;
  @Enumerated(EnumType.STRING) @Column(nullable = false) public Home home;
  @Column(nullable = false) public int servings;

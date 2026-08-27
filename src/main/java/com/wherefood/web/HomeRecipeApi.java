@@ -14,10 +14,11 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 import org.springframework.web.server.ResponseStatusException;
+import com.wherefood.validation.SafeHttpUrl;
 
 record RecipeIngredientRequest(@NotBlank @Size(max = 160) String name, @DecimalMin(value = "0.0", inclusive = false) BigDecimal quantity, @NotBlank @Size(max = 30) String unit) {}
 record RecipeStepRequest(@NotBlank @Size(max = 2000) String instruction) {}
-record RecipeRequest(@NotBlank @Size(max = 160) String name, @Size(max = 1000) String sourceUrl, List<@Valid RecipeIngredientRequest> ingredients, List<@Valid RecipeStepRequest> steps) {}
+record RecipeRequest(@NotBlank @Size(max = 160) String name, @Size(max = 1000) @SafeHttpUrl String sourceUrl, @Size(max = 50) List<@Valid RecipeIngredientRequest> ingredients, @Size(max = 50) List<@Valid RecipeStepRequest> steps) {}
 record CookingRequest(@NotNull Home home, @Min(1) @Max(100) int servings, @NotNull LocalDate cookedOn, @NotNull MealType mealType) {}
 record RecipeIngredientDto(String name, BigDecimal quantity, String unit) {}
 record RecipeStepDto(String instruction) {}
@@ -79,7 +80,7 @@ public class HomeRecipeApi {
   }
   @GetMapping(value = "/recipes/{id}/photo", produces = "image/webp") ResponseEntity<byte[]> recipePhoto(@PathVariable Long id, @RequestParam(defaultValue = "false") boolean thumbnail) {
    findRecipe(id); RecipePhoto photo = recipePhotos.findByRecipeId(id).orElseThrow(() -> notFound("Foto"));
-   return ResponseEntity.ok().cacheControl(CacheControl.maxAge(Duration.ofDays(30)).cachePublic()).contentType(MediaType.valueOf("image/webp")).body(storage.bytes(thumbnail ? photo.thumbnailBase64 : photo.imageBase64));
+   return ResponseEntity.ok().cacheControl(CacheControl.maxAge(Duration.ofDays(30)).cachePrivate()).contentType(MediaType.valueOf("image/webp")).body(storage.bytes(thumbnail ? photo.thumbnailBase64 : photo.imageBase64));
   }
   @PostMapping(value = "/recipes/{id}/photo", consumes = MediaType.MULTIPART_FORM_DATA_VALUE) @Transactional RecipeDto uploadRecipePhoto(@PathVariable Long id, @RequestPart("file") MultipartFile file, @AuthenticationPrincipal User author) throws IOException {
    Recipe recipe = findRecipe(id); recipePhotos.findByRecipeId(id).ifPresent(recipePhotos::delete); recipePhotos.flush(); recipe.updatedBy = author; recipe.updatedAt = Instant.now(); recipes.save(recipe); recipePhotos.save(storage.store(recipe, file)); return recipe(recipe);

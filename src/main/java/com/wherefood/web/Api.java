@@ -13,17 +13,18 @@ import org.springframework.security.core.annotation.*;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.*;
 import org.springframework.web.server.ResponseStatusException;
+import com.wherefood.validation.SafeHttpUrl;
 
-record CategoryRequest(@NotBlank String name, @NotBlank String slug, @NotBlank String icon, boolean active) {}
+record CategoryRequest(@NotBlank @Size(max = 60) String name, @NotBlank @Size(max = 60) String slug, @NotBlank @Size(max = 40) String icon, boolean active) {}
 record CategoryDto(Long id, String name, String slug, String icon, boolean active) {}
-record HighlightTagRequest(@NotBlank String name, @NotBlank String emoji) {}
+record HighlightTagRequest(@NotBlank @Size(max = 60) String name, @NotBlank @Size(max = 20) String emoji) {}
 record HighlightTagDto(Long id, String name, String emoji) {}
-record PlaceRequest(@NotBlank String name, String address, String sourceUrl, String mapsUrl, boolean acceptsReservations, @NotNull Long categoryId, List<Long> tagIds) {}
+record PlaceRequest(@NotBlank @Size(max = 120) String name, @Size(max = 300) String address, @Size(max = 1000) @SafeHttpUrl String sourceUrl, @Size(max = 1000) @SafeHttpUrl String mapsUrl, boolean acceptsReservations, @NotNull @Positive Long categoryId, @Size(max = 30) List<@NotNull @Positive Long> tagIds) {}
 record VisitRequest(@NotNull LocalDate visitedOn) {}
-record ItemRequest(@NotBlank String name) {}
-record ItemReviewRequest(String comment, @Min(1) @Max(5) short taste, @Min(1) @Max(5) short price) {}
-record CreateItemRequest(@NotBlank String name) {}
-record PlaceReviewRequest(String comment, @Min(1) @Max(5) Short location, @Min(1) @Max(5) Short heating, @Min(1) @Max(5) Short bathrooms, @Min(1) @Max(5) Short exterior, @Min(1) @Max(5) Short seating, @Min(1) @Max(5) Short service, @Min(1) @Max(5) Short ambiance) {}
+record ItemRequest(@NotBlank @Size(max = 120) String name) {}
+record ItemReviewRequest(@Size(max = 1000) String comment, @Min(1) @Max(5) short taste, @Min(1) @Max(5) short price) {}
+record CreateItemRequest(@NotBlank @Size(max = 120) String name) {}
+record PlaceReviewRequest(@Size(max = 2000) String comment, @Min(1) @Max(5) Short location, @Min(1) @Max(5) Short heating, @Min(1) @Max(5) Short bathrooms, @Min(1) @Max(5) Short exterior, @Min(1) @Max(5) Short seating, @Min(1) @Max(5) Short service, @Min(1) @Max(5) Short ambiance) {}
 record PlaceReviewDto(String author, String comment, Short location, Short heating, Short bathrooms, Short exterior, Short seating, Short service, Short ambiance) {}
 record ItemReviewDto(String author, String comment, short taste, short price, Instant createdAt, Instant updatedAt) {}
 record ItemDto(Long id, String name, String createdBy, String photoUrl, String thumbnailUrl, Integer photoWidth, Integer photoHeight, List<ItemReviewDto> reviews, Instant createdAt) {}
@@ -90,7 +91,7 @@ public class Api {
   @GetMapping("/places/{id}") PlaceDto getPlace(@PathVariable Long id) { Place place = active(places.findDetailedById(id).orElseThrow(() -> notFound("Lugar"))); return place(place, placeSummaries(List.of(place)).get(id)); }
  @GetMapping(value = "/places/{id}/photo", produces = "image/webp") ResponseEntity<byte[]> placePhoto(@PathVariable Long id, @RequestParam(defaultValue = "false") boolean thumbnail) {
   active(places.findById(id).orElseThrow(() -> notFound("Lugar"))); PlacePhoto photo = placePhotos.findByPlaceId(id).orElseThrow(() -> notFound("Foto"));
-  return ResponseEntity.ok().cacheControl(CacheControl.maxAge(java.time.Duration.ofDays(30)).cachePublic()).contentType(MediaType.valueOf("image/webp")).body(storage.bytes(thumbnail ? photo.thumbnailBase64 : photo.imageBase64));
+    return ResponseEntity.ok().cacheControl(CacheControl.maxAge(java.time.Duration.ofDays(30)).cachePrivate()).contentType(MediaType.valueOf("image/webp")).body(storage.bytes(thumbnail ? photo.thumbnailBase64 : photo.imageBase64));
  }
 
  @PutMapping("/places/{id}/review") PlaceReviewDto saveReview(@PathVariable Long id, @RequestBody @jakarta.validation.Valid PlaceReviewRequest request, @AuthenticationPrincipal User author) {
@@ -111,11 +112,16 @@ public class Api {
      active(places.findDetailedById(id).orElseThrow(() -> notFound("Lugar")));
      return items.findItemDatesByPlaceId(id);
    }
-   @GetMapping("/items") Slice<ItemCatalogDto> listItems(@RequestParam Long placeId, @RequestParam(required = false) LocalDate visitDate, @RequestParam(defaultValue = "30") int size) {
+    @GetMapping("/items") Slice<ItemCatalogDto> listItems(@RequestParam @Positive Long placeId, @RequestParam(required = false) LocalDate visitDate, @RequestParam(required = false) @jakarta.validation.constraints.PositiveOrZero @Max(1_000_000) Long cursor, @RequestParam(defaultValue = "30") int size) {
      active(places.findDetailedById(placeId).orElseThrow(() -> notFound("Lugar")));
-     int limit = Math.max(1, Math.min(size, 100));
-      List<Item> catalog = visitDate == null ? items.findCatalogByPlaceId(placeId) : items.findCatalogByPlaceIdAndVisitDate(placeId, visitDate);
-      return new Slice<>(catalog.stream().limit(limit).map(this::catalogItem).toList(), null);
+    int limit = Math.max(1, Math.min(size, 100));
+       int offset = cursor == null ? 0 : Math.max(0, cursor.intValue());
+       org.springframework.data.domain.Pageable page = org.springframework.data.domain.PageRequest.of(offset / limit, limit);
+        List<Item> catalog = visitDate == null ? items.findCatalogByPlaceId(placeId, page) : items.findCatalogByPlaceIdAndVisitDate(placeId, visitDate, page);
+        Long next = catalog.size() == limit ? (long) offset + limit : null;
+        Map<Long, ItemPhoto> catalogPhotos = catalog.isEmpty() || photos == null ? Map.of() : photos.findByItemIdIn(catalog.stream().map(item -> item.id).toList()).stream().filter(photo -> photo.item != null && photo.item.id != null).collect(java.util.stream.Collectors.toMap(photo -> photo.item.id, photo -> photo, (first, ignored) -> first));
+        Map<Long, List<ItemReview>> catalogReviews = catalog.isEmpty() ? Map.of() : itemReviews.findByItemIdInOrderByItemIdAscAuthorUsername(catalog.stream().map(item -> item.id).toList()).stream().collect(java.util.stream.Collectors.groupingBy(review -> review.item.id));
+        return new Slice<>(catalog.stream().map(item -> catalogItem(item, catalogPhotos.get(item.id), catalogReviews.getOrDefault(item.id, List.of()))).toList(), next);
    }
    @PostMapping("/places/{id}/visits") @ResponseStatus(HttpStatus.CREATED) @org.springframework.transaction.annotation.Transactional PlaceVisitSummaryDto addVisit(@PathVariable Long id, @RequestBody @jakarta.validation.Valid VisitRequest request, @AuthenticationPrincipal User author) {
    Place place = active(places.findById(id).orElseThrow(() -> notFound("Lugar")));
@@ -147,7 +153,7 @@ public class Api {
   @PostMapping(value = "/items/{id}/photo", consumes = MediaType.MULTIPART_FORM_DATA_VALUE) @org.springframework.transaction.annotation.Transactional ItemDto upload(@PathVariable Long id, @RequestPart("file") MultipartFile file, @AuthenticationPrincipal User author) throws IOException { Item item = active(items.findById(id).orElseThrow(() -> notFound("Ítem"))); photos.findByItemId(id).ifPresent(photos::delete); photos.flush(); ItemPhoto photo = storage.store(item, file); photos.save(photo); return item(item, photo); }
   @GetMapping(value = "/items/{id}/photo", produces = "image/webp") ResponseEntity<byte[]> itemPhoto(@PathVariable Long id, @RequestParam(defaultValue = "false") boolean thumbnail) {
    active(items.findById(id).orElseThrow(() -> notFound("Ítem"))); ItemPhoto photo = photos.findByItemId(id).orElseThrow(() -> notFound("Foto"));
-   return ResponseEntity.ok().cacheControl(CacheControl.maxAge(java.time.Duration.ofDays(30)).cachePublic()).contentType(MediaType.valueOf("image/webp")).body(storage.bytes(thumbnail ? photo.thumbnailBase64 : photo.imageBase64));
+   return ResponseEntity.ok().cacheControl(CacheControl.maxAge(java.time.Duration.ofDays(30)).cachePrivate()).contentType(MediaType.valueOf("image/webp")).body(storage.bytes(thumbnail ? photo.thumbnailBase64 : photo.imageBase64));
   }
 
   @PostMapping(value = "/place-visits/{id}/photos", consumes = MediaType.MULTIPART_FORM_DATA_VALUE) @org.springframework.transaction.annotation.Transactional PlaceVisitDto uploadVisitPhoto(@PathVariable Long id, @RequestPart("file") MultipartFile file, @AuthenticationPrincipal User author) throws IOException {
@@ -172,7 +178,7 @@ public class Api {
   }
   @GetMapping(value = "/place-visit-photos/{photoId}", produces = "image/webp") ResponseEntity<byte[]> visitPhoto(@PathVariable Long photoId, @RequestParam(defaultValue = "false") boolean thumbnail) {
    PlaceVisitPhoto photo = visitPhotos.findById(photoId).orElseThrow(() -> notFound("Foto"));
-   return ResponseEntity.ok().cacheControl(CacheControl.maxAge(java.time.Duration.ofDays(30)).cachePublic()).contentType(MediaType.valueOf("image/webp")).body(storage.bytes(thumbnail ? photo.thumbnailBase64 : photo.imageBase64));
+    return ResponseEntity.ok().cacheControl(CacheControl.maxAge(java.time.Duration.ofDays(30)).cachePrivate()).contentType(MediaType.valueOf("image/webp")).body(storage.bytes(thumbnail ? photo.thumbnailBase64 : photo.imageBase64));
   }
   @PostMapping("/place-visits/{id}/reviews") @ResponseStatus(HttpStatus.CREATED) @org.springframework.transaction.annotation.Transactional PlaceVisitReviewDto addVisitReview(@PathVariable Long id, @RequestBody @jakarta.validation.Valid PlaceVisitReviewRequest request, @AuthenticationPrincipal User author) {
    PlaceVisit visit = active(visits.findDetailedById(id).orElseThrow(() -> notFound("Visita")));
@@ -243,10 +249,10 @@ public class Api {
   }
   private ItemDto item(Item item) { return item(item, photos.findByItemId(item.id).orElse(null)); }
   private ItemDto item(Item item, ItemPhoto photo) { return item(item, photo, itemReviews.authorsByItemIdIn(List.of(item.id)).stream().collect(java.util.stream.Collectors.toMap(ReviewAuthor::getReviewId, ReviewAuthor::getAuthor))); }
-  private ItemCatalogDto catalogItem(Item item) {
-    ItemReview review = item.reviews.stream().findFirst().orElse(null);
-    ItemPhoto photo = photos.findByItemId(item.id).orElse(null);
-    return new ItemCatalogDto(item.id, item.name, review == null ? null : review.comment, review == null ? (short) 0 : review.taste, review == null ? (short) 0 : review.price, item.createdBy.username, photo == null ? null : itemPhotoUrl(item.id, false, photo.id), photo == null ? null : itemPhotoUrl(item.id, true, photo.id), photo == null ? null : photo.width, photo == null ? null : photo.height, item.visit.visitedOn, item.createdAt, item.reviews.stream().sorted(Comparator.comparing(value -> value.author.username, String.CASE_INSENSITIVE_ORDER)).map(Api::itemReview).toList());
+    private ItemCatalogDto catalogItem(Item item) { return catalogItem(item, photos.findByItemId(item.id).orElse(null), item.reviews); }
+    private ItemCatalogDto catalogItem(Item item, ItemPhoto photo, List<ItemReview> reviews) {
+      ItemReview review = reviews.stream().findFirst().orElse(null);
+      return new ItemCatalogDto(item.id, item.name, review == null ? null : review.comment, review == null ? (short) 0 : review.taste, review == null ? (short) 0 : review.price, item.createdBy.username, photo == null ? null : itemPhotoUrl(item.id, false, photo.id), photo == null ? null : itemPhotoUrl(item.id, true, photo.id), photo == null ? null : photo.width, photo == null ? null : photo.height, item.visit.visitedOn, item.createdAt, reviews.stream().sorted(Comparator.comparing(value -> value.author.username, String.CASE_INSENSITIVE_ORDER)).map(Api::itemReview).toList());
   }
  private ItemDto item(Item item, ItemPhoto photo, Map<Long, String> reviewAuthors) { return new ItemDto(item.id, item.name, item.createdBy.username, photo == null ? null : itemPhotoUrl(item.id, false, photo.id), photo == null ? null : itemPhotoUrl(item.id, true, photo.id), photo == null ? null : Integer.valueOf(photo.width), photo == null ? null : Integer.valueOf(photo.height), item.reviews.stream().sorted(Comparator.comparing(review -> reviewAuthors.get(review.id), Comparator.nullsLast(String.CASE_INSENSITIVE_ORDER))).map(review -> itemReview(review, reviewAuthors.get(review.id))).toList(), item.createdAt); }
   private static String itemPhotoUrl(Long itemId, boolean thumbnail, Long photoId) { return "/items/" + itemId + "/photo?" + (thumbnail ? "thumbnail=true&" : "") + "v=" + photoId; }

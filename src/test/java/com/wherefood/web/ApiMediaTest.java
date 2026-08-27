@@ -15,6 +15,9 @@ import com.wherefood.repo.Repositories.Items;
 import com.wherefood.repo.Repositories.Photos;
 import java.util.Base64;
 import java.util.Optional;
+import java.awt.image.BufferedImage;
+import java.io.ByteArrayOutputStream;
+import javax.imageio.ImageIO;
 import org.junit.jupiter.api.Test;
 
 class ApiMediaTest {
@@ -25,7 +28,7 @@ class ApiMediaTest {
  }
 
  @Test
- void servesTheRequestedItemPhotoVariantAsCacheableWebp() {
+  void servesTheRequestedItemPhotoVariantAsCacheableWebp() {
   Items items = mock(Items.class);
     Photos photos = mock(Photos.class);
     Item item = new Item();
@@ -42,5 +45,21 @@ class ApiMediaTest {
 
   assertEquals("image/webp", response.getHeaders().getContentType().toString());
   assertArrayEquals(new byte[] {4, 5}, response.getBody());
- }
+  }
+
+  @Test
+  void rejectsImagesThatExceedThePixelLimit() throws Exception {
+    BufferedImage image = new BufferedImage(2, 2, BufferedImage.TYPE_INT_RGB);
+    ByteArrayOutputStream bytes = new ByteArrayOutputStream();
+    ImageIO.write(image, "png", bytes);
+
+    PhotoStorage storage = new PhotoStorage(1024 * 1024, 1024 * 1024, 3, 100, 1);
+
+    org.springframework.web.server.ResponseStatusException error = org.junit.jupiter.api.Assertions.assertThrows(
+        org.springframework.web.server.ResponseStatusException.class,
+        () -> storage.store(new Item(), new org.springframework.mock.web.MockMultipartFile(
+            "file", "image.png", "image/png", bytes.toByteArray())));
+
+    assertEquals(org.springframework.http.HttpStatus.PAYLOAD_TOO_LARGE, error.getStatusCode());
+  }
 }

@@ -6,5 +6,6 @@ import jakarta.persistence.*;
 @Table(name = "global_settings")
 public class GlobalSettings {
  @Id public Integer id;
+ @Version public long version;
  @Column(name = "catalog_page_size", nullable = false) public int catalogPageSize = 5;
 }

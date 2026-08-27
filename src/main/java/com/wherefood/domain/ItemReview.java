@@ -7,6 +7,7 @@ import java.time.*;
 @Table(name="item_reviews", uniqueConstraints=@UniqueConstraint(columnNames={"item_id", "author_id"}))
 public class ItemReview {
  @Id @GeneratedValue(strategy=GenerationType.IDENTITY) public Long id;
+ @Version public long version;
  @ManyToOne(fetch=FetchType.LAZY) @JoinColumn(name="item_id", nullable=false) public Item item;
  @ManyToOne(fetch=FetchType.LAZY) @JoinColumn(name="author_id", nullable=false) public User author;
  public String comment;

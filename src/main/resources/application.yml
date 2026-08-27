@@ -1,8 +1,8 @@
 spring:
   datasource:
-    url: ${DATABASE_URL:jdbc:postgresql://localhost:5432/wherefood}
-    username: ${DATABASE_USER:wherefood}
-    password: ${DATABASE_PASSWORD:wherefood}
+    url: ${DATABASE_URL}
+    username: ${DATABASE_USER}
+    password: ${DATABASE_PASSWORD}
   jpa:
     open-in-view: false
     hibernate.ddl-auto: validate
@@ -12,8 +12,20 @@ spring:
   servlet.multipart.max-request-size: 11MB
 management:
   endpoints.web.base-path: /api/actuator
-app.auth-service-url: ${AUTH_SERVICE_URL:http://auth-service:8080}
-app.auth-public-key-pem: ${AUTH_PUBLIC_KEY_PEM:}
-app.auth-issuer: ${AUTH_JWT_ISSUER:central-auth-service}
-app.auth-default-role: ${AUTH_DEFAULT_ROLE:USER}
-app.tmdb.read-access-token: ${TMDB_READ_ACCESS_TOKEN:}
+  endpoints.web.exposure.include: health
+  endpoint.health.show-details: never
+app.auth-service-url: ${AUTH_SERVICE_URL}
+app.auth-public-key-pem: ${AUTH_PUBLIC_KEY_PEM}
+app.auth-issuer: ${AUTH_JWT_ISSUER}
+app.auth-default-role: ${AUTH_DEFAULT_ROLE}
+app.auth.allowed-users: ${WHATPLAN_ALLOWED_USERS:tomas,avril}
+app.tmdb.read-access-token: ${TMDB_READ_ACCESS_TOKEN}
+app.tmdb.connect-timeout-seconds: ${TMDB_CONNECT_TIMEOUT_SECONDS:5}
+app.tmdb.request-timeout-seconds: ${TMDB_REQUEST_TIMEOUT_SECONDS:8}
+app.tmdb.cache-ttl-seconds: ${TMDB_CACHE_TTL_SECONDS:21600}
+app.tmdb.max-cache-entries: ${TMDB_MAX_CACHE_ENTRIES:512}
+app.images.max-upload-bytes: ${IMAGE_MAX_UPLOAD_BYTES:10485760}
+app.images.max-decoded-bytes: ${IMAGE_MAX_DECODED_BYTES:52428800}
+app.images.max-pixels: ${IMAGE_MAX_PIXELS:25000000}
+app.images.max-dimension: ${IMAGE_MAX_DIMENSION:8000}
+app.images.process-timeout-seconds: ${IMAGE_PROCESS_TIMEOUT_SECONDS:10}

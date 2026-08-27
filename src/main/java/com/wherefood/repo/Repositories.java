@@ -23,7 +23,8 @@ public final class Repositories {
    public interface SpecialDateOccurrences extends JpaRepository<SpecialDateOccurrence, Long> {
      @EntityGraph(attributePaths = {"specialDate", "createdBy", "updatedBy"}) Optional<SpecialDateOccurrence> findBySpecialDateIdAndOccurredOn(Long specialDateId, LocalDate occurredOn);
      @EntityGraph(attributePaths = {"specialDate", "createdBy", "updatedBy"}) List<SpecialDateOccurrence> findBySpecialDateIdInAndOccurredOnBetween(Collection<Long> specialDateIds, LocalDate from, LocalDate to);
-     @EntityGraph(attributePaths = {"specialDate", "createdBy", "updatedBy"}) List<SpecialDateOccurrence> findAllByOrderByOccurredOnDescIdDesc();
+      @EntityGraph(attributePaths = {"specialDate", "createdBy", "updatedBy"}) List<SpecialDateOccurrence> findAllByOrderByOccurredOnDescIdDesc();
+      @EntityGraph(attributePaths = {"specialDate", "createdBy", "updatedBy"}) List<SpecialDateOccurrence> findByOccurredOnLessThanEqualOrderByOccurredOnDescIdDesc(LocalDate occurredOn);
     }
   public interface SpecialDateOccurrenceComments extends JpaRepository<SpecialDateOccurrenceComment, Long> {
    @EntityGraph(attributePaths = {"author", "updatedBy"}) List<SpecialDateOccurrenceComment> findByOccurrenceIdOrderByAuthorUsername(Long occurrenceId);
@@ -61,10 +62,11 @@ public final class Repositories {
    Long getReviewId(); String getAuthor();
   }
 
-    public interface PlaceVisits extends JpaRepository<PlaceVisit, Long> {
+     public interface PlaceVisits extends JpaRepository<PlaceVisit, Long> {
         @Override @EntityGraph(attributePaths = {"place", "createdBy", "updatedBy"}) List<PlaceVisit> findAll();
        @EntityGraph(attributePaths = {"place", "createdBy", "updatedBy"}) List<PlaceVisit> findByPlaceIdOrderByVisitedOnDescIdDesc(Long placeId);
-       @EntityGraph(attributePaths = {"place", "createdBy", "updatedBy"}) List<PlaceVisit> findByPlaceIdInOrderByPlaceIdAscVisitedOnDescIdDesc(Collection<Long> placeIds);
+        @EntityGraph(attributePaths = {"place", "createdBy", "updatedBy"}) List<PlaceVisit> findByPlaceIdInOrderByPlaceIdAscVisitedOnDescIdDesc(Collection<Long> placeIds);
+        @EntityGraph(attributePaths = {"place", "createdBy", "updatedBy"}) List<PlaceVisit> findByVisitedOnLessThanEqualOrderByVisitedOnDescIdDesc(LocalDate visitedOn);
        @EntityGraph(attributePaths = {"place", "createdBy", "updatedBy"}) Optional<PlaceVisit> findByPlaceIdAndVisitedOn(Long placeId, LocalDate visitedOn);
       boolean existsByPlaceId(Long placeId);
     @EntityGraph(attributePaths = {"place", "createdBy", "updatedBy"}) Optional<PlaceVisit> findDetailedById(Long id);
@@ -85,15 +87,21 @@ public final class Repositories {
     Optional<PlaceVisitReview> findByVisitIdAndAuthorId(Long visitId, Long authorId);
    }
 
-  public interface Items extends JpaRepository<Item, Long> {
+   public interface Items extends JpaRepository<Item, Long> {
    @Override @EntityGraph(attributePaths = {"createdBy", "visit", "visit.place", "reviews", "reviews.author"}) Optional<Item> findById(Long id);
    @EntityGraph(attributePaths = {"createdBy", "reviews", "reviews.author"}) List<Item> findByVisitIdAndDeletedAtIsNullOrderByIdDesc(Long visitId);
    @EntityGraph(attributePaths = {"createdBy", "visit", "visit.place", "reviews", "reviews.author"})
    @Query("select i from Item i where i.visit.place.id = :placeId and i.deletedAt is null order by i.id desc")
-   List<Item> findCatalogByPlaceId(@Param("placeId") Long placeId);
+    List<Item> findCatalogByPlaceId(@Param("placeId") Long placeId);
+     @EntityGraph(attributePaths = {"createdBy", "visit", "visit.place"})
+     @Query("select i from Item i where i.visit.place.id = :placeId and i.deletedAt is null order by i.id desc")
+     List<Item> findCatalogByPlaceId(@Param("placeId") Long placeId, Pageable pageable);
    @EntityGraph(attributePaths = {"createdBy", "visit", "visit.place", "reviews", "reviews.author"})
    @Query("select i from Item i where i.visit.place.id = :placeId and i.visit.visitedOn = :visitDate and i.deletedAt is null order by i.id desc")
-   List<Item> findCatalogByPlaceIdAndVisitDate(@Param("placeId") Long placeId, @Param("visitDate") LocalDate visitDate);
+    List<Item> findCatalogByPlaceIdAndVisitDate(@Param("placeId") Long placeId, @Param("visitDate") LocalDate visitDate);
+     @EntityGraph(attributePaths = {"createdBy", "visit", "visit.place"})
+     @Query("select i from Item i where i.visit.place.id = :placeId and i.visit.visitedOn = :visitDate and i.deletedAt is null order by i.id desc")
+     List<Item> findCatalogByPlaceIdAndVisitDate(@Param("placeId") Long placeId, @Param("visitDate") LocalDate visitDate, Pageable pageable);
    @Query("select distinct i.visit.visitedOn from Item i where i.visit.place.id = :placeId and i.deletedAt is null order by i.visit.visitedOn desc") List<LocalDate> findItemDatesByPlaceId(@Param("placeId") Long placeId);
    @Query("select i.visit.place.id as placeId, count(distinct i) as itemCount, coalesce(avg(review.taste), 0.0) as tasteAverage, coalesce(avg(review.price), 0.0) as priceAverage from Item i left join i.reviews review where i.visit.place.id in :ids and i.deletedAt is null group by i.visit.place.id") List<PlaceMetric> metrics(@Param("ids") Collection<Long> ids);
   }
@@ -136,7 +144,8 @@ public final class Repositories {
   }
 
    public interface ItemReviews extends JpaRepository<ItemReview, Long> {
-    Optional<ItemReview> findByItemIdAndAuthorId(Long itemId, Long authorId);
+     @EntityGraph(attributePaths = {"item", "author"}) List<ItemReview> findByItemIdInOrderByItemIdAscAuthorUsername(Collection<Long> itemIds);
+     Optional<ItemReview> findByItemIdAndAuthorId(Long itemId, Long authorId);
     @Query("select r.id as reviewId, author.username as author from ItemReview r join r.author author where r.item.id in :itemIds") List<ReviewAuthor> authorsByItemIdIn(@Param("itemIds") Collection<Long> itemIds);
   }
 
@@ -157,9 +166,10 @@ public final class Repositories {
     boolean existsByViewIdAndAuthorId(Long viewId, Long authorId);
   }
 
-    public interface FilmViews extends JpaRepository<FilmView, Long> {
+     public interface FilmViews extends JpaRepository<FilmView, Long> {
        @Override @EntityGraph(attributePaths = {"film", "createdBy", "updatedBy"}) List<FilmView> findAll();
-      @EntityGraph(attributePaths = {"createdBy", "updatedBy"}) List<FilmView> findByFilmIdOrderByWatchedOnDescIdDesc(Long filmId);
+       @EntityGraph(attributePaths = {"createdBy", "updatedBy"}) List<FilmView> findByFilmIdOrderByWatchedOnDescIdDesc(Long filmId);
+       @EntityGraph(attributePaths = {"film", "film.platform", "film.genres", "createdBy", "updatedBy"}) List<FilmView> findByWatchedOnLessThanEqualOrderByWatchedOnDescIdDesc(LocalDate watchedOn);
       @EntityGraph(attributePaths = {"createdBy", "updatedBy"}) Optional<FilmView> findByIdAndFilmId(Long id, Long filmId);
       Optional<FilmView> findByFilmIdAndWatchedOn(Long filmId, LocalDate watchedOn);
    }
@@ -224,10 +234,11 @@ public final class Repositories {
     @EntityGraph(attributePaths = "author") Optional<WhyFunVenueReview> findByVenueIdAndAuthorId(Long venueId, Long authorId);
    }
 
-   public interface WhyFunVisits extends JpaRepository<WhyFunVisit, Long> {
+    public interface WhyFunVisits extends JpaRepository<WhyFunVisit, Long> {
     @EntityGraph(attributePaths = {"venue", "venue.category", "venue.subcategory", "createdBy", "updatedBy"}) List<WhyFunVisit> findByVenueIdOrderByScheduledAtDescIdDesc(Long venueId);
     @EntityGraph(attributePaths = {"venue", "venue.category", "venue.subcategory", "venue.schedules", "createdBy", "updatedBy"}) Optional<WhyFunVisit> findDetailedById(Long id);
-     @Override @EntityGraph(attributePaths = {"venue", "venue.category", "venue.subcategory", "createdBy", "updatedBy"}) List<WhyFunVisit> findAll();
+      @Override @EntityGraph(attributePaths = {"venue", "venue.category", "venue.subcategory", "createdBy", "updatedBy"}) List<WhyFunVisit> findAll();
+      @EntityGraph(attributePaths = {"venue", "venue.category", "venue.subcategory", "createdBy", "updatedBy"}) List<WhyFunVisit> findByScheduledAtLessThanEqualOrderByScheduledAtDescIdDesc(LocalDate scheduledAt);
      @Query("select v.venue.id as activityId, count(v) as visitCount from WhyFunVisit v where v.venue.id in :activityIds group by v.venue.id") List<ActivityVisitCount> countsByActivityIdIn(@Param("activityIds") Collection<Long> activityIds);
    }
 
@@ -261,10 +272,11 @@ public final class Repositories {
     public interface RecipeHome { Long getRecipeId(); Home getHome(); }
     public interface RecipeRating { Long getRecipeId(); Double getRating(); }
 
-   public interface Cookings extends JpaRepository<Cooking, Long> {
+    public interface Cookings extends JpaRepository<Cooking, Long> {
     @Override @EntityGraph(attributePaths = {"recipe", "recipe.ingredients", "recipe.steps", "createdBy", "updatedBy"}) List<Cooking> findAll();
     @EntityGraph(attributePaths = {"recipe", "recipe.ingredients", "recipe.steps", "createdBy", "updatedBy"}) List<Cooking> findByHomeOrderByCookedOnDescIdDesc(Home home);
-    @EntityGraph(attributePaths = {"recipe", "recipe.ingredients", "recipe.steps", "createdBy", "updatedBy"}) List<Cooking> findByRecipeIdOrderByCookedOnDescIdDesc(Long recipeId);
+     @EntityGraph(attributePaths = {"recipe", "recipe.ingredients", "recipe.steps", "createdBy", "updatedBy"}) List<Cooking> findByRecipeIdOrderByCookedOnDescIdDesc(Long recipeId);
+     @EntityGraph(attributePaths = {"recipe", "recipe.ingredients", "recipe.steps", "createdBy", "updatedBy"}) List<Cooking> findByCookedOnLessThanEqualOrderByCookedOnDescIdDesc(LocalDate cookedOn);
      @EntityGraph(attributePaths = {"recipe", "recipe.ingredients", "recipe.steps", "createdBy", "updatedBy"}) Optional<Cooking> findDetailedById(Long id);
      boolean existsByRecipeId(Long recipeId);
      @Query("select c.recipe.id as recipeId, count(c) as cookingCount from Cooking c where c.recipe.id in :recipeIds group by c.recipe.id") List<RecipeCookingCount> cookingCountsByRecipeIdIn(@Param("recipeIds") Collection<Long> recipeIds);

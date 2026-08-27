@@ -2,6 +2,7 @@ package com.wherefood.auth;
 
 import com.wherefood.domain.Role;
 import com.wherefood.domain.User;
+import com.wherefood.config.AllowedWhatPlanUsers;
 import com.wherefood.repo.Repositories.Users;
 import java.util.UUID;
 import org.springframework.beans.factory.annotation.Value;
@@ -12,9 +13,13 @@ import org.springframework.transaction.annotation.Transactional;
 public class LocalUserProvisioner {
     private final Users users;
     private final Role defaultRole;
+    private final AllowedWhatPlanUsers allowedUsers;
 
-    public LocalUserProvisioner(Users users, @Value("${app.auth-default-role}") String defaultRole) {
+    @org.springframework.beans.factory.annotation.Autowired
+    public LocalUserProvisioner(Users users, @Value("${app.auth-default-role}") String defaultRole,
+                                AllowedWhatPlanUsers allowedUsers) {
         this.users = users;
+        this.allowedUsers = allowedUsers;
         try {
             this.defaultRole = Role.valueOf(defaultRole.trim().toUpperCase());
         } catch (Exception ex) {
@@ -22,8 +27,13 @@ public class LocalUserProvisioner {
         }
     }
 
+    public LocalUserProvisioner(Users users, String defaultRole) {
+        this(users, defaultRole, AllowedWhatPlanUsers.defaults());
+    }
+
     @Transactional
     public User provision(UUID authUserId, String username) {
+        allowedUsers.requireAllowed(username);
         if (authUserId == null || username == null || username.isBlank()) {
             throw new IllegalArgumentException("Central user identity is incomplete");
         }

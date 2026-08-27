@@ -1,0 +1,23 @@
+alter table users add column version bigint not null default 0;
+alter table categories add column version bigint not null default 0;
+alter table global_settings add column version bigint not null default 0;
+alter table places add column version bigint not null default 0;
+alter table place_visits add column version bigint not null default 0;
+alter table items add column version bigint not null default 0;
+alter table watch_platforms add column version bigint not null default 0;
+alter table films add column version bigint not null default 0;
+alter table film_genre_options add column version bigint not null default 0;
+alter table film_views add column version bigint not null default 0;
+alter table recipes add column version bigint not null default 0;
+alter table cookings add column version bigint not null default 0;
+alter table why_fun_categories add column version bigint not null default 0;
+alter table why_fun_venues add column version bigint not null default 0;
+alter table why_fun_visits add column version bigint not null default 0;
+alter table special_dates add column version bigint not null default 0;
+alter table special_date_occurrences add column version bigint not null default 0;
+
+create index idx_place_visits_visited_on_id on place_visits(visited_on desc, id desc);
+create index idx_film_views_watched_on_id on film_views(watched_on desc, id desc);
+create index idx_cookings_cooked_on_id on cookings(cooked_on desc, id desc);
+create index idx_why_fun_visits_scheduled_at_id on why_fun_visits(scheduled_at desc, id desc);
+create index idx_special_date_occurrences_occurred_on_id on special_date_occurrences(occurred_on desc, id desc);

@@ -1,6 +1,9 @@
 name: Backend CI/CD
 on: {push: {branches: [main]}, pull_request: {branches: [main]}}
 permissions: {contents: read, packages: write}
+concurrency:
+  group: whatplan-backend-${{ github.ref }}
+  cancel-in-progress: true
 jobs:
   build:
     runs-on: ubuntu-latest

@@ -7,6 +7,7 @@ import java.time.Instant;
 @Table(name = "film_genre_options")
 public class FilmGenreOption {
  @Id @GeneratedValue(strategy = GenerationType.IDENTITY) public Long id;
+ @Version public long version;
  @Column(nullable = false, unique = true, length = 80) public String name;
  @Column(nullable = false, length = 20) public String emoji;
  @Column(nullable = false) public Instant createdAt;

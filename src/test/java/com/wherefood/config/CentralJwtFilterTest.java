@@ -54,4 +54,21 @@ class CentralJwtFilterTest {
 
         assertNull(SecurityContextHolder.getContext().getAuthentication());
     }
+
+    @Test
+    void rejectsAValidTokenForAnUnlistedWhatPlanUser() throws Exception {
+        UUID authId = UUID.randomUUID();
+        User user = new User();
+        user.authUserId = authId;
+        user.username = "other-user";
+        user.role = Role.USER;
+        when(jwt.subject("valid-token")).thenReturn(authId);
+        when(users.findByAuthUserId(authId)).thenReturn(Optional.of(user));
+
+        MockHttpServletRequest request = new MockHttpServletRequest();
+        request.addHeader("Authorization", "Bearer valid-token");
+        filter.doFilterInternal(request, new MockHttpServletResponse(), mock(FilterChain.class));
+
+        assertNull(SecurityContextHolder.getContext().getAuthentication());
+    }
 }

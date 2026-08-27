@@ -8,6 +8,7 @@ import java.util.*;
 @Table(name = "recipes")
 public class Recipe {
  @Id @GeneratedValue(strategy = GenerationType.IDENTITY) public Long id;
+ @Version public long version;
  @Column(nullable = false) public String name;
  @Column(name = "source_url") public String sourceUrl;
  @ManyToOne(fetch = FetchType.LAZY) @JoinColumn(name = "created_by", nullable = false) public User createdBy;

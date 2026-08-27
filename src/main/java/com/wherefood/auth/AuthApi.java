@@ -4,6 +4,7 @@ import com.wherefood.config.CentralAuthClient;
 import com.wherefood.config.CentralAuthClient.CentralUser;
 import com.wherefood.config.CentralAuthClient.TokenResponse;
 import com.wherefood.config.CentralJwt;
+import com.wherefood.config.AllowedWhatPlanUsers;
 import com.wherefood.domain.User;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
@@ -17,10 +18,10 @@ import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
-record LoginRequest(@NotBlank String username, @NotBlank String password) {}
-record RefreshRequest(@NotBlank String refreshToken) {}
-record LogoutRequest(@NotBlank String refreshToken) {}
-record ChangePasswordRequest(@NotBlank String currentPassword, @NotBlank String newPassword) {}
+record LoginRequest(@NotBlank @jakarta.validation.constraints.Size(max = 80) String username, @NotBlank @jakarta.validation.constraints.Size(max = 200) String password) {}
+record RefreshRequest(@NotBlank @jakarta.validation.constraints.Size(max = 4096) String refreshToken) {}
+record LogoutRequest(@NotBlank @jakarta.validation.constraints.Size(max = 4096) String refreshToken) {}
+record ChangePasswordRequest(@NotBlank @jakarta.validation.constraints.Size(max = 200) String currentPassword, @NotBlank @jakarta.validation.constraints.Size(max = 200) String newPassword) {}
 record LocalUserInfo(Long id, UUID authUserId, String username, String role, boolean mustChangePassword) {}
 record AuthResponse(String token, String username, String role, String accessToken, String refreshToken,
                     String tokenType, long expiresIn, LocalUserInfo user) {}
@@ -31,15 +32,19 @@ public class AuthApi {
     private final CentralAuthClient central;
     private final CentralJwt jwt;
     private final LocalUserProvisioner provisioner;
+    private final AllowedWhatPlanUsers allowedUsers;
 
-    public AuthApi(CentralAuthClient central, CentralJwt jwt, LocalUserProvisioner provisioner) {
+    public AuthApi(CentralAuthClient central, CentralJwt jwt, LocalUserProvisioner provisioner,
+                   AllowedWhatPlanUsers allowedUsers) {
         this.central = central;
         this.jwt = jwt;
         this.provisioner = provisioner;
+        this.allowedUsers = allowedUsers;
     }
 
     @PostMapping("/login")
     AuthResponse login(@Valid @RequestBody LoginRequest request) {
+        allowedUsers.requireAllowed(request.username());
         TokenResponse response = central.login(request.username(), request.password());
         return authenticatedResponse(response);
     }
@@ -59,6 +64,7 @@ public class AuthApi {
     LocalUserInfo me(@RequestHeader(HttpHeaders.AUTHORIZATION) String authorization,
                      @AuthenticationPrincipal User localUser) {
         CentralAuthClient.MeResponse centralUser = central.me(authorization);
+        allowedUsers.requireAllowed(centralUser.username());
         verifySubject(centralUser.id(), localUser);
         User synchronizedUser = provisioner.provision(centralUser.id(), centralUser.username());
         return info(synchronizedUser, centralUser.mustChangePassword());
@@ -77,6 +83,7 @@ public class AuthApi {
         }
         UUID subject = jwt.subject(response.accessToken());
         CentralUser centralUser = response.user();
+        allowedUsers.requireAllowed(centralUser.username());
         if (!subject.equals(centralUser.id())) {
             throw new IllegalStateException("Central JWT subject does not match its user");
         }

@@ -7,6 +7,7 @@ import java.time.*;
 @Table(name = "why_fun_visits")
 public class WhyFunVisit {
  @Id @GeneratedValue(strategy = GenerationType.IDENTITY) public Long id;
+ @Version public long version;
  @ManyToOne(fetch = FetchType.LAZY) @JoinColumn(name = "venue_id", nullable = false) public WhyFunVenue venue;
  @Column(name = "scheduled_at") public LocalDate scheduledAt;
  @Column(name = "cover_photo_id") public Long coverPhotoId;

@@ -7,6 +7,7 @@ import java.time.Instant;
 @Table(name = "why_fun_categories")
 public class WhyFunCategory {
  @Id @GeneratedValue(strategy = GenerationType.IDENTITY) public Long id;
+ @Version public long version;
  @ManyToOne(fetch = FetchType.LAZY) @JoinColumn(name = "parent_id") public WhyFunCategory parent;
  @Column(nullable = false) public String name;
  @Column(nullable = false) public String slug;

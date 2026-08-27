@@ -9,6 +9,8 @@ import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 import org.springframework.web.server.ResponseStatusException;
 import javax.imageio.ImageIO;
+import javax.imageio.ImageReader;
+import javax.imageio.stream.ImageInputStream;
 import java.awt.image.BufferedImage;
 import java.awt.Graphics2D;
 import java.io.*;
@@ -16,10 +18,43 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Instant;
 import java.util.Base64;
+import java.util.Iterator;
 import java.util.concurrent.TimeUnit;
 
 @Service
 public class PhotoStorage {
+ private static final long DEFAULT_MAX_UPLOAD_BYTES = 10L * 1024 * 1024;
+ private static final long DEFAULT_MAX_DECODED_BYTES = 50L * 1024 * 1024;
+ private static final long DEFAULT_MAX_PIXELS = 25_000_000L;
+ private static final int DEFAULT_MAX_DIMENSION = 8_000;
+ private static final long DEFAULT_PROCESS_TIMEOUT_SECONDS = 10;
+ private final long maxUploadBytes;
+ private final long maxDecodedBytes;
+ private final long maxPixels;
+ private final int maxDimension;
+ private final long processTimeoutSeconds;
+
+ public PhotoStorage() {
+  this(DEFAULT_MAX_UPLOAD_BYTES, DEFAULT_MAX_DECODED_BYTES, DEFAULT_MAX_PIXELS, DEFAULT_MAX_DIMENSION, DEFAULT_PROCESS_TIMEOUT_SECONDS);
+ }
+
+ @org.springframework.beans.factory.annotation.Autowired
+ public PhotoStorage(
+   @org.springframework.beans.factory.annotation.Value("${app.images.max-upload-bytes:10485760}") long maxUploadBytes,
+   @org.springframework.beans.factory.annotation.Value("${app.images.max-decoded-bytes:52428800}") long maxDecodedBytes,
+   @org.springframework.beans.factory.annotation.Value("${app.images.max-pixels:25000000}") long maxPixels,
+   @org.springframework.beans.factory.annotation.Value("${app.images.max-dimension:8000}") int maxDimension,
+   @org.springframework.beans.factory.annotation.Value("${app.images.process-timeout-seconds:10}") long processTimeoutSeconds) {
+  if (maxUploadBytes <= 0 || maxDecodedBytes <= 0 || maxPixels <= 0 || maxDimension <= 0 || processTimeoutSeconds <= 0) {
+   throw new IllegalArgumentException("Image processing limits must be positive");
+  }
+  this.maxUploadBytes = maxUploadBytes;
+  this.maxDecodedBytes = maxDecodedBytes;
+  this.maxPixels = maxPixels;
+  this.maxDimension = maxDimension;
+  this.processTimeoutSeconds = processTimeoutSeconds;
+ }
+
  public ItemPhoto store(Item item, MultipartFile upload) throws IOException {
   ImageData data = imageData(upload);
   ItemPhoto photo = new ItemPhoto();
@@ -75,24 +110,42 @@ public class PhotoStorage {
    return photo;
   }
  private ImageData imageData(MultipartFile upload) throws IOException {
-  if (upload.getSize() > 10 * 1024 * 1024) throw new ResponseStatusException(HttpStatus.PAYLOAD_TOO_LARGE, "Máximo 10 MB");
-   byte[] source = upload.getBytes();
-   BufferedImage image = read(source);
-   if (image == null) throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "La foto debe ser una imagen válida");
+   if (upload == null || upload.isEmpty() || upload.getSize() > maxUploadBytes) throw new ResponseStatusException(HttpStatus.PAYLOAD_TOO_LARGE, "El archivo de imagen supera el límite permitido");
+    byte[] source = upload.getBytes();
+    if (source.length > maxUploadBytes) throw new ResponseStatusException(HttpStatus.PAYLOAD_TOO_LARGE, "El archivo de imagen supera el límite permitido");
+    BufferedImage image = read(source);
+    if (image == null) throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "La foto debe ser una imagen válida");
+    validateDimensions(image);
    image = orient(image, source);
    return new ImageData(Base64.getEncoder().encodeToString(render(image, 1600)),Base64.getEncoder().encodeToString(render(image, 480)),image.getWidth(),image.getHeight());
   }
 
   private BufferedImage read(byte[] source) throws IOException {
-   if (!isWebp(source)) return ImageIO.read(new ByteArrayInputStream(source));
+    ImageIO.setUseCache(false);
+    if (!isWebp(source)) {
+     try (ImageInputStream input = ImageIO.createImageInputStream(new ByteArrayInputStream(source))) {
+      if (input == null) return null;
+      Iterator<ImageReader> readers = ImageIO.getImageReaders(input);
+      if (!readers.hasNext()) return null;
+      ImageReader reader = readers.next();
+      try {
+       reader.setInput(input, true, true);
+       validateDimensions(reader.getWidth(0), reader.getHeight(0));
+       return reader.read(0);
+      } finally {
+       reader.dispose();
+      }
+     }
+    }
    Path input = Files.createTempFile("wherefood-", ".webp"), output = Files.createTempFile("wherefood-", ".png");
    try {
     Files.write(input, source);
     Files.delete(output);
     Process process = new ProcessBuilder("dwebp", input.toString(), "-o", output.toString()).redirectOutput(ProcessBuilder.Redirect.DISCARD).redirectError(ProcessBuilder.Redirect.DISCARD).start();
-    if (!process.waitFor(10, TimeUnit.SECONDS)) { process.destroyForcibly(); throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "La foto no pudo procesarse"); }
-    if (process.exitValue() != 0) throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "La foto debe ser una imagen válida");
-    try (InputStream decoded = Files.newInputStream(output)) { return ImageIO.read(decoded); }
+     if (!process.waitFor(processTimeoutSeconds, TimeUnit.SECONDS)) { process.destroyForcibly(); throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "La foto no pudo procesarse"); }
+     if (process.exitValue() != 0) throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "La foto debe ser una imagen válida");
+      if (!Files.exists(output) || Files.size(output) > maxDecodedBytes) throw new ResponseStatusException(HttpStatus.PAYLOAD_TOO_LARGE, "La imagen descomprimida supera el límite permitido");
+      return readDecoded(output);
    } catch (InterruptedException exception) {
     Thread.currentThread().interrupt();
     throw new IOException("No se pudo procesar la imagen", exception);
@@ -100,6 +153,33 @@ public class PhotoStorage {
     Files.deleteIfExists(input);
     Files.deleteIfExists(output);
    }
+  }
+
+  private void validateDimensions(BufferedImage image) {
+   validateDimensions(image.getWidth(), image.getHeight());
+  }
+
+  private void validateDimensions(int width, int height) {
+   long pixels = (long) width * height;
+   if (width > maxDimension || height > maxDimension || pixels > maxPixels) {
+    throw new ResponseStatusException(HttpStatus.PAYLOAD_TOO_LARGE, "Las dimensiones de la imagen superan el límite permitido");
+   }
+  }
+
+  private BufferedImage readDecoded(Path output) throws IOException {
+    try (ImageInputStream input = ImageIO.createImageInputStream(output)) {
+      if (input == null) return null;
+      Iterator<ImageReader> readers = ImageIO.getImageReaders(input);
+      if (!readers.hasNext()) return null;
+      ImageReader reader = readers.next();
+      try {
+        reader.setInput(input, true, true);
+        validateDimensions(reader.getWidth(0), reader.getHeight(0));
+        return reader.read(0);
+      } finally {
+        reader.dispose();
+      }
+    }
   }
 
   static boolean isWebp(byte[] source) {
@@ -140,6 +220,12 @@ public class PhotoStorage {
  }
 
  public String url(String base64) { return base64 == null ? null : "data:image/webp;base64," + base64; }
- public byte[] bytes(String base64) { return Base64.getDecoder().decode(base64); }
+  public byte[] bytes(String base64) {
+   if (base64 == null || base64.length() > ((maxDecodedBytes + 2) / 3) * 4) {
+    throw new ResponseStatusException(HttpStatus.PAYLOAD_TOO_LARGE, "La imagen almacenada supera el límite permitido");
+   }
+   try { return Base64.getDecoder().decode(base64); }
+   catch (IllegalArgumentException ex) { throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "La imagen almacenada no es válida"); }
+  }
  private record ImageData(String image,String thumbnail,int width,int height) {}
 }

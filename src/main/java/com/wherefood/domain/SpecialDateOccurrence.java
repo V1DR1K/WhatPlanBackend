@@ -7,6 +7,7 @@ import java.time.*;
 @Table(name = "special_date_occurrences", uniqueConstraints = @UniqueConstraint(columnNames = {"special_date_id", "occurred_on"}))
 public class SpecialDateOccurrence {
  @Id @GeneratedValue(strategy = GenerationType.IDENTITY) public Long id;
+ @Version public long version;
  @ManyToOne(fetch = FetchType.LAZY) @JoinColumn(name = "special_date_id", nullable = false) public SpecialDate specialDate;
  @Column(name = "occurred_on", nullable = false) public LocalDate occurredOn;
  @Column(name = "cover_photo_id") public Long coverPhotoId;

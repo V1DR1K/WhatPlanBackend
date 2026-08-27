@@ -18,10 +18,17 @@ import org.springframework.web.filter.OncePerRequestFilter;
 public class CentralJwtFilter extends OncePerRequestFilter {
     private final CentralJwt jwt;
     private final Users users;
+    private final AllowedWhatPlanUsers allowedUsers;
 
-    public CentralJwtFilter(CentralJwt jwt, Users users) {
+    @org.springframework.beans.factory.annotation.Autowired
+    public CentralJwtFilter(CentralJwt jwt, Users users, AllowedWhatPlanUsers allowedUsers) {
         this.jwt = jwt;
         this.users = users;
+        this.allowedUsers = allowedUsers;
+    }
+
+    public CentralJwtFilter(CentralJwt jwt, Users users) {
+        this(jwt, users, AllowedWhatPlanUsers.defaults());
     }
 
     @Override
@@ -37,7 +44,7 @@ public class CentralJwtFilter extends OncePerRequestFilter {
             try {
                 String token = header.substring(7).trim();
                 if (token.isBlank()) throw new IllegalArgumentException("Bearer token is empty");
-                User user = users.findByAuthUserId(jwt.subject(token)).orElseThrow();
+                User user = users.findByAuthUserId(jwt.subject(token)).filter(value -> allowedUsers.isAllowed(value.username)).orElseThrow();
                 SecurityContextHolder.getContext().setAuthentication(new UsernamePasswordAuthenticationToken(
                         user, null, List.of(new SimpleGrantedAuthority("ROLE_" + user.role.name()))));
             } catch (RuntimeException ignored) {
