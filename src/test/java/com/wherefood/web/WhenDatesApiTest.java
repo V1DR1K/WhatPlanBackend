@@ -61,7 +61,7 @@ class WhenDatesApiTest {
 
     WhenDateOccurrenceSummaryDto entry = api(specialDates, visits, placePhotos, visitPhotos, occurrences).list(null, null, 12).content().getFirst();
 
-    assertEquals("/when-dates/photos/91", entry.imageUrl());
+     assertEquals("/when-dates/photos/91?thumbnail=true", entry.imageUrl());
    }
 
    @Test
