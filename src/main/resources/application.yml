@@ -18,7 +18,10 @@ app.auth-service-url: ${AUTH_SERVICE_URL}
 app.auth-public-key-pem: ${AUTH_PUBLIC_KEY_PEM}
 app.auth-issuer: ${AUTH_JWT_ISSUER}
 app.auth-default-role: ${AUTH_DEFAULT_ROLE}
-app.auth.allowed-users: ${WHATPLAN_ALLOWED_USERS:tomas,avril}
+app.auth-audience: ${AUTH_JWT_AUDIENCE:whatplan}
+app.auth-access-token-claim: ${AUTH_ACCESS_TOKEN_CLAIM:}
+app.auth-access-token-value: ${AUTH_ACCESS_TOKEN_VALUE:access}
+app.auth-cookie-secure: ${AUTH_COOKIE_SECURE:true}
 app.tmdb.read-access-token: ${TMDB_READ_ACCESS_TOKEN}
 app.tmdb.connect-timeout-seconds: ${TMDB_CONNECT_TIMEOUT_SECONDS:5}
 app.tmdb.request-timeout-seconds: ${TMDB_REQUEST_TIMEOUT_SECONDS:8}

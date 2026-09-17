@@ -6,14 +6,49 @@ import java.util.*;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.*;
 import org.springframework.data.repository.query.Param;
+import org.springframework.data.jpa.repository.Lock;
+import jakarta.persistence.LockModeType;
 
 public final class Repositories {
  private Repositories() {}
 
-  public interface Users extends JpaRepository<User, Long> {
+ public interface Users extends JpaRepository<User, Long> {
    Optional<User> findByUsernameIgnoreCase(String username);
    Optional<User> findByAuthUserId(java.util.UUID authUserId);
-  }
+ }
+
+ public interface Couples extends JpaRepository<Couple, java.util.UUID> {
+   @Lock(LockModeType.PESSIMISTIC_WRITE)
+   @Query("select c from Couple c where c.id = :id")
+   Optional<Couple> findLockedById(@Param("id") java.util.UUID id);
+ }
+
+ public interface CoupleMembers extends JpaRepository<CoupleMember, Long> {
+   @Query("select m.couple.id from CoupleMember m where m.user.id = :userId and m.status = com.wherefood.domain.CoupleMemberStatus.ACTIVE")
+   Optional<java.util.UUID> findActiveCoupleIdByUserId(@Param("userId") Long userId);
+
+   @EntityGraph(attributePaths = {"user"})
+   List<CoupleMember> findByCoupleIdAndStatusOrderBySlot(java.util.UUID coupleId, CoupleMemberStatus status);
+
+   @EntityGraph(attributePaths = {"couple", "user"})
+   Optional<CoupleMember> findByCoupleIdAndUserIdAndStatus(java.util.UUID coupleId, Long userId, CoupleMemberStatus status);
+
+   long countByCoupleIdAndStatus(java.util.UUID coupleId, CoupleMemberStatus status);
+ }
+
+ public interface CoupleInvitations extends JpaRepository<CoupleInvitation, Long> {
+   @EntityGraph(attributePaths = {"couple", "createdBy"})
+   Optional<CoupleInvitation> findByTokenHash(String tokenHash);
+
+   @Lock(LockModeType.PESSIMISTIC_WRITE)
+   @EntityGraph(attributePaths = {"couple", "createdBy"})
+   Optional<CoupleInvitation> findLockedById(Long id);
+
+   @EntityGraph(attributePaths = {"couple"})
+   List<CoupleInvitation> findByCoupleIdAndStatusOrderByCreatedAtDesc(java.util.UUID coupleId, CoupleInvitationStatus status);
+
+   Optional<CoupleInvitation> findByIdAndCoupleId(Long id, java.util.UUID coupleId);
+ }
 
  public interface Categories extends JpaRepository<Category, Long> {
   List<Category> findByActiveTrueOrderByName();

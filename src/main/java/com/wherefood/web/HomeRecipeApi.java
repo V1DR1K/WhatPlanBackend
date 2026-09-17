@@ -107,9 +107,9 @@ public class HomeRecipeApi {
   review.updatedBy = author; review.updatedAt = Instant.now(); apply(review, request); return review(reviews.save(review));
  }
  @PutMapping("/cooking-reviews/{reviewId}") @Transactional CookingReviewDto updateReview(@PathVariable Long reviewId, @RequestBody @Valid CookingReviewRequest request, @AuthenticationPrincipal User author) {
-  CookingReview review = reviews.findDetailedById(reviewId).orElseThrow(() -> notFound("Reseña")); review.updatedBy = author; review.updatedAt = Instant.now(); apply(review, request); return review(reviews.save(review));
+  CookingReview review = reviews.findDetailedById(reviewId).orElseThrow(() -> notFound("Reseña")); if (!review.author.id.equals(author.id)) throw notFound("Reseña"); review.updatedBy = author; review.updatedAt = Instant.now(); apply(review, request); return review(reviews.save(review));
  }
- @DeleteMapping("/cooking-reviews/{reviewId}") @ResponseStatus(HttpStatus.NO_CONTENT) void deleteReview(@PathVariable Long reviewId) { reviews.delete(reviews.findDetailedById(reviewId).orElseThrow(() -> notFound("Reseña"))); }
+ @DeleteMapping("/cooking-reviews/{reviewId}") @ResponseStatus(HttpStatus.NO_CONTENT) void deleteReview(@PathVariable Long reviewId, @AuthenticationPrincipal User author) { CookingReview review = reviews.findDetailedById(reviewId).orElseThrow(() -> notFound("Reseña")); if (!review.author.id.equals(author.id)) throw notFound("Reseña"); reviews.delete(review); }
 
  private Recipe findRecipe(Long id) { return recipes.findById(id).orElseThrow(() -> notFound("Receta")); }
  private Cooking findCooking(Long id) { return cookings.findDetailedById(id).orElseThrow(() -> notFound("Preparación")); }

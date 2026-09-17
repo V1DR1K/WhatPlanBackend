@@ -1,6 +1,7 @@
 package com.wherefood.web;
 
 import com.wherefood.domain.*;
+import com.wherefood.config.CoupleContext;
 import com.wherefood.repo.Repositories.*;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.*;
@@ -41,10 +42,11 @@ public class WhenDatesApi {
   private final RecipePhotos recipePhotos;
   private final WhyFunVenuePhotos funPhotos;
   private final WhyFunVisitPhotos funVisitPhotos;
+  private final CoupleMembers coupleMembers;
   private final PhotoStorage storage;
 
-  public WhenDatesApi(SpecialDates specialDates, SpecialDateOccurrences occurrences, SpecialDateOccurrenceComments comments, SpecialDateOccurrencePhotos photos, PlaceVisits placeVisits, FilmViews filmViews, Cookings cookings, WhyFunVisits funVisits, PlacePhotos placePhotos, PlaceVisitPhotos visitPhotos, FilmPhotos filmPhotos, RecipePhotos recipePhotos, WhyFunVenuePhotos funPhotos, WhyFunVisitPhotos funVisitPhotos, PhotoStorage storage) {
-   this.specialDates = specialDates; this.occurrences = occurrences; this.comments = comments; this.photos = photos; this.placeVisits = placeVisits; this.filmViews = filmViews; this.cookings = cookings; this.funVisits = funVisits; this.placePhotos = placePhotos; this.visitPhotos = visitPhotos; this.filmPhotos = filmPhotos; this.recipePhotos = recipePhotos; this.funPhotos = funPhotos; this.funVisitPhotos = funVisitPhotos; this.storage = storage;
+  public WhenDatesApi(SpecialDates specialDates, SpecialDateOccurrences occurrences, SpecialDateOccurrenceComments comments, SpecialDateOccurrencePhotos photos, PlaceVisits placeVisits, FilmViews filmViews, Cookings cookings, WhyFunVisits funVisits, PlacePhotos placePhotos, PlaceVisitPhotos visitPhotos, FilmPhotos filmPhotos, RecipePhotos recipePhotos, WhyFunVenuePhotos funPhotos, WhyFunVisitPhotos funVisitPhotos, PhotoStorage storage, CoupleMembers coupleMembers) {
+   this.specialDates = specialDates; this.occurrences = occurrences; this.comments = comments; this.photos = photos; this.placeVisits = placeVisits; this.filmViews = filmViews; this.cookings = cookings; this.funVisits = funVisits; this.placePhotos = placePhotos; this.visitPhotos = visitPhotos; this.filmPhotos = filmPhotos; this.recipePhotos = recipePhotos; this.funPhotos = funPhotos; this.funVisitPhotos = funVisitPhotos; this.storage = storage; this.coupleMembers = coupleMembers;
  }
 
   @GetMapping @Transactional(readOnly = true) Slice<WhenDateOccurrenceSummaryDto> list(@RequestParam(required = false) Long specialDateId, @RequestParam(required = false) Long cursor, @RequestParam(defaultValue = "12") int size) {
@@ -94,7 +96,7 @@ public class WhenDatesApi {
   LocalDate today = RosarioClock.today(); List<WhenDateEntryDto> result = new ArrayList<>();
     for (PlaceVisit visit : placeVisits.findByVisitedOnLessThanEqualOrderByVisitedOnDescIdDesc(today)) add(result, "FOOD", visit.id, visit.place.id, visit.visitedOn, visit.place.name, visit.place.address, placeImage(visit), "/food/places/" + visit.place.id, dates, from, to, today, placeSourcePhotos(visit));
     for (FilmView view : filmViews.findByWatchedOnLessThanEqualOrderByWatchedOnDescIdDesc(today)) add(result, "FILM", view.id, view.film.id, view.watchedOn, view.film.title, view.film.platform == null ? "Película vista" : view.film.platform.icon + " " + view.film.platform.name, filmImage(view.film), "/films/" + view.film.id, dates, from, to, today, filmSourcePhotos(view.film));
-    for (Cooking cooking : cookings.findByCookedOnLessThanEqualOrderByCookedOnDescIdDesc(today)) add(result, "COOK", cooking.id, cooking.recipe.id, cooking.cookedOn, cooking.recipe.name, cooking.home == Home.TOMAS ? "Casa de Tomás" : "Casa de Avril", recipeImage(cooking.recipe), "/how-cook/" + cooking.recipe.id, dates, from, to, today, recipeSourcePhotos(cooking.recipe));
+    for (Cooking cooking : cookings.findByCookedOnLessThanEqualOrderByCookedOnDescIdDesc(today)) add(result, "COOK", cooking.id, cooking.recipe.id, cooking.cookedOn, cooking.recipe.name, homeLabel(cooking.home), recipeImage(cooking.recipe), "/how-cook/" + cooking.recipe.id, dates, from, to, today, recipeSourcePhotos(cooking.recipe));
     for (WhyFunVisit visit : funVisits.findByScheduledAtLessThanEqualOrderByScheduledAtDescIdDesc(today)) add(result, "FUN", visit.id, visit.venue.id, visit.scheduledAt, visit.venue.name, visit.venue.address, funImage(visit), "/why-fun/" + visit.venue.id, dates, from, to, today, funSourcePhotos(visit));
     Map<String, String> coverUrls = from == null || to == null ? Map.of() : occurrenceCoverUrls(result, from, to);
     return result.stream().map(entry -> entry(entry, coverUrls)).sorted(Comparator.comparing(WhenDateEntryDto::date).reversed().thenComparing(WhenDateEntryDto::section).thenComparing(WhenDateEntryDto::experienceId)).toList();
@@ -140,7 +142,13 @@ public class WhenDatesApi {
   validateOccurrence(specialDate, occurredOn); return occurrences.findBySpecialDateIdAndOccurredOn(specialDate.id, occurredOn).orElseGet(() -> { SpecialDateOccurrence value = new SpecialDateOccurrence(); value.specialDate = specialDate; value.occurredOn = occurredOn; value.createdBy = value.updatedBy = author; value.createdAt = value.updatedAt = Instant.now(); return occurrences.save(value); });
  }
  private SpecialDateOccurrence findOccurrence(Long id) { return occurrences.findById(id).orElseThrow(() -> notFound("Recuerdo")); }
- private SpecialDate specialDate(Long id) { return specialDates.findById(id).orElseThrow(() -> notFound("Fecha especial")); }
+  private SpecialDate specialDate(Long id) { return specialDates.findById(id).orElseThrow(() -> notFound("Fecha especial")); }
+  private String homeLabel(Home home) {
+   UUID coupleId = CoupleContext.current();
+   if (coupleId == null) return "Integrante";
+   int index = home == Home.TOMAS ? 0 : 1;
+   return coupleMembers.findByCoupleIdAndStatusOrderBySlot(coupleId, CoupleMemberStatus.ACTIVE).stream().skip(index).findFirst().map(value -> value.displayName).orElse("Integrante");
+  }
  private void touch(SpecialDateOccurrence occurrence, User author) { occurrence.updatedBy = author; occurrence.updatedAt = Instant.now(); occurrences.save(occurrence); }
  private void validateOccurrence(SpecialDate specialDate, LocalDate occurredOn) { if (occurredOn.isAfter(RosarioClock.today())) throw badRequest("La fecha todavía no ocurrió"); if (!matches(specialDate, occurredOn)) throw badRequest("La fecha no coincide con esta fecha especial"); }
   private static boolean matches(SpecialDate specialDate, LocalDate date) { if (specialDate.date == null) return false; return switch (recurrence(specialDate)) { case ONCE -> specialDate.date.equals(date); case ANNUAL -> specialDate.date.getMonthValue() == date.getMonthValue() && specialDate.date.getDayOfMonth() == date.getDayOfMonth(); case MONTHLY -> specialDate.date.getDayOfMonth() == date.getDayOfMonth(); }; }

@@ -191,9 +191,9 @@ public class Api {
    review.updatedBy = author; review.updatedAt = Instant.now(); apply(review, request); return visitReview(visitReviews.save(review));
   }
   @PutMapping("/place-visit-reviews/{reviewId}") @org.springframework.transaction.annotation.Transactional PlaceVisitReviewDto updateVisitReview(@PathVariable Long reviewId, @RequestBody @jakarta.validation.Valid PlaceVisitReviewRequest request, @AuthenticationPrincipal User author) {
-   PlaceVisitReview review = visitReviews.findDetailedById(reviewId).orElseThrow(() -> notFound("Reseña")); active(review.visit); review.updatedBy = author; review.updatedAt = Instant.now(); apply(review, request); return visitReview(visitReviews.save(review));
+   PlaceVisitReview review = visitReviews.findDetailedById(reviewId).orElseThrow(() -> notFound("Reseña")); active(review.visit); if (!review.author.id.equals(author.id)) throw notFound("Reseña"); review.updatedBy = author; review.updatedAt = Instant.now(); apply(review, request); return visitReview(visitReviews.save(review));
   }
-  @DeleteMapping("/place-visit-reviews/{reviewId}") @ResponseStatus(HttpStatus.NO_CONTENT) void deleteVisitReview(@PathVariable Long reviewId) { visitReviews.delete(visitReviews.findDetailedById(reviewId).orElseThrow(() -> notFound("Reseña"))); }
+  @DeleteMapping("/place-visit-reviews/{reviewId}") @ResponseStatus(HttpStatus.NO_CONTENT) void deleteVisitReview(@PathVariable Long reviewId, @AuthenticationPrincipal User author) { PlaceVisitReview review = visitReviews.findDetailedById(reviewId).orElseThrow(() -> notFound("Reseña")); if (!review.author.id.equals(author.id)) throw notFound("Reseña"); visitReviews.delete(review); }
 
   private Map<Long, PlaceSummary> placeSummaries(List<Place> values) {
    if (values.isEmpty()) return Map.of();

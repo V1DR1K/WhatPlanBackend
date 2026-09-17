@@ -122,9 +122,9 @@ public class WhyFunActivityApi {
   review.updatedBy = author; review.updatedAt = Instant.now(); apply(review, request); return review(reviews.save(review));
  }
  @PutMapping("/activity-visit-reviews/{reviewId}") @Transactional ActivityReviewDto updateReview(@PathVariable Long reviewId, @RequestBody @Valid ActivityReviewRequest request, @AuthenticationPrincipal User author) {
-  WhyFunVisitReview review = reviews.findDetailedById(reviewId).orElseThrow(() -> notFound("Reseña")); review.updatedBy = author; review.updatedAt = Instant.now(); apply(review, request); return review(reviews.save(review));
+  WhyFunVisitReview review = reviews.findDetailedById(reviewId).orElseThrow(() -> notFound("Reseña")); if (!review.author.id.equals(author.id)) throw notFound("Reseña"); review.updatedBy = author; review.updatedAt = Instant.now(); apply(review, request); return review(reviews.save(review));
  }
- @DeleteMapping("/activity-visit-reviews/{reviewId}") @ResponseStatus(HttpStatus.NO_CONTENT) void deleteReview(@PathVariable Long reviewId) { reviews.delete(reviews.findDetailedById(reviewId).orElseThrow(() -> notFound("Reseña"))); }
+ @DeleteMapping("/activity-visit-reviews/{reviewId}") @ResponseStatus(HttpStatus.NO_CONTENT) void deleteReview(@PathVariable Long reviewId, @AuthenticationPrincipal User author) { WhyFunVisitReview review = reviews.findDetailedById(reviewId).orElseThrow(() -> notFound("Reseña")); if (!review.author.id.equals(author.id)) throw notFound("Reseña"); reviews.delete(review); }
 
  private WhyFunVenue findActivity(Long id) { return activities.findDetailedById(id).orElseThrow(() -> notFound("Actividad")); }
  private WhyFunVisit findVisit(Long id) { return visits.findDetailedById(id).orElseThrow(() -> notFound("Visita")); }

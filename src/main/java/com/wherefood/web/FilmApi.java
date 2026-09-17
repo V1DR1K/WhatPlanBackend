@@ -128,10 +128,11 @@ public class FilmApi {
 
   @PutMapping("/films/{filmId}/reviews/{reviewId}") @Transactional FilmReviewDto updateReview(@PathVariable Long filmId, @PathVariable Long reviewId, @RequestBody @Valid FilmReviewRequest request, @AuthenticationPrincipal User author) {
     FilmReview review = reviews.findByIdAndFilmId(reviewId, filmId).orElseThrow(() -> notFound("Reseña"));
+   if (!review.author.id.equals(author.id)) throw notFound("Reseña");
    review.rating = request.rating(); review.comment = emptyToNull(request.comment()); review.favoriteCharacter = favoriteCharacter(review.film, request.favoriteCharacter()); review.metrics.clear(); if (request.metrics() != null) review.metrics.putAll(request.metrics()); review.updatedBy = author; review.updatedAt = Instant.now();
    return review(reviews.save(review));
   }
-  @DeleteMapping("/films/{filmId}/reviews/{reviewId}") @ResponseStatus(HttpStatus.NO_CONTENT) void deleteReview(@PathVariable Long filmId, @PathVariable Long reviewId) { reviews.delete(reviews.findByIdAndFilmId(reviewId, filmId).orElseThrow(() -> notFound("Reseña"))); }
+  @DeleteMapping("/films/{filmId}/reviews/{reviewId}") @ResponseStatus(HttpStatus.NO_CONTENT) void deleteReview(@PathVariable Long filmId, @PathVariable Long reviewId, @AuthenticationPrincipal User author) { FilmReview review = reviews.findByIdAndFilmId(reviewId, filmId).orElseThrow(() -> notFound("Reseña")); if (!review.author.id.equals(author.id)) throw notFound("Reseña"); reviews.delete(review); }
 
   private Film findFilm(Long id) { return films.findDetailedById(id).orElseThrow(() -> notFound("Película")); }
   private void assertAvailableTmdbId(Long tmdbId, Long currentId) {

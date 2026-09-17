@@ -3,6 +3,23 @@
 Authenticated users collaborate on every mutation; `createdBy` identifies the
 creator and `updatedBy` identifies the most recent editor where the resource is mutable.
 
+## Couple tenancy
+
+Every authenticated request derives its couple from the central JWT subject and
+the local `couple_members` relation. Clients must not send or trust a couple ID
+header. Private resources are protected both by repository/service checks and by
+PostgreSQL row-level security.
+
+- `POST /api/couples` creates a private `PENDING` couple for the current user.
+- `GET /api/couple` returns the current couple and its active members.
+- `POST /api/couple/invitations` creates a single-use invitation valid for seven days.
+- `DELETE /api/couple/invitations/{id}` revokes the current couple's invitation.
+- `POST /api/couple/invitations/{token}/accept` accepts an invitation after authentication.
+- `POST /api/couple/leave` removes the current user without deleting historical content.
+
+Couples have at most two active members. Reviews are owned by their author: a
+different member receives `404` when trying to edit or delete them.
+
 - Food: `/api/places/{placeId}/visits`, `/api/place-visits/{id}`, and visit-scoped
   `/photos`, `/cover/{photoId}`, and `/reviews`. Media is at
   `/api/place-visit-photos/{id}` and reviews at `/api/place-visit-reviews/{id}`.
@@ -15,12 +32,12 @@ creator and `updatedBy` identifies the most recent editor where the resource is 
 - WhoCook: reusable `/api/how-cook/recipes` have dated
   `/api/how-cook/recipes/{recipeId}/cookings`; cooking media and reviews are at
   `/api/how-cook/cookings/{id}/photos` and `/reviews`.
-- Global calendar: `/api/special-dates` stores date labels with a required
+- Private calendar: `/api/special-dates` stores date labels per couple with a required
   `recurrence`: `ONCE` applies only to the exact date, `ANNUAL` applies on the
   same month/day every year, and `MONTHLY` applies on the same day each month.
   Requests require `date`, `label`, and `recurrence`; responses include all
-  three fields. More than one label may use the same date. Reads require
-  authentication; creating, updating, and deleting entries require `ADMIN`.
+  three fields. More than one label may use the same date. All operations are
+  scoped to the active couple; catalog administration remains restricted to `ADMIN`.
 - Global settings: authenticated users can `GET /api/settings`, which returns
   `{ "catalogPageSize": 5 }` by default. `ADMIN` users can `PUT /api/settings`
   with `catalogPageSize` from 1 through 50.
@@ -45,7 +62,7 @@ the next request's `cursor`; it is `null` when there are no more results.
   `author`, `reviews`, `views`, `createdAt`, `updatedAt`, and `tmdb`.
 - `GET /api/how-cook/recipes` accepts `cursor`, `size`, `search`, `home`,
   `cooked`, and `sort`. `home` is `TOMAS` or `AVRIL` and selects recipes with
-  at least one cooking at that home. `cooked=true` selects recipes with cooking
+  at least one cooking at that legacy member slot. `cooked=true` selects recipes with cooking
   history; `cooked=false` selects recipes without it. `sort` accepts
   `rating-desc`, `rating-asc`, `date-desc`, and `date-asc` (`rating` and
   `date` are descending aliases); dates use `updatedAt`, and the default is

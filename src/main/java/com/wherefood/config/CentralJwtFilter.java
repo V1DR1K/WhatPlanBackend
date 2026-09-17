@@ -1,6 +1,7 @@
 package com.wherefood.config;
 
 import com.wherefood.domain.User;
+import com.wherefood.repo.Repositories.CoupleMembers;
 import com.wherefood.repo.Repositories.Users;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
@@ -18,17 +19,17 @@ import org.springframework.web.filter.OncePerRequestFilter;
 public class CentralJwtFilter extends OncePerRequestFilter {
     private final CentralJwt jwt;
     private final Users users;
-    private final AllowedWhatPlanUsers allowedUsers;
+    private final CoupleMembers coupleMembers;
 
     @org.springframework.beans.factory.annotation.Autowired
-    public CentralJwtFilter(CentralJwt jwt, Users users, AllowedWhatPlanUsers allowedUsers) {
+    public CentralJwtFilter(CentralJwt jwt, Users users, CoupleMembers coupleMembers) {
         this.jwt = jwt;
         this.users = users;
-        this.allowedUsers = allowedUsers;
+        this.coupleMembers = coupleMembers;
     }
 
     public CentralJwtFilter(CentralJwt jwt, Users users) {
-        this(jwt, users, AllowedWhatPlanUsers.defaults());
+        this(jwt, users, null);
     }
 
     @Override
@@ -39,18 +40,28 @@ public class CentralJwtFilter extends OncePerRequestFilter {
     @Override
     protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain chain)
             throws ServletException, IOException {
+        CoupleContext.clear();
+        SecurityContextHolder.clearContext();
         String header = request.getHeader("Authorization");
         if (header != null && header.regionMatches(true, 0, "Bearer ", 0, 7)) {
             try {
                 String token = header.substring(7).trim();
                 if (token.isBlank()) throw new IllegalArgumentException("Bearer token is empty");
-                User user = users.findByAuthUserId(jwt.subject(token)).filter(value -> allowedUsers.isAllowed(value.username)).orElseThrow();
+                User user = users.findByAuthUserId(jwt.subject(token)).orElseThrow();
                 SecurityContextHolder.getContext().setAuthentication(new UsernamePasswordAuthenticationToken(
                         user, null, List.of(new SimpleGrantedAuthority("ROLE_" + user.role.name()))));
+                if (coupleMembers != null) {
+                    coupleMembers.findActiveCoupleIdByUserId(user.id).ifPresent(CoupleContext::set);
+                }
             } catch (RuntimeException ignored) {
                 SecurityContextHolder.clearContext();
+                CoupleContext.clear();
             }
         }
-        chain.doFilter(request, response);
+        try {
+            chain.doFilter(request, response);
+        } finally {
+            CoupleContext.clear();
+        }
     }
 }
