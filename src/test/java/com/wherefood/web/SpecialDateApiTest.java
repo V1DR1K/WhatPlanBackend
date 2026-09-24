@@ -30,13 +30,13 @@ class SpecialDateApiTest {
   SpecialDates dates = mock(SpecialDates.class);
   SpecialDate first = specialDate(4L, LocalDate.of(2026, 12, 25), "Navidad", SpecialDateRecurrence.ANNUAL);
   SpecialDate second = specialDate(5L, LocalDate.of(2026, 12, 25), "Cena familiar", SpecialDateRecurrence.ONCE);
-  when(dates.findAllByOrderByDateAscLabelAscIdAsc()).thenReturn(List.of(second, first));
+  when(dates.findAllByCoupleIdOrderByDateAscLabelAscIdAsc(null)).thenReturn(List.of(second, first));
   when(dates.save(any(SpecialDate.class))).thenAnswer(invocation -> {
    SpecialDate value = invocation.getArgument(0);
    if (value.id == null) value.id = 6L;
    return value;
   });
-  when(dates.findById(4L)).thenReturn(Optional.of(first));
+  when(dates.findByIdAndCoupleId(4L, null)).thenReturn(Optional.of(first));
   SpecialDateApi api = new SpecialDateApi(dates);
 
   List<SpecialDateDto> listed = api.list();

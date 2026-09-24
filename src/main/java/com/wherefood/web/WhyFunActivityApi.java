@@ -48,7 +48,7 @@ public class WhyFunActivityApi {
   @GetMapping("/activities") @Transactional(readOnly = true) Slice<ActivityDto> listActivities(@RequestParam(required = false) Long categoryId, @RequestParam(required = false) Long subcategoryId, @RequestParam(required = false) String search, @RequestParam(required = false) Boolean visited, @RequestParam(required = false) String sort, @RequestParam(required = false) Long cursor, @RequestParam(defaultValue = "5") int size) {
     int limit = Math.max(1, Math.min(size, 30));
     String normalizedSearch = search == null || search.isBlank() ? null : search.trim().toLowerCase(Locale.ROOT);
-    List<WhyFunVenue> values = activities.findAll().stream().filter(value -> categoryId == null || value.category.id.equals(categoryId)).filter(value -> subcategoryId == null || value.subcategory.id.equals(subcategoryId)).filter(value -> normalizedSearch == null || contains(value.name, normalizedSearch) || contains(value.address, normalizedSearch) || contains(value.category.name, normalizedSearch) || contains(value.subcategory.name, normalizedSearch)).toList();
+    List<WhyFunVenue> values = activities.findAllByCoupleId(CoupleContext.current()).stream().filter(value -> categoryId == null || value.category.id.equals(categoryId)).filter(value -> subcategoryId == null || value.subcategory.id.equals(subcategoryId)).filter(value -> normalizedSearch == null || contains(value.name, normalizedSearch) || contains(value.address, normalizedSearch) || contains(value.category.name, normalizedSearch) || contains(value.subcategory.name, normalizedSearch)).toList();
     Map<Long, Double> ratings = activityRatings(values.stream().map(value -> value.id).toList());
     Map<Long, Long> visitCounts = activityVisitCounts(values.stream().map(value -> value.id).toList());
     List<WhyFunVenue> candidates = values.stream().filter(value -> visited == null || visited == (visitCounts.getOrDefault(value.id, 0L) > 0)).toList();
@@ -102,15 +102,15 @@ public class WhyFunActivityApi {
   return visit(visit);
  }
  @PutMapping("/activity-visits/{id}/cover/{photoId}") @Transactional ActivityVisitDto setCover(@PathVariable Long id, @PathVariable Long photoId, @AuthenticationPrincipal User author) {
-  WhyFunVisit visit = findVisit(id); WhyFunVisitPhoto photo = photos.findDetailedById(photoId).orElseThrow(() -> notFound("Foto")); if (!photo.visit.id.equals(visit.id)) throw badRequest("La foto no pertenece a esta visita");
+  WhyFunVisit visit = findVisit(id); WhyFunVisitPhoto photo = photos.findDetailedByIdAndCoupleId(photoId, CoupleContext.current()).orElseThrow(() -> notFound("Foto")); if (!photo.visit.id.equals(visit.id)) throw badRequest("La foto no pertenece a esta visita");
   visit.coverPhotoId = photo.id; visit.updatedBy = author; visit.updatedAt = Instant.now(); return visit(visits.save(visit));
  }
  @DeleteMapping("/activity-visit-photos/{photoId}") @ResponseStatus(HttpStatus.NO_CONTENT) @Transactional void deletePhoto(@PathVariable Long photoId, @AuthenticationPrincipal User author) {
-  WhyFunVisitPhoto photo = photos.findDetailedById(photoId).orElseThrow(() -> notFound("Foto")); WhyFunVisit visit = photo.visit; boolean wasCover = photo.id.equals(visit.coverPhotoId); photos.delete(photo); photos.flush();
+  WhyFunVisitPhoto photo = photos.findDetailedByIdAndCoupleId(photoId, CoupleContext.current()).orElseThrow(() -> notFound("Foto")); WhyFunVisit visit = photo.visit; boolean wasCover = photo.id.equals(visit.coverPhotoId); photos.delete(photo); photos.flush();
   if (wasCover) { visit.coverPhotoId = photos.findByVisitIdOrderByPositionAscIdAsc(visit.id).stream().findFirst().map(value -> value.id).orElse(null); visit.updatedBy = author; visit.updatedAt = Instant.now(); visits.save(visit); }
  }
  @GetMapping(value = "/activity-visit-photos/{photoId}", produces = "image/webp") ResponseEntity<byte[]> photo(@PathVariable Long photoId, @RequestParam(defaultValue = "false") boolean thumbnail) {
-   WhyFunVisitPhoto photo = photos.findById(photoId).orElseThrow(() -> notFound("Foto")); return ResponseEntity.ok().cacheControl(CacheControl.maxAge(Duration.ofDays(30)).cachePrivate()).contentType(MediaType.valueOf("image/webp")).body(storage.bytes(thumbnail ? photo.thumbnailBase64 : photo.imageBase64));
+   WhyFunVisitPhoto photo = photos.findByIdAndCoupleId(photoId, CoupleContext.current()).orElseThrow(() -> notFound("Foto")); return ResponseEntity.ok().cacheControl(CacheControl.maxAge(Duration.ofDays(30)).cachePrivate()).contentType(MediaType.valueOf("image/webp")).body(storage.bytes(thumbnail ? photo.thumbnailBase64 : photo.imageBase64));
  }
 
  @PostMapping("/activity-visits/{id}/reviews") @ResponseStatus(HttpStatus.CREATED) @Transactional ActivityReviewDto addReview(@PathVariable Long id, @RequestBody @Valid ActivityReviewRequest request, @AuthenticationPrincipal User author) {
@@ -122,12 +122,12 @@ public class WhyFunActivityApi {
   review.updatedBy = author; review.updatedAt = Instant.now(); apply(review, request); return review(reviews.save(review));
  }
  @PutMapping("/activity-visit-reviews/{reviewId}") @Transactional ActivityReviewDto updateReview(@PathVariable Long reviewId, @RequestBody @Valid ActivityReviewRequest request, @AuthenticationPrincipal User author) {
-  WhyFunVisitReview review = reviews.findDetailedById(reviewId).orElseThrow(() -> notFound("Reseña")); if (!review.author.id.equals(author.id)) throw notFound("Reseña"); review.updatedBy = author; review.updatedAt = Instant.now(); apply(review, request); return review(reviews.save(review));
+  WhyFunVisitReview review = reviews.findDetailedByIdAndCoupleId(reviewId, CoupleContext.current()).orElseThrow(() -> notFound("Reseña")); if (!review.author.id.equals(author.id)) throw notFound("Reseña"); review.updatedBy = author; review.updatedAt = Instant.now(); apply(review, request); return review(reviews.save(review));
  }
- @DeleteMapping("/activity-visit-reviews/{reviewId}") @ResponseStatus(HttpStatus.NO_CONTENT) void deleteReview(@PathVariable Long reviewId, @AuthenticationPrincipal User author) { WhyFunVisitReview review = reviews.findDetailedById(reviewId).orElseThrow(() -> notFound("Reseña")); if (!review.author.id.equals(author.id)) throw notFound("Reseña"); reviews.delete(review); }
+ @DeleteMapping("/activity-visit-reviews/{reviewId}") @ResponseStatus(HttpStatus.NO_CONTENT) void deleteReview(@PathVariable Long reviewId, @AuthenticationPrincipal User author) { WhyFunVisitReview review = reviews.findDetailedByIdAndCoupleId(reviewId, CoupleContext.current()).orElseThrow(() -> notFound("Reseña")); if (!review.author.id.equals(author.id)) throw notFound("Reseña"); reviews.delete(review); }
 
- private WhyFunVenue findActivity(Long id) { return activities.findDetailedById(id).orElseThrow(() -> notFound("Actividad")); }
- private WhyFunVisit findVisit(Long id) { return visits.findDetailedById(id).orElseThrow(() -> notFound("Visita")); }
+ private WhyFunVenue findActivity(Long id) { return activities.findDetailedByIdAndCoupleId(id, CoupleContext.current()).orElseThrow(() -> notFound("Actividad")); }
+ private WhyFunVisit findVisit(Long id) { return visits.findDetailedByIdAndCoupleId(id, CoupleContext.current()).orElseThrow(() -> notFound("Visita")); }
  private WhyFunCategory findCategory(Long id) { return categories.findDetailedById(id).orElseThrow(() -> notFound("Categoría")); }
   private void apply(WhyFunVenue activity, ActivityRequest request) {
   WhyFunCategory category = findCategory(request.categoryId()); WhyFunCategory subcategory = findCategory(request.subcategoryId());
@@ -157,7 +157,7 @@ public class WhyFunActivityApi {
     if (photoIds.isEmpty()) return Map.of();
     return activityPhotos.metadataByIdIn(photoIds).stream().collect(java.util.stream.Collectors.toMap(PhotoMetadata::getId, photo -> photo));
    }
-   private Optional<WhyFunVenuePhoto> profilePhoto(WhyFunVenue value) { return value.coverPhotoId == null ? Optional.empty() : activityPhotos.findByIdAndVenueId(value.coverPhotoId, value.id); }
+   private Optional<WhyFunVenuePhoto> profilePhoto(WhyFunVenue value) { return value.coverPhotoId == null ? Optional.empty() : activityPhotos.findByIdAndVenueIdAndCoupleId(value.coverPhotoId, value.id, CoupleContext.current()); }
    private static ActivityProfilePhotoDto profilePhoto(Long activityId, PhotoMetadata value) { return new ActivityProfilePhotoDto(value.getId(), "/why-fun/activities/" + activityId + "/photo?v=" + value.getId(), "/why-fun/activities/" + activityId + "/photo?thumbnail=true&v=" + value.getId(), value.getWidth(), value.getHeight(), value.getCreatedAt()); }
  private static FunCategoryDto category(WhyFunCategory value) { return new FunCategoryDto(value.id, value.parent == null ? null : value.parent.id, value.name, value.slug, value.icon, value.active); }
  private static ActivityPhotoDto photo(WhyFunVisitPhoto value) { return new ActivityPhotoDto(value.id, "/why-fun/activity-visit-photos/" + value.id, "/why-fun/activity-visit-photos/" + value.id + "?thumbnail=true", value.width, value.height, value.position, value.createdBy.username, value.createdAt); }

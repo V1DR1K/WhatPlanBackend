@@ -5,7 +5,7 @@ import java.time.*;
 
 @Entity
 @Table(name="place_visits")
-public class PlaceVisit {
+public class PlaceVisit extends CoupleScopedEntity {
  @Id @GeneratedValue(strategy=GenerationType.IDENTITY) public Long id;
  @Version public long version;
  @ManyToOne(fetch=FetchType.LAZY) @JoinColumn(name="place_id", nullable=false) public Place place;

@@ -47,7 +47,7 @@ public class HomeRecipeApi {
   @GetMapping("/recipes") @Transactional(readOnly = true) Slice<RecipeDto> listRecipes(@RequestParam(required = false) String search, @RequestParam(required = false) Home home, @RequestParam(required = false) Boolean cooked, @RequestParam(required = false) String sort, @RequestParam(required = false) Long cursor, @RequestParam(defaultValue = "5") int size) {
    int limit = Math.max(1, Math.min(size, 30));
    String normalizedSearch = search == null || search.isBlank() ? null : search.trim().toLowerCase(Locale.ROOT);
-   List<Recipe> all = recipes.findAll();
+   List<Recipe> all = recipes.findAllByCoupleId(CoupleContext.current());
    Map<Long, RecipeSummary> summaries = recipeSummaries(all.stream().map(recipe -> recipe.id).toList());
    List<Recipe> candidates = all.stream()
      .filter(recipe -> normalizedSearch == null || recipe.name.toLowerCase(Locale.ROOT).contains(normalizedSearch))
@@ -87,7 +87,7 @@ public class HomeRecipeApi {
   }
 
  @GetMapping("/cookings") @Transactional(readOnly = true) List<CookingDto> listCookings(@RequestParam(required = false) Home home, @RequestParam(required = false) Long recipeId) {
-  List<Cooking> values = recipeId != null ? cookings.findByRecipeIdOrderByCookedOnDescIdDesc(recipeId) : home != null ? cookings.findByHomeOrderByCookedOnDescIdDesc(home) : cookings.findAll(); return values.stream().map(this::cooking).toList();
+  List<Cooking> values = recipeId != null ? cookings.findByRecipeIdAndCoupleIdOrderByCookedOnDescIdDesc(recipeId, CoupleContext.current()) : home != null ? cookings.findByCoupleIdAndHomeOrderByCookedOnDescIdDesc(CoupleContext.current(), home) : cookings.findAllByCoupleId(CoupleContext.current()); return values.stream().map(this::cooking).toList();
  }
   @PostMapping("/recipes/{recipeId}/cookings") @ResponseStatus(HttpStatus.CREATED) @Transactional CookingDto addCooking(@PathVariable Long recipeId, @RequestBody @Valid CookingRequest request, @AuthenticationPrincipal User author) {
    validateCookingDate(request); Recipe recipe = findRecipe(recipeId); Cooking cooking = new Cooking(); cooking.recipe = recipe; cooking.createdBy = cooking.updatedBy = author; cooking.createdAt = cooking.updatedAt = Instant.now(); apply(cooking, request); touch(recipe, author); return cooking(cookings.save(cooking));
@@ -107,12 +107,12 @@ public class HomeRecipeApi {
   review.updatedBy = author; review.updatedAt = Instant.now(); apply(review, request); return review(reviews.save(review));
  }
  @PutMapping("/cooking-reviews/{reviewId}") @Transactional CookingReviewDto updateReview(@PathVariable Long reviewId, @RequestBody @Valid CookingReviewRequest request, @AuthenticationPrincipal User author) {
-  CookingReview review = reviews.findDetailedById(reviewId).orElseThrow(() -> notFound("Reseña")); if (!review.author.id.equals(author.id)) throw notFound("Reseña"); review.updatedBy = author; review.updatedAt = Instant.now(); apply(review, request); return review(reviews.save(review));
+  CookingReview review = reviews.findDetailedByIdAndCoupleId(reviewId, CoupleContext.current()).orElseThrow(() -> notFound("Reseña")); if (!review.author.id.equals(author.id)) throw notFound("Reseña"); review.updatedBy = author; review.updatedAt = Instant.now(); apply(review, request); return review(reviews.save(review));
  }
- @DeleteMapping("/cooking-reviews/{reviewId}") @ResponseStatus(HttpStatus.NO_CONTENT) void deleteReview(@PathVariable Long reviewId, @AuthenticationPrincipal User author) { CookingReview review = reviews.findDetailedById(reviewId).orElseThrow(() -> notFound("Reseña")); if (!review.author.id.equals(author.id)) throw notFound("Reseña"); reviews.delete(review); }
+ @DeleteMapping("/cooking-reviews/{reviewId}") @ResponseStatus(HttpStatus.NO_CONTENT) void deleteReview(@PathVariable Long reviewId, @AuthenticationPrincipal User author) { CookingReview review = reviews.findDetailedByIdAndCoupleId(reviewId, CoupleContext.current()).orElseThrow(() -> notFound("Reseña")); if (!review.author.id.equals(author.id)) throw notFound("Reseña"); reviews.delete(review); }
 
- private Recipe findRecipe(Long id) { return recipes.findById(id).orElseThrow(() -> notFound("Receta")); }
- private Cooking findCooking(Long id) { return cookings.findDetailedById(id).orElseThrow(() -> notFound("Preparación")); }
+ private Recipe findRecipe(Long id) { return recipes.findByIdAndCoupleId(id, CoupleContext.current()).orElseThrow(() -> notFound("Receta")); }
+ private Cooking findCooking(Long id) { return cookings.findDetailedByIdAndCoupleId(id, CoupleContext.current()).orElseThrow(() -> notFound("Preparación")); }
  private void apply(Recipe recipe, RecipeRequest request) {
   recipe.name = request.name().trim(); recipe.sourceUrl = blankToNull(request.sourceUrl()); recipe.ingredients.clear(); recipe.steps.clear();
   List<RecipeIngredientRequest> ingredients = request.ingredients() == null ? List.of() : request.ingredients();

@@ -38,7 +38,7 @@ class ApiMediaTest {
   ItemPhoto photo = new ItemPhoto();
   photo.imageBase64 = Base64.getEncoder().encodeToString(new byte[] {1, 2, 3});
   photo.thumbnailBase64 = Base64.getEncoder().encodeToString(new byte[] {4, 5});
-  when(items.findById(42L)).thenReturn(Optional.of(item));
+  when(items.findByIdAndCoupleId(42L, null)).thenReturn(Optional.of(item));
   when(photos.findByItemId(42L)).thenReturn(Optional.of(photo));
 
    var response = new Api(null, null, null, null, null, items, photos, null, null, null, null, null, new PhotoStorage()).itemPhoto(42L, true);

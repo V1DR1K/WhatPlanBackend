@@ -5,7 +5,7 @@ import java.time.Instant;
 
 @Entity
 @Table(name="place_reviews", uniqueConstraints=@UniqueConstraint(columnNames={"place_id","author_id"}))
-public class PlaceReview {
+public class PlaceReview extends CoupleScopedEntity {
  @Id @GeneratedValue(strategy=GenerationType.IDENTITY) public Long id;
  @Version public long version;
  @ManyToOne(fetch=FetchType.LAZY) @JoinColumn(name="place_id") public Place place;

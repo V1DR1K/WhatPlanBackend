@@ -22,7 +22,7 @@ class HomeRecipeApiTest {
    Recipes recipes = mock(Recipes.class); Cookings cookings = mock(Cookings.class); CookingReviews reviews = mock(CookingReviews.class);
   User tomas = user(7L, "tomas"), avril = user(6L, "avril"); Recipe recipe = new Recipe(); recipe.id = 3L; recipe.name = "Panes rellenos"; recipe.createdBy = recipe.updatedBy = tomas;
   Cooking cooking = new Cooking(); cooking.id = 2L; cooking.recipe = recipe; cooking.home = Home.TOMAS; cooking.servings = 2; cooking.cookedOn = LocalDate.of(2026, 7, 18); cooking.mealType = MealType.CENA; cooking.createdBy = cooking.updatedBy = tomas;
-   when(cookings.findDetailedById(2L)).thenReturn(Optional.of(cooking)); when(cookings.save(cooking)).thenReturn(cooking); when(reviews.findByCookingIdOrderByAuthorUsername(2L)).thenReturn(List.of());
+   when(cookings.findDetailedByIdAndCoupleId(2L, null)).thenReturn(Optional.of(cooking)); when(cookings.save(cooking)).thenReturn(cooking); when(reviews.findByCookingIdOrderByAuthorUsername(2L)).thenReturn(List.of());
 
    CookingDto result = new HomeRecipeApi(recipes, mock(RecipePhotos.class), cookings, reviews, null).updateCooking(2L, new CookingRequest(Home.AVRIL, 4, LocalDate.of(2026, 7, 21), MealType.ALMUERZO), avril);
 
@@ -52,7 +52,7 @@ class HomeRecipeApiTest {
   Recipes recipes = mock(Recipes.class); User tomas = user(7L, "tomas"); Recipe recipe = new Recipe(); recipe.id = 5L; recipe.name = "Tarta"; recipe.createdBy = recipe.updatedBy = tomas; recipe.updatedAt = Instant.parse("2026-07-23T00:00:00Z");
   RecipeIngredient ingredient = new RecipeIngredient(); ingredient.name = "Harina"; ingredient.quantity = BigDecimal.valueOf(250); ingredient.unit = "g"; ingredient.position = 0; recipe.ingredients.add(ingredient);
   RecipeStep step = new RecipeStep(); step.instruction = "Hornear."; step.position = 0; recipe.steps.add(step);
-  when(recipes.findAll()).thenReturn(List.of(recipe));
+  when(recipes.findAllByCoupleId(null)).thenReturn(List.of(recipe));
 
    Slice<RecipeDto> result = new HomeRecipeApi(recipes, mock(RecipePhotos.class), null, null, null).listRecipes(null, null, null, null, null, 5);
 
@@ -64,7 +64,7 @@ class HomeRecipeApiTest {
   @Test
   void updatesCookingReviewComplexity() {
    CookingReviews reviews = mock(CookingReviews.class); User tomas = user(7L, "tomas"); CookingReview review = new CookingReview(); review.id = 8L; review.author = review.updatedBy = tomas;
-   when(reviews.findDetailedById(8L)).thenReturn(Optional.of(review)); when(reviews.save(review)).thenReturn(review);
+   when(reviews.findDetailedByIdAndCoupleId(8L, null)).thenReturn(Optional.of(review)); when(reviews.save(review)).thenReturn(review);
 
     CookingReviewDto result = new HomeRecipeApi(null, null, null, reviews, null).updateReview(8L, new CookingReviewRequest((short) 4, (short) 2, (short) 5, "Quedó bien\n\nLa repetiría\n"), tomas);
 
@@ -75,7 +75,7 @@ class HomeRecipeApiTest {
   void projectsTheRecipeProfileSeparatelyFromCookings() {
    Recipes recipes = mock(Recipes.class); RecipePhotos profilePhotos = mock(RecipePhotos.class); User tomas = user(7L, "tomas");
    Recipe recipe = new Recipe(); recipe.id = 5L; recipe.name = "Tarta"; recipe.createdBy = recipe.updatedBy = tomas; recipe.updatedAt = Instant.parse("2026-07-23T00:00:00Z");
-   when(recipes.findAll()).thenReturn(List.of(recipe)); when(profilePhotos.metadataByRecipeIdIn(any())).thenReturn(List.of(photo(12L, 5L, 1200, 800)));
+   when(recipes.findAllByCoupleId(null)).thenReturn(List.of(recipe)); when(profilePhotos.metadataByRecipeIdIn(any())).thenReturn(List.of(photo(12L, 5L, 1200, 800)));
 
    RecipeDto result = new HomeRecipeApi(recipes, profilePhotos, null, null, null).listRecipes(null, null, null, null, null, 5).content().getFirst();
 
@@ -92,7 +92,7 @@ class HomeRecipeApiTest {
    Recipe best = recipe(1L, "Pastas", tomas, "2026-07-23T00:00:00Z");
    Recipe other = recipe(2L, "Pizza", tomas, "2026-07-22T00:00:00Z");
    Recipe pending = recipe(3L, "Pan", tomas, "2026-07-21T00:00:00Z");
-   when(recipes.findAll()).thenReturn(List.of(best, other, pending));
+   when(recipes.findAllByCoupleId(null)).thenReturn(List.of(best, other, pending));
    when(cookings.cookingCountsByRecipeIdIn(any())).thenReturn(List.of(count(1L, 2L), count(2L, 1L)));
    when(cookings.homesByRecipeIdIn(any())).thenReturn(List.of(home(1L, Home.TOMAS), home(1L, Home.AVRIL), home(2L, Home.TOMAS)));
    when(reviews.ratingsByRecipeIdIn(any())).thenReturn(List.of(rating(1L, 5.0), rating(2L, 3.0)));

@@ -6,7 +6,7 @@ import java.util.*;
 
 @Entity
 @Table(name = "film_reviews")
-public class FilmReview {
+public class FilmReview extends CoupleScopedEntity {
  @Id @GeneratedValue(strategy = GenerationType.IDENTITY) public Long id;
  @Version public long version;
  @ManyToOne(fetch = FetchType.LAZY) @JoinColumn(name = "film_id") public Film film;

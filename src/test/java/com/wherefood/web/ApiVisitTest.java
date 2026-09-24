@@ -49,7 +49,7 @@ class ApiVisitTest {
     visit.id = 9L;
     visit.place = place;
     visit.createdBy = tomas;
-    when(visits.findDetailedById(9L)).thenReturn(Optional.of(visit));
+    when(visits.findDetailedByIdAndCoupleId(9L, null)).thenReturn(Optional.of(visit));
     when(visits.existsByPlaceId(4L)).thenReturn(false);
 
     new Api(null, null, null, places, visits, null, null, null, null, null, null, null, null).deleteVisit(9L, tomas);
@@ -64,7 +64,7 @@ class ApiVisitTest {
     Places places = mock(Places.class); PlaceVisits visits = mock(PlaceVisits.class); PlaceVisitReviews visitReviews = mock(PlaceVisitReviews.class);
     User tomas = user(7L, "tomas"); Place place = place(4L, tomas, Instant.parse("2026-07-23T00:00:00Z")); place.status = PlaceStatus.REVIEWED;
     PlaceVisit visit = visit(10L, place, tomas, LocalDate.of(2026, 7, 22));
-    when(visits.findDetailedById(10L)).thenReturn(Optional.of(visit)); when(visitReviews.findByVisitIdAndAuthorId(10L, 7L)).thenReturn(Optional.empty());
+    when(visits.findDetailedByIdAndCoupleId(10L, null)).thenReturn(Optional.of(visit)); when(visitReviews.findByVisitIdAndAuthorId(10L, 7L)).thenReturn(Optional.empty());
     when(visitReviews.save(any(PlaceVisitReview.class))).thenAnswer(invocation -> invocation.getArgument(0));
 
     PlaceVisitReviewDto result = new Api(null, null, null, places, visits, null, null, null, null, null, null, visitReviews, null).addVisitReview(10L, new PlaceVisitReviewRequest((short) 5, "Primera línea\n\nSegunda línea\n", (short) 4, null), tomas);
@@ -79,7 +79,7 @@ class ApiVisitTest {
     User tomas = user(7L, "tomas");
     Place place = new Place(); place.id = 4L; place.status = PlaceStatus.REVIEWED; place.updatedAt = LocalDate.of(2026, 7, 1).atStartOfDay(java.time.ZoneOffset.UTC).toInstant();
     PlaceVisit visit = visit(9L, place, tomas, LocalDate.of(2026, 7, 10));
-    when(visits.findDetailedById(9L)).thenReturn(Optional.of(visit));
+    when(visits.findDetailedByIdAndCoupleId(9L, null)).thenReturn(Optional.of(visit));
     when(visits.findByPlaceIdAndVisitedOn(4L, LocalDate.of(2026, 7, 12))).thenReturn(Optional.empty());
     when(visits.save(visit)).thenReturn(visit);
 
@@ -101,7 +101,7 @@ class ApiVisitTest {
     User tomas = user(7L, "tomas");
     Place older = place(1L, tomas, Instant.parse("2026-07-21T00:00:00Z"));
     Place recent = place(2L, tomas, Instant.parse("2026-07-23T00:00:00Z"));
-    when(places.findAll()).thenReturn(List.of(older, recent));
+    when(places.findAllByCoupleId(null)).thenReturn(List.of(older, recent));
     when(visits.findByPlaceIdInOrderByPlaceIdAscVisitedOnDescIdDesc(any())).thenReturn(List.of());
     when(visitReviews.findByVisitIdInOrderByVisitIdAscAuthorUsername(any())).thenReturn(List.of());
     when(placeReviews.summariesByPlaceIdIn(any())).thenReturn(List.of());
@@ -132,8 +132,8 @@ class ApiVisitTest {
     PlaceVisitReview first = review(recent, tomas, (short) 4, (short) 3, null);
     PlaceVisitReview second = review(older, avril, (short) 5, null, (short) 4);
     PlaceReviewSummary placeReview = placeReview(place.id, tomas.username, (short) 2, (short) 4);
-    when(places.findDetailedById(4L)).thenReturn(Optional.of(place));
-    when(places.findAll()).thenReturn(List.of(place));
+    when(places.findDetailedByIdAndCoupleId(4L, null)).thenReturn(Optional.of(place));
+    when(places.findAllByCoupleId(null)).thenReturn(List.of(place));
     when(visits.findByPlaceIdInOrderByPlaceIdAscVisitedOnDescIdDesc(List.of(4L))).thenReturn(List.of(recent, older));
     when(visitPhotos.findByVisitIdInOrderByVisitIdAscPositionAscIdAsc(List.of(10L, 9L))).thenReturn(List.of(photo));
     when(visitReviews.findByVisitIdInOrderByVisitIdAscAuthorUsername(List.of(10L, 9L))).thenReturn(List.of(first, second));
@@ -163,7 +163,7 @@ class ApiVisitTest {
    User tomas = user(7L, "tomas"); Place place = new Place(); place.id = 4L; place.name = "Lugar"; place.status = PlaceStatus.REVIEWED; place.createdBy = tomas; place.category = new com.wherefood.domain.Category();
    PlaceVisit visit = visit(10L, place, tomas, LocalDate.of(2026, 7, 22)); PlaceVisitPhoto cover = new PlaceVisitPhoto(); cover.id = 99L; cover.visit = visit; cover.createdBy = tomas; cover.width = 1200; cover.height = 800; visit.coverPhotoId = cover.id;
    com.wherefood.domain.PlacePhoto profile = new com.wherefood.domain.PlacePhoto(); profile.id = 88L; profile.place = place; profile.width = 900; profile.height = 600;
-   when(places.findDetailedById(4L)).thenReturn(Optional.of(place)); when(visits.findByPlaceIdInOrderByPlaceIdAscVisitedOnDescIdDesc(List.of(4L))).thenReturn(List.of(visit)); when(visitPhotos.findByVisitIdInOrderByVisitIdAscPositionAscIdAsc(List.of(10L))).thenReturn(List.of(cover)); when(visitReviews.findByVisitIdInOrderByVisitIdAscAuthorUsername(List.of(10L))).thenReturn(List.of()); when(placeReviews.summariesByPlaceIdIn(List.of(4L))).thenReturn(List.of()); when(placePhotos.findByPlaceIdIn(List.of(4L))).thenReturn(List.of(profile));
+   when(places.findDetailedByIdAndCoupleId(4L, null)).thenReturn(Optional.of(place)); when(visits.findByPlaceIdInOrderByPlaceIdAscVisitedOnDescIdDesc(List.of(4L))).thenReturn(List.of(visit)); when(visitPhotos.findByVisitIdInOrderByVisitIdAscPositionAscIdAsc(List.of(10L))).thenReturn(List.of(cover)); when(visitReviews.findByVisitIdInOrderByVisitIdAscAuthorUsername(List.of(10L))).thenReturn(List.of()); when(placeReviews.summariesByPlaceIdIn(List.of(4L))).thenReturn(List.of()); when(placePhotos.findByPlaceIdIn(List.of(4L))).thenReturn(List.of(profile));
 
    PlaceDto result = new Api(null, null, null, places, visits, null, null, null, placeReviews, placePhotos, visitPhotos, visitReviews, null, null, null).getPlace(4L);
 
@@ -183,7 +183,7 @@ class ApiVisitTest {
     PlacePhotos placePhotos = mock(PlacePhotos.class);
     Place place = new Place();
     place.id = 5L; place.name = "Sin foto"; place.status = PlaceStatus.PENDING; place.createdBy = user(7L, "tomas"); place.category = new com.wherefood.domain.Category();
-    when(places.findDetailedById(5L)).thenReturn(Optional.of(place));
+    when(places.findDetailedByIdAndCoupleId(5L, null)).thenReturn(Optional.of(place));
     when(visits.findByPlaceIdInOrderByPlaceIdAscVisitedOnDescIdDesc(List.of(5L))).thenReturn(List.of());
     when(placeReviews.summariesByPlaceIdIn(List.of(5L))).thenReturn(List.of());
     when(placePhotos.findByPlaceIdIn(List.of(5L))).thenReturn(List.of());
@@ -200,7 +200,7 @@ class ApiVisitTest {
    Places places = mock(Places.class); PlaceVisits visits = mock(PlaceVisits.class); Items items = mock(Items.class); Photos itemPhotos = mock(Photos.class); PlaceReviews placeReviews = mock(PlaceReviews.class); PlacePhotos placePhotos = mock(PlacePhotos.class); PlaceVisitPhotos visitPhotos = mock(PlaceVisitPhotos.class); PlaceVisitReviews visitReviews = mock(PlaceVisitReviews.class); PhotoStorage storage = mock(PhotoStorage.class);
    User tomas = user(7L, "tomas"); Place place = new Place(); place.id = 4L; place.status = PlaceStatus.REVIEWED; place.createdBy = tomas;
    PlaceVisit visit = visit(10L, place, tomas, LocalDate.of(2026, 7, 22)); PlaceVisitPhoto photo = new PlaceVisitPhoto(); photo.id = 99L; photo.visit = visit; photo.createdBy = tomas; photo.width = 1200; photo.height = 800;
-   when(visits.findDetailedById(10L)).thenReturn(Optional.of(visit)); when(visitPhotos.findByVisitIdOrderByPositionAscIdAsc(10L)).thenReturn(List.of()); when(storage.store(any(PlaceVisit.class), any(User.class), anyInt(), any())).thenReturn(photo); when(visitPhotos.saveAndFlush(any(PlaceVisitPhoto.class))).thenReturn(photo); when(items.findByVisitIdAndDeletedAtIsNullOrderByIdDesc(10L)).thenReturn(List.of()); when(itemPhotos.findByItemIdIn(List.of())).thenReturn(List.of()); when(visitReviews.findByVisitIdOrderByAuthorUsername(10L)).thenReturn(List.of());
+   when(visits.findDetailedByIdAndCoupleId(10L, null)).thenReturn(Optional.of(visit)); when(visitPhotos.findByVisitIdOrderByPositionAscIdAsc(10L)).thenReturn(List.of()); when(storage.store(any(PlaceVisit.class), any(User.class), anyInt(), any())).thenReturn(photo); when(visitPhotos.saveAndFlush(any(PlaceVisitPhoto.class))).thenReturn(photo); when(items.findByVisitIdAndDeletedAtIsNullOrderByIdDesc(10L)).thenReturn(List.of()); when(itemPhotos.findByItemIdIn(List.of())).thenReturn(List.of()); when(visitReviews.findByVisitIdOrderByAuthorUsername(10L)).thenReturn(List.of());
 
    PlaceVisitDto result = new Api(null, null, null, places, visits, items, itemPhotos, null, placeReviews, placePhotos, visitPhotos, visitReviews, null, storage, null).uploadVisitPhoto(10L, new MockMultipartFile("file", "foto.webp", "image/webp", new byte[] {1}), tomas);
 
@@ -214,7 +214,7 @@ class ApiVisitTest {
     Places places = mock(Places.class); PlaceVisits visits = mock(PlaceVisits.class); PlaceVisitPhotos visitPhotos = mock(PlaceVisitPhotos.class);
     User tomas = user(7L, "tomas"); Place place = new Place(); place.id = 4L; place.status = PlaceStatus.REVIEWED; place.createdBy = tomas;
     PlaceVisit visit = visit(10L, place, tomas, LocalDate.of(2026, 7, 22));
-    when(visits.findDetailedById(10L)).thenReturn(Optional.of(visit)); when(visitPhotos.findByVisitIdOrderByPositionAscIdAsc(10L)).thenReturn(List.of(new PlaceVisitPhoto(), new PlaceVisitPhoto(), new PlaceVisitPhoto(), new PlaceVisitPhoto()));
+    when(visits.findDetailedByIdAndCoupleId(10L, null)).thenReturn(Optional.of(visit)); when(visitPhotos.findByVisitIdOrderByPositionAscIdAsc(10L)).thenReturn(List.of(new PlaceVisitPhoto(), new PlaceVisitPhoto(), new PlaceVisitPhoto(), new PlaceVisitPhoto()));
 
     ResponseStatusException error = assertThrows(ResponseStatusException.class, () -> new Api(null, null, null, places, visits, null, null, null, null, null, visitPhotos, null, null, null, null).uploadVisitPhoto(10L, new MockMultipartFile("file", "foto.webp", "image/webp", new byte[] {1}), tomas));
 

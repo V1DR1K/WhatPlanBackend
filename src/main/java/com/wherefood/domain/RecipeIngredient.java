@@ -5,7 +5,7 @@ import java.math.*;
 
 @Entity
 @Table(name = "recipe_ingredients")
-public class RecipeIngredient {
+public class RecipeIngredient extends CoupleScopedEntity {
  @Id @GeneratedValue(strategy = GenerationType.IDENTITY) public Long id;
  @ManyToOne(fetch = FetchType.LAZY) @JoinColumn(name = "recipe_id", nullable = false) public Recipe recipe;
  @Column(nullable = false) public String name;
