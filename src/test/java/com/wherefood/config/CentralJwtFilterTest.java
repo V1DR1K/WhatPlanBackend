@@ -4,6 +4,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -95,5 +96,19 @@ class CentralJwtFilterTest {
         });
 
         verify(members, never()).findActiveCoupleIdByUserId(admin.id);
+    }
+
+    @Test
+    void doesNotMisreportDatabaseOutageAsInvalidBearerToken() throws Exception {
+        UUID authId = UUID.randomUUID();
+        when(jwt.subject("valid-token")).thenReturn(authId);
+        doThrow(new IllegalStateException("database unavailable")).when(users).findByAuthUserId(authId);
+
+        MockHttpServletRequest request = new MockHttpServletRequest();
+        request.addHeader("Authorization", "Bearer valid-token");
+        org.junit.jupiter.api.Assertions.assertThrows(IllegalStateException.class,
+                () -> filter.doFilterInternal(request, new MockHttpServletResponse(), mock(FilterChain.class)));
+        assertNull(SecurityContextHolder.getContext().getAuthentication());
+        assertNull(CoupleContext.current());
     }
 }

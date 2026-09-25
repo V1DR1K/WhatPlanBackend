@@ -9,6 +9,8 @@ import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import java.io.IOException;
 import java.util.List;
+import java.util.UUID;
+import io.jsonwebtoken.JwtException;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -42,24 +44,33 @@ public class CentralJwtFilter extends OncePerRequestFilter {
             throws ServletException, IOException {
         CoupleContext.clear();
         SecurityContextHolder.clearContext();
-        String header = request.getHeader("Authorization");
-        if (header != null && header.regionMatches(true, 0, "Bearer ", 0, 7)) {
-            try {
-                String token = header.substring(7).trim();
-                if (token.isBlank()) throw new IllegalArgumentException("Bearer token is empty");
-                User user = users.findByAuthUserId(jwt.subject(token)).orElseThrow();
-                SecurityContextHolder.getContext().setAuthentication(new UsernamePasswordAuthenticationToken(
-                        user, null, List.of(new SimpleGrantedAuthority("ROLE_" + user.role.name()))));
-                coupleAuthorization.resolvePrivateCouple(user).ifPresent(CoupleContext::set);
-            } catch (RuntimeException ignored) {
-                SecurityContextHolder.clearContext();
-                CoupleContext.clear();
-            }
-        }
         try {
+            String header = request.getHeader("Authorization");
+            if (header != null && header.regionMatches(true, 0, "Bearer ", 0, 7)) {
+                UUID subject = null;
+                try {
+                    String token = header.substring(7).trim();
+                    if (token.isBlank() || token.length() > 8192) throw new IllegalArgumentException("Bearer token length is invalid");
+                    subject = jwt.subject(token);
+                } catch (JwtException | IllegalArgumentException ignored) {
+                    SecurityContextHolder.clearContext();
+                    CoupleContext.clear();
+                }
+                // Keep database and tenant-resolution failures outside the invalid-token catch.
+                // A backend outage must not be misreported as an anonymous/invalid session.
+                if (subject != null) {
+                    User user = users.findByAuthUserId(subject).orElse(null);
+                    if (user != null) {
+                        SecurityContextHolder.getContext().setAuthentication(new UsernamePasswordAuthenticationToken(
+                                user, null, List.of(new SimpleGrantedAuthority("ROLE_" + user.role.name()))));
+                        coupleAuthorization.resolvePrivateCouple(user).ifPresent(CoupleContext::set);
+                    }
+                }
+            }
             chain.doFilter(request, response);
         } finally {
             CoupleContext.clear();
+            SecurityContextHolder.clearContext();
         }
     }
 }

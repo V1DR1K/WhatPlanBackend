@@ -10,7 +10,9 @@ import com.wherefood.domain.Role;
 import com.wherefood.domain.User;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;
+import org.springframework.http.HttpStatus;
 import org.springframework.mock.web.MockHttpServletResponse;
+import org.springframework.web.server.ResponseStatusException;
 
 class AuthApiTest {
     private final CentralAuthClient central = mock(CentralAuthClient.class);
@@ -57,5 +59,19 @@ class AuthApiTest {
         verify(provisioner).provision(userId, "intruder");
         org.junit.jupiter.api.Assertions.assertEquals("intruder", result.username());
         org.junit.jupiter.api.Assertions.assertNull(result.refreshToken());
+    }
+
+    @Test
+    void reportsInvalidTokenFromCentralAuthAsBadGatewayNotUserUnauthorized() {
+        UUID userId = UUID.randomUUID();
+        when(central.login("new-user", "password")).thenReturn(new CentralAuthClient.TokenResponse(
+                "invalid-access", "refresh", "Bearer", 300,
+                new CentralAuthClient.CentralUser(userId, "new-user", "ACTIVE", null, null, false)));
+        when(jwt.subject("invalid-access")).thenThrow(new IllegalArgumentException("invalid claims"));
+
+        ResponseStatusException error = org.junit.jupiter.api.Assertions.assertThrows(ResponseStatusException.class,
+                () -> api.login(new LoginRequest("new-user", "password"), new MockHttpServletResponse()));
+
+        org.junit.jupiter.api.Assertions.assertEquals(HttpStatus.BAD_GATEWAY, error.getStatusCode());
     }
 }

@@ -5,6 +5,7 @@ import com.wherefood.config.CentralAuthClient.CentralUser;
 import com.wherefood.config.CentralAuthClient.TokenResponse;
 import com.wherefood.config.CentralJwt;
 import com.wherefood.domain.User;
+import io.jsonwebtoken.JwtException;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import java.util.UUID;
@@ -98,10 +99,19 @@ public class AuthApi {
         if (response == null || response.accessToken() == null || response.user() == null) {
             throw new IllegalStateException("Central authentication response is incomplete");
         }
-        UUID subject = jwt.subject(response.accessToken());
+        UUID subject;
+        try {
+            subject = jwt.subject(response.accessToken());
+        } catch (JwtException | IllegalArgumentException invalidCentralToken) {
+            throw new org.springframework.web.server.ResponseStatusException(
+                    org.springframework.http.HttpStatus.BAD_GATEWAY,
+                    "El servicio de autenticación devolvió un token inválido", invalidCentralToken);
+        }
         CentralUser centralUser = response.user();
         if (!subject.equals(centralUser.id())) {
-            throw new IllegalStateException("Central JWT subject does not match its user");
+            throw new org.springframework.web.server.ResponseStatusException(
+                    org.springframework.http.HttpStatus.BAD_GATEWAY,
+                    "El token del servicio de autenticación no coincide con la identidad devuelta");
         }
         User localUser = provisioner.provision(subject, centralUser.username());
         if (response.refreshToken() != null && !response.refreshToken().isBlank()) setRefreshCookie(servletResponse, response.refreshToken());
