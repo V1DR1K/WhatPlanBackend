@@ -60,10 +60,12 @@ public class WhenDatesApi {
  }
 
   @GetMapping @Transactional(readOnly = true) Slice<WhenDateOccurrenceSummaryDto> list(@RequestParam(required = false) Long specialDateId, @RequestParam(required = false) Long cursor, @RequestParam(defaultValue = "12") int size) {
-   List<WhenDateOccurrenceSummaryDto> summaries = summaries(entries(null, null, specialDateId), specialDateId);
-   int limit = Math.max(1, Math.min(size, 30)); int offset = cursor == null ? 0 : Math.max(0, cursor.intValue());
-   List<WhenDateOccurrenceSummaryDto> page = summaries.stream().skip(offset).limit(limit + 1L).toList();
-   return new Slice<>(page.stream().limit(limit).toList(), page.size() > limit ? (long) offset + limit : null);
+   int limit = Math.max(1, Math.min(size, 30)); long offset = cursor == null ? 0L : Math.max(0L, cursor);
+   List<WhenDateSummaryProjection> page = specialDates.findSummaryPageByCoupleId(CoupleContext.current(), specialDateId, RosarioClock.today(), limit + 1, offset);
+   List<WhenDateOccurrenceSummaryDto> content = page.stream().limit(limit).map(value -> new WhenDateOccurrenceSummaryDto(
+           new WhenDateLabelDto(value.getSpecialDateId(), value.getLabel(), SpecialDateRecurrence.valueOf(value.getRecurrence())),
+           value.getOccurredOn(), Math.toIntExact(value.getExperienceCount()), value.getImageUrl())).toList();
+   return new Slice<>(content, page.size() > limit ? offset + limit : null);
   }
 
  @GetMapping("/special-dates/{specialDateId}/occurrences/{occurredOn}") @Transactional(readOnly = true) WhenDateOccurrenceDto occurrence(@PathVariable Long specialDateId, @PathVariable LocalDate occurredOn) {
@@ -99,31 +101,15 @@ public class WhenDatesApi {
  }
 
   private List<WhenDateEntryDto> entries(LocalDate from, LocalDate to, Long requestedSpecialDateId) {
-  List<SpecialDate> dates = specialDates.findAllByCoupleIdOrderByDateAscLabelAscIdAsc(CoupleContext.current()); if (requestedSpecialDateId != null) dates = dates.stream().filter(value -> value.id.equals(requestedSpecialDateId)).toList();
+  if (from == null || !from.equals(to)) return List.of();
+  List<SpecialDate> dates = specialDates.findByIdAndCoupleId(requestedSpecialDateId, CoupleContext.current()).map(List::of).orElseGet(List::of);
   LocalDate today = RosarioClock.today(); List<WhenDateEntryDto> result = new ArrayList<>();
-    for (PlaceVisit visit : placeVisits.findByCoupleIdAndVisitedOnLessThanEqualOrderByVisitedOnDescIdDesc(CoupleContext.current(), today)) add(result, "FOOD", visit.id, visit.place.id, visit.visitedOn, visit.place.name, visit.place.address, placeImage(visit), "/food/places/" + visit.place.id, dates, from, to, today, placeSourcePhotos(visit));
-    for (FilmView view : filmViews.findByCoupleIdAndWatchedOnLessThanEqualOrderByWatchedOnDescIdDesc(CoupleContext.current(), today)) add(result, "FILM", view.id, view.film.id, view.watchedOn, view.film.title, view.film.platform == null ? "Película vista" : view.film.platform.icon + " " + view.film.platform.name, filmImage(view.film), "/films/" + view.film.id, dates, from, to, today, filmSourcePhotos(view.film));
-    for (Cooking cooking : cookings.findByCoupleIdAndCookedOnLessThanEqualOrderByCookedOnDescIdDesc(CoupleContext.current(), today)) add(result, "COOK", cooking.id, cooking.recipe.id, cooking.cookedOn, cooking.recipe.name, homeLabel(cooking.home), recipeImage(cooking.recipe), "/how-cook/" + cooking.recipe.id, dates, from, to, today, recipeSourcePhotos(cooking.recipe));
-    for (WhyFunVisit visit : funVisits.findByCoupleIdAndScheduledAtLessThanEqualOrderByScheduledAtDescIdDesc(CoupleContext.current(), today)) add(result, "FUN", visit.id, visit.venue.id, visit.scheduledAt, visit.venue.name, visit.venue.address, funImage(visit), "/why-fun/" + visit.venue.id, dates, from, to, today, funSourcePhotos(visit));
+    for (PlaceVisit visit : placeVisits.findByCoupleIdAndVisitedOnOrderByVisitedOnDescIdDesc(CoupleContext.current(), from)) add(result, "FOOD", visit.id, visit.place.id, visit.visitedOn, visit.place.name, visit.place.address, placeImage(visit), "/food/places/" + visit.place.id, dates, from, to, today, placeSourcePhotos(visit));
+    for (FilmView view : filmViews.findByCoupleIdAndWatchedOnOrderByWatchedOnDescIdDesc(CoupleContext.current(), from)) add(result, "FILM", view.id, view.film.id, view.watchedOn, view.film.title, view.film.platform == null ? "Película vista" : view.film.platform.icon + " " + view.film.platform.name, filmImage(view.film), "/films/" + view.film.id, dates, from, to, today, filmSourcePhotos(view.film));
+    for (Cooking cooking : cookings.findByCoupleIdAndCookedOnOrderByCookedOnDescIdDesc(CoupleContext.current(), from)) add(result, "COOK", cooking.id, cooking.recipe.id, cooking.cookedOn, cooking.recipe.name, homeLabel(cooking.home), recipeImage(cooking.recipe), "/how-cook/" + cooking.recipe.id, dates, from, to, today, recipeSourcePhotos(cooking.recipe));
+    for (WhyFunVisit visit : funVisits.findByCoupleIdAndScheduledAtOrderByScheduledAtDescIdDesc(CoupleContext.current(), from)) add(result, "FUN", visit.id, visit.venue.id, visit.scheduledAt, visit.venue.name, visit.venue.address, funImage(visit), "/why-fun/" + visit.venue.id, dates, from, to, today, funSourcePhotos(visit));
     Map<String, String> coverUrls = from == null || to == null ? Map.of() : occurrenceCoverUrls(result, from, to);
     return result.stream().map(entry -> entry(entry, coverUrls)).sorted(Comparator.comparing(WhenDateEntryDto::date).reversed().thenComparing(WhenDateEntryDto::section).thenComparing(WhenDateEntryDto::experienceId)).toList();
-  }
-
-  private List<WhenDateOccurrenceSummaryDto> summaries(List<WhenDateEntryDto> entries, Long requestedSpecialDateId) {
-   Map<String, List<WhenDateEntryDto>> grouped = new LinkedHashMap<>();
-   for (WhenDateEntryDto entry : entries) for (WhenDateLabelDto specialDate : entry.specialDates()) grouped.computeIfAbsent(coverKey(specialDate.id(), entry.date()), ignored -> new ArrayList<>()).add(entry);
-   Map<String, WhenDateOccurrenceSummaryDto> result = new HashMap<>();
-   for (Map.Entry<String, List<WhenDateEntryDto>> group : grouped.entrySet()) {
-    List<WhenDateEntryDto> groupedEntries = group.getValue(); WhenDateEntryDto first = groupedEntries.getFirst(); WhenDateLabelDto specialDate = first.specialDates().stream().filter(value -> group.getKey().equals(coverKey(value.id(), first.date()))).findFirst().orElseThrow();
-    String imageUrl = groupedEntries.stream().map(WhenDateEntryDto::imageUrl).filter(Objects::nonNull).findFirst().orElse(null);
-    result.put(coverKey(specialDate.id(), first.date()), new WhenDateOccurrenceSummaryDto(specialDate, first.date(), groupedEntries.size(), imageUrl));
-   }
-    for (SpecialDateOccurrence occurrence : occurrences.findByCoupleIdAndOccurredOnLessThanEqualOrderByOccurredOnDescIdDesc(CoupleContext.current(), RosarioClock.today())) {
-    if (requestedSpecialDateId != null && !occurrence.specialDate.id.equals(requestedSpecialDateId)) continue;
-    String key = coverKey(occurrence.specialDate.id, occurrence.occurredOn); WhenDateOccurrenceSummaryDto current = result.get(key);
-     result.put(key, new WhenDateOccurrenceSummaryDto(label(occurrence.specialDate), occurrence.occurredOn, current == null ? 0 : current.experienceCount(), occurrence.coverPhotoId == null ? current == null ? null : current.imageUrl() : "/when-dates/photos/" + occurrence.coverPhotoId + "?thumbnail=true"));
-   }
-   return result.values().stream().sorted(Comparator.comparing(WhenDateOccurrenceSummaryDto::occurredOn).reversed().thenComparing(value -> value.specialDate().label()).thenComparing(value -> value.specialDate().id())).toList();
   }
 
   private void add(List<WhenDateEntryDto> result, String section, Long experienceId, Long entityId, LocalDate date, String title, String detail, String imageUrl, String href, List<SpecialDate> dates, LocalDate from, LocalDate to, LocalDate today, List<WhenDateSourcePhotoDto> sourcePhotos) {

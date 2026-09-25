@@ -13,6 +13,8 @@ import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.time.Instant;
+import java.time.LocalDate;
+import java.time.ZoneId;
 import java.util.Base64;
 import java.util.Date;
 import java.util.UUID;
@@ -157,6 +159,13 @@ class CoupleHttpIsolationIntegrationTest {
         assertThat(genreFilmsForB.getStatusCode().value()).isEqualTo(200);
         assertThat(genreFilmsForB.getBody()).contains("Private film B").doesNotContain("Private film A");
 
+        ResponseEntity<String> calendarForA = get("/api/when-dates?size=12", USER_A1_AUTH_ID, null);
+        ResponseEntity<String> calendarForB = get("/api/when-dates?size=12", USER_B_AUTH_ID, null);
+        assertThat(calendarForA.getStatusCode().value()).isEqualTo(200);
+        assertThat(calendarForA.getBody()).contains("Private anniversary A").doesNotContain("Private anniversary B");
+        assertThat(calendarForB.getStatusCode().value()).isEqualTo(200);
+        assertThat(calendarForB.getBody()).contains("Private anniversary B").doesNotContain("Private anniversary A");
+
         ResponseEntity<String> spoofedCoupleHeader = get("/api/places", USER_A1_AUTH_ID, COUPLE_B_ID.toString());
         assertThat(spoofedCoupleHeader.getStatusCode().value()).isEqualTo(200);
         assertThat(spoofedCoupleHeader.getBody()).contains("Private place A").doesNotContain("Private place B");
@@ -277,6 +286,9 @@ class CoupleHttpIsolationIntegrationTest {
             insertMember(connection, COUPLE_B_ID, userB, "Member B", 1);
             long placeA = insertPlace(connection, "Private place A", categoryId, userA1, COUPLE_A_ID);
             long placeB = insertPlace(connection, "Private place B", categoryId, userB, COUPLE_B_ID);
+            LocalDate today = LocalDate.now(ZoneId.of("America/Argentina/Buenos_Aires"));
+            insertSpecialDateAndVisit(connection, placeA, userA1, COUPLE_A_ID, "Private anniversary A", today.minusYears(1), "ANNUAL", today);
+            insertSpecialDateAndVisit(connection, placeB, userB, COUPLE_B_ID, "Private anniversary B", today.minusMonths(1), "MONTHLY", today);
             long archivedPlaceB = insertPlace(connection, "Archived private place B", categoryId, userB, COUPLE_B_ID);
             try (PreparedStatement archive = connection.prepareStatement(
                     "update places set deactivated_at = now() where id = ?")) {
@@ -319,6 +331,26 @@ class CoupleHttpIsolationIntegrationTest {
             statement.setLong(3, authorId);
             statement.setObject(4, coupleId);
             try (ResultSet result = statement.executeQuery()) { result.next(); return result.getLong(1); }
+        }
+    }
+
+    private static void insertSpecialDateAndVisit(Connection connection, long placeId, long userId, UUID coupleId,
+            String label, LocalDate specialDateOn, String recurrence, LocalDate visitedOn) throws Exception {
+        try (PreparedStatement dateStatement = connection.prepareStatement("""
+                insert into special_dates(special_date, label, recurrence, couple_id)
+                values (?, ?, ?, ?) returning id
+                """)) {
+            dateStatement.setObject(1, specialDateOn); dateStatement.setString(2, label); dateStatement.setString(3, recurrence); dateStatement.setObject(4, coupleId);
+            try (ResultSet result = dateStatement.executeQuery()) {
+                result.next();
+            }
+        }
+        try (PreparedStatement visit = connection.prepareStatement("""
+                insert into place_visits(place_id, visited_on, created_by, updated_by, couple_id)
+                values (?, ?, ?, ?, ?)
+                """)) {
+            visit.setLong(1, placeId); visit.setObject(2, visitedOn); visit.setLong(3, userId); visit.setLong(4, userId);
+            visit.setObject(5, coupleId); visit.executeUpdate();
         }
     }
 

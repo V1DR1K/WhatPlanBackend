@@ -12,6 +12,15 @@ import jakarta.persistence.LockModeType;
 public final class Repositories {
  private Repositories() {}
 
+ public interface WhenDateSummaryProjection {
+  Long getSpecialDateId();
+  String getLabel();
+  String getRecurrence();
+  LocalDate getOccurredOn();
+  Long getExperienceCount();
+  String getImageUrl();
+ }
+
  public interface Users extends JpaRepository<User, Long> {
    @Lock(LockModeType.PESSIMISTIC_WRITE)
    @Query("select u from User u where u.id = :id")
@@ -70,7 +79,78 @@ public final class Repositories {
   List<Category> findByActiveTrueOrderByName();
  }
   public interface HighlightTags extends JpaRepository<HighlightTag, Long> { List<HighlightTag> findAllByOrderByNameAsc(); }
-  public interface SpecialDates extends CoupleScopedRepository<SpecialDate> { List<SpecialDate> findAllByCoupleIdOrderByDateAscLabelAscIdAsc(java.util.UUID coupleId); }
+  public interface SpecialDates extends CoupleScopedRepository<SpecialDate> {
+    List<SpecialDate> findAllByCoupleIdOrderByDateAscLabelAscIdAsc(java.util.UUID coupleId);
+
+    @Query(value = """
+      WITH event_rows AS (
+        SELECT s.id AS special_date_id, v.visited_on AS occurred_on, 'FOOD' AS section, v.id AS experience_id,
+          CASE WHEN v.cover_photo_id IS NOT NULL THEN '/place-visit-photos/' || v.cover_photo_id || '?thumbnail=true'
+               WHEN EXISTS (SELECT 1 FROM place_photos pp WHERE pp.place_id = p.id AND pp.couple_id = v.couple_id)
+               THEN '/places/' || p.id || '/photo?thumbnail=true' END AS image_url
+        FROM place_visits v JOIN places p ON p.id = v.place_id AND p.couple_id = v.couple_id
+        JOIN special_dates s ON s.couple_id = v.couple_id AND (
+          (COALESCE(s.recurrence, 'ONCE') = 'ONCE' AND s.special_date = v.visited_on) OR
+          (s.recurrence = 'ANNUAL' AND EXTRACT(MONTH FROM s.special_date) = EXTRACT(MONTH FROM v.visited_on) AND EXTRACT(DAY FROM s.special_date) = EXTRACT(DAY FROM v.visited_on)) OR
+          (s.recurrence = 'MONTHLY' AND EXTRACT(DAY FROM s.special_date) = EXTRACT(DAY FROM v.visited_on)))
+        WHERE v.couple_id = :coupleId AND v.visited_on <= :today AND (CAST(:specialDateId AS bigint) IS NULL OR s.id = :specialDateId)
+        UNION ALL
+        SELECT s.id, v.watched_on, 'FILM', v.id,
+          CASE WHEN EXISTS (SELECT 1 FROM film_photos fp WHERE fp.film_id = f.id AND fp.couple_id = v.couple_id)
+               THEN '/films/' || f.id || '/photo?thumbnail=true' ELSE f.poster_path END
+        FROM film_views v JOIN films f ON f.id = v.film_id AND f.couple_id = v.couple_id
+        JOIN special_dates s ON s.couple_id = v.couple_id AND (
+          (COALESCE(s.recurrence, 'ONCE') = 'ONCE' AND s.special_date = v.watched_on) OR
+          (s.recurrence = 'ANNUAL' AND EXTRACT(MONTH FROM s.special_date) = EXTRACT(MONTH FROM v.watched_on) AND EXTRACT(DAY FROM s.special_date) = EXTRACT(DAY FROM v.watched_on)) OR
+          (s.recurrence = 'MONTHLY' AND EXTRACT(DAY FROM s.special_date) = EXTRACT(DAY FROM v.watched_on)))
+        WHERE v.couple_id = :coupleId AND v.watched_on <= :today AND (CAST(:specialDateId AS bigint) IS NULL OR s.id = :specialDateId)
+        UNION ALL
+        SELECT s.id, c.cooked_on, 'COOK', c.id,
+          CASE WHEN EXISTS (SELECT 1 FROM recipe_photos rp WHERE rp.recipe_id = r.id AND rp.couple_id = c.couple_id)
+               THEN '/how-cook/recipes/' || r.id || '/photo?thumbnail=true' END
+        FROM cookings c JOIN recipes r ON r.id = c.recipe_id AND r.couple_id = c.couple_id
+        JOIN special_dates s ON s.couple_id = c.couple_id AND (
+          (COALESCE(s.recurrence, 'ONCE') = 'ONCE' AND s.special_date = c.cooked_on) OR
+          (s.recurrence = 'ANNUAL' AND EXTRACT(MONTH FROM s.special_date) = EXTRACT(MONTH FROM c.cooked_on) AND EXTRACT(DAY FROM s.special_date) = EXTRACT(DAY FROM c.cooked_on)) OR
+          (s.recurrence = 'MONTHLY' AND EXTRACT(DAY FROM s.special_date) = EXTRACT(DAY FROM c.cooked_on)))
+        WHERE c.couple_id = :coupleId AND c.cooked_on <= :today AND (CAST(:specialDateId AS bigint) IS NULL OR s.id = :specialDateId)
+        UNION ALL
+        SELECT s.id, v.scheduled_at, 'FUN', v.id,
+          CASE WHEN v.cover_photo_id IS NOT NULL THEN '/why-fun/activity-visit-photos/' || v.cover_photo_id || '?thumbnail=true'
+               WHEN EXISTS (SELECT 1 FROM why_fun_venue_photos vp WHERE vp.venue_id = y.id AND vp.couple_id = v.couple_id)
+               THEN '/why-fun/activities/' || y.id || '/photo?thumbnail=true' END
+        FROM why_fun_visits v JOIN why_fun_venues y ON y.id = v.venue_id AND y.couple_id = v.couple_id
+        JOIN special_dates s ON s.couple_id = v.couple_id AND (
+          (COALESCE(s.recurrence, 'ONCE') = 'ONCE' AND s.special_date = v.scheduled_at) OR
+          (s.recurrence = 'ANNUAL' AND EXTRACT(MONTH FROM s.special_date) = EXTRACT(MONTH FROM v.scheduled_at) AND EXTRACT(DAY FROM s.special_date) = EXTRACT(DAY FROM v.scheduled_at)) OR
+          (s.recurrence = 'MONTHLY' AND EXTRACT(DAY FROM s.special_date) = EXTRACT(DAY FROM v.scheduled_at)))
+        WHERE v.couple_id = :coupleId AND v.scheduled_at <= :today AND (CAST(:specialDateId AS bigint) IS NULL OR s.id = :specialDateId)
+      ), event_summary AS (
+        SELECT special_date_id, occurred_on, COUNT(*) AS experience_count,
+          (ARRAY_AGG(image_url ORDER BY section, experience_id) FILTER (WHERE image_url IS NOT NULL))[1] AS image_url
+        FROM event_rows GROUP BY special_date_id, occurred_on
+      ), summary_keys AS (
+        SELECT special_date_id, occurred_on FROM event_summary
+        UNION
+        SELECT o.special_date_id, o.occurred_on FROM special_date_occurrences o
+        WHERE o.couple_id = :coupleId AND o.occurred_on <= :today
+          AND (CAST(:specialDateId AS bigint) IS NULL OR o.special_date_id = :specialDateId)
+      )
+      SELECT s.id AS special_date_id, s.label AS label, COALESCE(s.recurrence, 'ONCE') AS recurrence,
+        k.occurred_on AS occurred_on, COALESCE(es.experience_count, 0) AS experience_count,
+        CASE WHEN o.cover_photo_id IS NOT NULL THEN '/when-dates/photos/' || o.cover_photo_id || '?thumbnail=true'
+             ELSE es.image_url END AS image_url
+      FROM summary_keys k
+      JOIN special_dates s ON s.id = k.special_date_id AND s.couple_id = :coupleId
+      LEFT JOIN event_summary es ON es.special_date_id = k.special_date_id AND es.occurred_on = k.occurred_on
+      LEFT JOIN special_date_occurrences o ON o.special_date_id = k.special_date_id AND o.occurred_on = k.occurred_on AND o.couple_id = :coupleId
+      ORDER BY k.occurred_on DESC, s.label ASC, s.id ASC
+      LIMIT :limit OFFSET :offset
+      """, nativeQuery = true)
+    List<WhenDateSummaryProjection> findSummaryPageByCoupleId(@Param("coupleId") java.util.UUID coupleId,
+        @Param("specialDateId") Long specialDateId, @Param("today") LocalDate today,
+        @Param("limit") int limit, @Param("offset") long offset);
+  }
   public interface SpecialDateOccurrences extends CoupleScopedRepository<SpecialDateOccurrence> {
      @EntityGraph(attributePaths = {"specialDate", "createdBy", "updatedBy"}) Optional<SpecialDateOccurrence> findBySpecialDateIdAndOccurredOnAndCoupleId(Long specialDateId, LocalDate occurredOn, java.util.UUID coupleId);
      @EntityGraph(attributePaths = {"specialDate", "createdBy", "updatedBy"}) Optional<SpecialDateOccurrence> findDetailedBySpecialDateIdAndOccurredOnAndCoupleId(Long specialDateId, LocalDate occurredOn, java.util.UUID coupleId);
@@ -206,7 +286,7 @@ public final class Repositories {
         List<PlaceVisit> findAllByIdInAndPlaceIdAndCoupleId(@Param("ids") Collection<Long> ids, @Param("placeId") Long placeId, @Param("coupleId") java.util.UUID coupleId);
         @EntityGraph(attributePaths = {"place", "createdBy", "updatedBy"}) List<PlaceVisit> findByPlaceIdInAndCoupleIdOrderByPlaceIdAscVisitedOnDescIdDesc(Collection<Long> placeIds, java.util.UUID coupleId);
         @EntityGraph(attributePaths = {"place", "createdBy", "updatedBy"}) List<PlaceVisit> findByPlaceIdInOrderByPlaceIdAscVisitedOnDescIdDesc(Collection<Long> placeIds);
-        @EntityGraph(attributePaths = {"place", "createdBy", "updatedBy"}) List<PlaceVisit> findByCoupleIdAndVisitedOnLessThanEqualOrderByVisitedOnDescIdDesc(java.util.UUID coupleId, LocalDate visitedOn);
+      @EntityGraph(attributePaths = {"place", "createdBy", "updatedBy"}) List<PlaceVisit> findByCoupleIdAndVisitedOnOrderByVisitedOnDescIdDesc(java.util.UUID coupleId, LocalDate visitedOn);
        @EntityGraph(attributePaths = {"place", "createdBy", "updatedBy"}) Optional<PlaceVisit> findByPlaceIdAndVisitedOn(Long placeId, LocalDate visitedOn);
       boolean existsByPlaceId(Long placeId);
     @EntityGraph(attributePaths = {"place", "createdBy", "updatedBy"}) Optional<PlaceVisit> findDetailedByIdAndCoupleId(Long id, java.util.UUID coupleId);
@@ -379,7 +459,7 @@ public final class Repositories {
        @EntityGraph(attributePaths = {"film", "createdBy", "updatedBy"}) List<FilmView> findAllByCoupleId(java.util.UUID coupleId);
        @EntityGraph(attributePaths = {"createdBy", "updatedBy"}) List<FilmView> findByFilmIdOrderByWatchedOnDescIdDesc(Long filmId);
        @EntityGraph(attributePaths = {"createdBy", "updatedBy"}) List<FilmView> findByFilmIdAndCoupleIdOrderByWatchedOnDescIdDesc(Long filmId, java.util.UUID coupleId);
-       @EntityGraph(attributePaths = {"film", "film.platform", "film.genres", "createdBy", "updatedBy"}) List<FilmView> findByCoupleIdAndWatchedOnLessThanEqualOrderByWatchedOnDescIdDesc(java.util.UUID coupleId, LocalDate watchedOn);
+       @EntityGraph(attributePaths = {"film", "film.platform", "film.genres", "createdBy", "updatedBy"}) List<FilmView> findByCoupleIdAndWatchedOnOrderByWatchedOnDescIdDesc(java.util.UUID coupleId, LocalDate watchedOn);
       @EntityGraph(attributePaths = {"createdBy", "updatedBy"}) Optional<FilmView> findByIdAndFilmIdAndCoupleId(Long id, Long filmId, java.util.UUID coupleId);
       Optional<FilmView> findByFilmIdAndWatchedOnAndCoupleId(Long filmId, LocalDate watchedOn, java.util.UUID coupleId);
    }
@@ -530,7 +610,7 @@ public final class Repositories {
     @EntityGraph(attributePaths = {"venue", "venue.category", "venue.subcategory", "venue.createdBy", "venue.updatedBy", "venue.schedules", "createdBy", "updatedBy"}) List<WhyFunVisit> findByVenueIdAndCoupleIdOrderByScheduledAtDescIdDesc(Long venueId, java.util.UUID coupleId);
     @EntityGraph(attributePaths = {"venue", "venue.category", "venue.subcategory", "venue.createdBy", "venue.updatedBy", "venue.schedules", "createdBy", "updatedBy"}) Optional<WhyFunVisit> findDetailedByIdAndCoupleId(Long id, java.util.UUID coupleId);
       @EntityGraph(attributePaths = {"venue", "venue.category", "venue.subcategory", "venue.createdBy", "venue.updatedBy", "venue.schedules", "createdBy", "updatedBy"}) List<WhyFunVisit> findAllByCoupleId(java.util.UUID coupleId);
-   @EntityGraph(attributePaths = {"venue", "venue.category", "venue.subcategory", "venue.createdBy", "venue.updatedBy", "venue.schedules", "createdBy", "updatedBy"}) List<WhyFunVisit> findByCoupleIdAndScheduledAtLessThanEqualOrderByScheduledAtDescIdDesc(java.util.UUID coupleId, LocalDate scheduledAt);
+   @EntityGraph(attributePaths = {"venue", "venue.category", "venue.subcategory", "venue.createdBy", "venue.updatedBy", "venue.schedules", "createdBy", "updatedBy"}) List<WhyFunVisit> findByCoupleIdAndScheduledAtOrderByScheduledAtDescIdDesc(java.util.UUID coupleId, LocalDate scheduledAt);
      @Query("select v.venue.id as activityId, count(v) as visitCount from WhyFunVisit v where v.venue.id in :activityIds group by v.venue.id") List<ActivityVisitCount> countsByActivityIdIn(@Param("activityIds") Collection<Long> activityIds);
      @Query("select v.venue.id as activityId, count(v) as visitCount from WhyFunVisit v where v.venue.id in :activityIds and v.coupleId=:coupleId group by v.venue.id") List<ActivityVisitCount> countsByActivityIdInAndCoupleId(@Param("activityIds") Collection<Long> activityIds, @Param("coupleId") java.util.UUID coupleId);
    }
@@ -623,7 +703,7 @@ public final class Repositories {
     @EntityGraph(attributePaths = {"recipe", "recipe.ingredients", "recipe.steps", "createdBy", "updatedBy"})
     @Query("select c from Cooking c where c.id in :ids and c.coupleId = :coupleId")
     List<Cooking> findAllByIdInAndCoupleId(@Param("ids") Collection<Long> ids, @Param("coupleId") java.util.UUID coupleId);
-     @EntityGraph(attributePaths = {"recipe", "recipe.ingredients", "recipe.steps", "createdBy", "updatedBy"}) List<Cooking> findByCoupleIdAndCookedOnLessThanEqualOrderByCookedOnDescIdDesc(java.util.UUID coupleId, LocalDate cookedOn);
+     @EntityGraph(attributePaths = {"recipe", "recipe.ingredients", "recipe.steps", "createdBy", "updatedBy"}) List<Cooking> findByCoupleIdAndCookedOnOrderByCookedOnDescIdDesc(java.util.UUID coupleId, LocalDate cookedOn);
      @EntityGraph(attributePaths = {"recipe", "recipe.ingredients", "recipe.steps", "createdBy", "updatedBy"}) Optional<Cooking> findDetailedByIdAndCoupleId(Long id, java.util.UUID coupleId);
      boolean existsByRecipeId(Long recipeId);
      @Query("select c.recipe.id as recipeId, count(c) as cookingCount from Cooking c where c.recipe.id in :recipeIds group by c.recipe.id") List<RecipeCookingCount> cookingCountsByRecipeIdIn(@Param("recipeIds") Collection<Long> recipeIds);
