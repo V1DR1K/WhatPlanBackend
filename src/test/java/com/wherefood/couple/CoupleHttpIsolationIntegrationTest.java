@@ -115,10 +115,10 @@ class CoupleHttpIsolationIntegrationTest {
         assertThat(recipesForB.getStatusCode().value()).isEqualTo(200);
         assertThat(recipesForB.getBody()).contains("Torta pareja B").doesNotContain("Torta pareja A");
 
-        ResponseEntity<String> activitiesForA = get("/api/activities?search=museo&categoryId=" + fixture.activityCategoryId()
+        ResponseEntity<String> activitiesForA = get("/api/why-fun/activities?search=museo&categoryId=" + fixture.activityCategoryId()
                 + "&subcategoryId=" + fixture.activitySubcategoryId() + "&visited=true&sort=rating-asc&size=30",
                 USER_A1_AUTH_ID, null);
-        ResponseEntity<String> activitiesForB = get("/api/activities?search=museo&categoryId=" + fixture.activityCategoryId()
+        ResponseEntity<String> activitiesForB = get("/api/why-fun/activities?search=museo&categoryId=" + fixture.activityCategoryId()
                 + "&subcategoryId=" + fixture.activitySubcategoryId() + "&visited=true&sort=rating-desc&size=30",
                 USER_B_AUTH_ID, null);
         assertThat(activitiesForA.getStatusCode().value()).isEqualTo(200);

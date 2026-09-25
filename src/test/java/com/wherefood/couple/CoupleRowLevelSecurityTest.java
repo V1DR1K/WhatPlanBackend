@@ -66,7 +66,7 @@ class CoupleRowLevelSecurityTest {
 
         try (Connection admin = adminConnection(); Statement statement = admin.createStatement()) {
             statement.executeUpdate("insert into couples(id, status, created_by) values ('" + OTHER_COUPLE + "', 'ACTIVE', 1)");
-            statement.executeUpdate("insert into places(name, category_id, created_by, couple_id) values ('Other couple place', 1, 2, '" + OTHER_COUPLE + "')");
+            statement.executeUpdate("insert into places(name, category_id, created_by, updated_by, couple_id) values ('Other couple place', 1, 2, 2, '" + OTHER_COUPLE + "')");
             statement.executeUpdate("insert into special_dates(id, special_date, label, couple_id) values (1001, date '2026-01-01', 'Legacy anniversary', '" + ORIGINAL_COUPLE + "'), (1002, date '2026-01-02', 'Private anniversary', '" + OTHER_COUPLE + "')");
             statement.executeUpdate("insert into special_date_occurrences(id, special_date_id, occurred_on, created_by, updated_by, couple_id) values (1101, 1001, date '2026-01-01', 1, 1, '" + ORIGINAL_COUPLE + "'), (1102, 1002, date '2026-01-02', 2, 2, '" + OTHER_COUPLE + "')");
             statement.executeUpdate("insert into special_date_occurrence_comments(id, occurrence_id, author_id, updated_by, comment, couple_id) values (1201, 1101, 1, 1, 'Shared memory', '" + ORIGINAL_COUPLE + "'), (1202, 1102, 2, 2, 'Private memory', '" + OTHER_COUPLE + "')");
