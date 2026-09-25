@@ -53,11 +53,7 @@ class CoupleHttpIsolationIntegrationTest {
     private static final KeyPair JWT_KEYS = newRsaKeyPair();
 
     @Container
-    private static final PostgreSQLContainer<?> POSTGRES = new PostgreSQLContainer<>("postgres:16-alpine")
-            .withDatabaseName("whatplan_test")
-            .withUsername("whatplan_admin")
-            .withPassword(ADMIN_PASSWORD)
-            .withInitScript("db/couple-http-role-bootstrap.sql") {
+    private static final PostgreSQLContainer<?> POSTGRES = new PostgreSQLContainer<>("postgres:16-alpine") {
                 @Override
                 public void start() {
                     super.start();
@@ -72,7 +68,10 @@ class CoupleHttpIsolationIntegrationTest {
                         throw new IllegalStateException("Unable to seed legacy users for tenant migration test", exception);
                     }
                 }
-            };
+            }.withDatabaseName("whatplan_test")
+                    .withUsername("whatplan_admin")
+                    .withPassword(ADMIN_PASSWORD)
+                    .withInitScript("db/couple-http-role-bootstrap.sql");
 
     @Container
     private static final GenericContainer<?> REDIS = new GenericContainer<>(DockerImageName.parse("redis:7.4-alpine"))
