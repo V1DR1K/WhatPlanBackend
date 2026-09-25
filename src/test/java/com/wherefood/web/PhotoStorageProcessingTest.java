@@ -2,23 +2,41 @@ package com.wherefood.web;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
 import com.wherefood.domain.Item;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
+import java.awt.image.BufferedImage;
 import java.nio.charset.StandardCharsets;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import org.junit.jupiter.api.Test;
+import javax.imageio.ImageIO;
 import org.springframework.http.HttpStatus;
 import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.web.multipart.MultipartFile;
 import org.springframework.web.server.ResponseStatusException;
 
 class PhotoStorageProcessingTest {
+    @Test
+    void processesSmallValidImageWithinConfiguredMemoryBudget() throws Exception {
+        BufferedImage image = new BufferedImage(2, 2, BufferedImage.TYPE_INT_RGB);
+        ByteArrayOutputStream png = new ByteArrayOutputStream();
+        ImageIO.write(image, "png", png);
+        PhotoStorage storage = storage(1024 * 1024, 1024 * 1024L, 100, 100);
+
+        var photo = storage.store(new Item(), new MockMultipartFile("file", "small.png", "image/png", png.toByteArray()));
+
+        assertEquals(2, photo.width);
+        assertEquals(2, photo.height);
+        assertTrue(PhotoStorage.isWebp(storage.bytes(photo.imageBase64)));
+        assertTrue(PhotoStorage.isWebp(storage.bytes(photo.thumbnailBase64)));
+    }
+
     @Test
     void rejectsOversizedExtendedWebpDimensionsBeforeLaunchingDecoder() {
         PhotoStorage storage = storage(50L * 1024 * 1024, 25_000_000L, 8_000, 2);
