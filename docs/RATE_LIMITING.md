@@ -19,7 +19,7 @@ These are abuse controls, not product quotas. Invitation creation has its own co
 
 ## Proxy configuration
 
-Set `TRUSTED_PROXY_ADDRESSES` to a comma-separated list of exact IP addresses for the reverse proxies that connect directly to the backend (for example `10.0.0.5,2001:db8::5`). CIDR ranges are not accepted. Leave it empty if requests connect directly. The backend ignores `X-Forwarded-For` from untrusted peers and walks the forwarded chain from the nearest trusted hop. The proxy must replace/append that header correctly and must not expose a path that bypasses the proxy while retaining a trusted source address.
+Set `TRUSTED_PROXY_ADDRESSES` to a comma-separated list of exact IP addresses for the reverse proxies that connect directly to the backend (for example `10.0.0.5,2001:db8::5`). CIDR ranges are not accepted. Leave it empty only when requests connect directly to the backend; the production Compose topology is behind a reverse proxy and now rejects an empty value. Without the proxy address, all clients appear to come from the same proxy IP and can exhaust the shared login/refresh IP budget. The backend ignores `X-Forwarded-For` from untrusted peers and walks the forwarded chain from the nearest trusted hop. The proxy must replace/append that header correctly and must not expose a path that bypasses the proxy while retaining a trusted source address. Prefer a stable, dedicated proxy address over trusting a shared network range.
 
 ## Authentication-service timeouts
 
