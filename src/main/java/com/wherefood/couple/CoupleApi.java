@@ -1,6 +1,9 @@
 package com.wherefood.couple;
 
 import com.wherefood.domain.User;
+import jakarta.validation.Valid;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.Size;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.DeleteMapping;
@@ -43,9 +46,9 @@ public class CoupleApi {
         couples.revoke(id, user);
     }
 
-    @PostMapping("/couple/invitations/{token}/accept")
-    CoupleService.CoupleSnapshot accept(@PathVariable String token, @AuthenticationPrincipal User user) {
-        return couples.accept(token, user);
+    @PostMapping("/couple/invitations/accept")
+    CoupleService.CoupleSnapshot accept(@Valid @RequestBody AcceptInvitationRequest request, @AuthenticationPrincipal User user) {
+        return couples.accept(request.token(), user);
     }
 
     @PostMapping("/couple/leave")
@@ -54,3 +57,5 @@ public class CoupleApi {
         couples.leave(user);
     }
 }
+
+record AcceptInvitationRequest(@NotBlank @Size(max = 43) String token) {}

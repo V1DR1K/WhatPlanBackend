@@ -33,6 +33,8 @@ import org.slf4j.LoggerFactory;
 public class CoupleService {
     private static final Logger audit = LoggerFactory.getLogger("whatplan.audit.couple");
     private static final Duration INVITATION_TTL = Duration.ofDays(7);
+    private static final Duration INVITATION_CREATION_WINDOW = Duration.ofHours(24);
+    private static final int MAX_INVITATIONS_PER_WINDOW = 10;
     private final Couples couples;
     private final CoupleMembers members;
     private final CoupleInvitations invitations;
@@ -79,9 +81,13 @@ public class CoupleService {
         if (couple.status == CoupleStatus.CLOSED) throw notFound("Pareja");
         if (members.countByCoupleIdAndStatus(coupleId, CoupleMemberStatus.ACTIVE) >= 2) throw conflict("La pareja ya tiene dos integrantes");
         Instant now = Instant.now();
+        if (invitations.countByCoupleIdAndCreatedAtAfter(coupleId, now.minus(INVITATION_CREATION_WINDOW)) >= MAX_INVITATIONS_PER_WINDOW) {
+            throw new ResponseStatusException(HttpStatus.TOO_MANY_REQUESTS, "Se alcanzó el límite de invitaciones por hoy");
+        }
         invitations.findByCoupleIdAndStatusOrderByCreatedAtDesc(coupleId, CoupleInvitationStatus.PENDING).forEach(value -> {
             value.status = CoupleInvitationStatus.REVOKED;
             value.revokedAt = now;
+            audit.info("couple_invitation_revoked coupleId={} invitationId={} userId={} reason=replaced", coupleId, value.id, user.id);
         });
         invitations.flush();
         String token = randomToken();
@@ -98,10 +104,10 @@ public class CoupleService {
 
     @Transactional(noRollbackFor = ExpiredInvitationException.class)
     public CoupleSnapshot accept(String rawToken, User user) {
-        if (rawToken == null || rawToken.isBlank()) throw notFound("Invitación");
+        if (rawToken == null || rawToken.length() != 43 || !rawToken.matches("[A-Za-z0-9_-]{43}")) throw notFound("Invitación");
         user = users.findLockedById(user.id).orElseThrow(() -> notFound("Usuario"));
         if (members.findActiveCoupleIdByUserId(user.id).isPresent()) throw conflict("Primero tenés que dejar tu pareja actual");
-        CoupleInvitation invitation = invitations.findByTokenHash(hash(rawToken.trim())).orElseThrow(() -> notFound("Invitación"));
+        CoupleInvitation invitation = invitations.findByTokenHash(hash(rawToken)).orElseThrow(() -> notFound("Invitación"));
         Couple couple = couples.findLockedById(invitation.couple.id).orElseThrow(() -> notFound("Pareja"));
         CoupleContext.set(couple.id);
         invitation = invitations.findLockedByIdAndCoupleId(invitation.id, couple.id).orElseThrow(() -> notFound("Invitación"));
@@ -109,7 +115,7 @@ public class CoupleService {
         if (couple.status == CoupleStatus.CLOSED || invitation.status != CoupleInvitationStatus.PENDING) throw notFound("Invitación");
         if (!invitation.expiresAt.isAfter(now)) {
             invitation.status = CoupleInvitationStatus.EXPIRED;
-            audit.info("couple_invitation_expired invitationId={} userId={}", invitation.id, user.id);
+            audit.info("couple_invitation_expired coupleId={} invitationId={} userId={}", couple.id, invitation.id, user.id);
             throw new ExpiredInvitationException();
         }
         if (members.countByCoupleIdAndStatus(couple.id, CoupleMemberStatus.ACTIVE) >= 2) throw conflict("La pareja ya está completa");
@@ -148,6 +154,7 @@ public class CoupleService {
         invitations.findByCoupleIdAndStatusOrderByCreatedAtDesc(coupleId, CoupleInvitationStatus.PENDING).forEach(value -> {
             value.status = CoupleInvitationStatus.REVOKED;
             value.revokedAt = Instant.now();
+            audit.info("couple_invitation_revoked coupleId={} invitationId={} userId={} reason=member_left", coupleId, value.id, user.id);
         });
         members.flush();
         if (members.countByCoupleIdAndStatus(coupleId, CoupleMemberStatus.ACTIVE) == 0) {

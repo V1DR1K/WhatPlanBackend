@@ -277,6 +277,50 @@ class CoupleRowLevelSecurityTest {
     }
 
     @Test
+    void concurrentInvitationAcceptanceAndRevocationHaveExactlyOneWinner() throws Exception {
+        UUID coupleId = UUID.fromString("00000000-0000-0000-0000-000000000006");
+        long invitationId;
+        try (Connection admin = adminConnection(); PreparedStatement insert = admin.prepareStatement(
+                "insert into couples(id, status, created_by) values (?, 'PENDING', 3)")) {
+            insert.setObject(1, coupleId);
+            insert.executeUpdate();
+        }
+        try (Connection admin = adminConnection(); PreparedStatement insert = admin.prepareStatement(
+                "insert into couple_members(couple_id, user_id, display_name, slot, status) values (?, 3, 'Charlie', 1, 'ACTIVE')")) {
+            insert.setObject(1, coupleId);
+            insert.executeUpdate();
+        }
+        try (Connection admin = adminConnection(); PreparedStatement insert = admin.prepareStatement(
+                "insert into couple_invitations(couple_id, created_by, token_hash, expires_at) values (?, 3, ?, now() + interval '7 days') returning id")) {
+            insert.setObject(1, coupleId);
+            insert.setString(2, "c".repeat(64));
+            try (ResultSet result = insert.executeQuery()) { result.next(); invitationId = result.getLong(1); }
+        }
+
+        CountDownLatch start = new CountDownLatch(1);
+        ExecutorService executor = Executors.newFixedThreadPool(2);
+        try {
+            Future<Boolean> accepted = executor.submit(() -> tryFinalizeInvitation(coupleId, invitationId, true, start));
+            Future<Boolean> revoked = executor.submit(() -> tryFinalizeInvitation(coupleId, invitationId, false, start));
+            start.countDown();
+            assertEquals(1, (accepted.get() ? 1 : 0) + (revoked.get() ? 1 : 0));
+        } finally {
+            executor.shutdownNow();
+        }
+
+        try (Connection admin = adminConnection(); PreparedStatement invitation = admin.prepareStatement(
+                "select status from couple_invitations where id = ?")) {
+            invitation.setLong(1, invitationId);
+            try (ResultSet result = invitation.executeQuery()) {
+                assertTrue(result.next());
+                String status = result.getString(1);
+                assertTrue(status.equals("ACCEPTED") || status.equals("REVOKED"));
+                assertEquals(status.equals("ACCEPTED") ? 2 : 1, countActiveMembers(admin, coupleId));
+            }
+        }
+    }
+
+    @Test
     void leftMembershipKeepsHistoryButReleasesTheSlotAndUserForANewPair() throws Exception {
         UUID coupleId = UUID.fromString("00000000-0000-0000-0000-000000000005");
         try (Connection admin = adminConnection(); Statement statement = admin.createStatement()) {
@@ -343,6 +387,52 @@ class CoupleRowLevelSecurityTest {
             } catch (SQLException conflict) {
                 connection.rollback(); return false;
             }
+        }
+    }
+
+    private static boolean tryFinalizeInvitation(UUID coupleId, long invitationId, boolean accept, CountDownLatch start) throws Exception {
+        start.await();
+        try (Connection connection = adminConnection()) {
+            connection.setAutoCommit(false);
+            try {
+                try (PreparedStatement lock = connection.prepareStatement("select id from couples where id = ? for update")) {
+                    lock.setObject(1, coupleId);
+                    try (ResultSet result = lock.executeQuery()) { if (!result.next()) throw new SQLException("couple missing"); }
+                }
+                String status;
+                try (PreparedStatement invitation = connection.prepareStatement("select status from couple_invitations where id = ? for update")) {
+                    invitation.setLong(1, invitationId);
+                    try (ResultSet result = invitation.executeQuery()) { if (!result.next()) throw new SQLException("invitation missing"); status = result.getString(1); }
+                }
+                if (!"PENDING".equals(status)) { connection.commit(); return false; }
+                if (accept) {
+                    try (PreparedStatement update = connection.prepareStatement("update couple_invitations set status = 'ACCEPTED', accepted_by = 4, accepted_at = now() where id = ?")) {
+                        update.setLong(1, invitationId); update.executeUpdate();
+                    }
+                    try (PreparedStatement member = connection.prepareStatement("insert into couple_members(couple_id, user_id, display_name, slot, status) values (?, 4, 'Dana', 2, 'ACTIVE')")) {
+                        member.setObject(1, coupleId); member.executeUpdate();
+                    }
+                    try (PreparedStatement couple = connection.prepareStatement("update couples set status = 'ACTIVE' where id = ?")) {
+                        couple.setObject(1, coupleId); couple.executeUpdate();
+                    }
+                } else {
+                    try (PreparedStatement update = connection.prepareStatement("update couple_invitations set status = 'REVOKED', revoked_at = now() where id = ?")) {
+                        update.setLong(1, invitationId); update.executeUpdate();
+                    }
+                }
+                connection.commit();
+                return true;
+            } catch (SQLException exception) {
+                connection.rollback();
+                throw exception;
+            }
+        }
+    }
+
+    private static int countActiveMembers(Connection connection, UUID coupleId) throws SQLException {
+        try (PreparedStatement count = connection.prepareStatement("select count(*) from couple_members where couple_id = ? and status = 'ACTIVE'")) {
+            count.setObject(1, coupleId);
+            try (ResultSet result = count.executeQuery()) { result.next(); return result.getInt(1); }
         }
     }
 

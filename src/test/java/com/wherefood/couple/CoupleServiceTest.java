@@ -82,7 +82,7 @@ class CoupleServiceTest {
         when(couples.findLockedById(couple.id)).thenReturn(Optional.of(couple));
         when(invitations.findLockedByIdAndCoupleId(invitation.id, couple.id)).thenReturn(Optional.of(invitation));
 
-        assertThrows(ResponseStatusException.class, () -> service.accept("token", user));
+        assertThrows(ResponseStatusException.class, () -> service.accept("a".repeat(43), user));
         assertEquals(CoupleInvitationStatus.EXPIRED, invitation.status);
     }
 
@@ -99,6 +99,26 @@ class CoupleServiceTest {
         assertNotNull(result.token());
         assertEquals(43, result.token().length());
         assertEquals(CoupleInvitationStatus.PENDING, capturedStatus());
+    }
+
+    @Test
+    void boundsInvitationCreationForOneCoupleToTenPerRollingDay() {
+        Couple couple = couple();
+        when(members.findActiveCoupleIdByUserId(user.id)).thenReturn(Optional.of(couple.id));
+        when(couples.findLockedById(couple.id)).thenReturn(Optional.of(couple));
+        when(members.countByCoupleIdAndStatus(couple.id, CoupleMemberStatus.ACTIVE)).thenReturn(1L);
+        when(invitations.countByCoupleIdAndCreatedAtAfter(org.mockito.ArgumentMatchers.eq(couple.id), any(Instant.class)))
+                .thenReturn(10L);
+
+        ResponseStatusException error = assertThrows(ResponseStatusException.class, () -> service.createInvitation(user));
+
+        assertEquals(429, error.getStatusCode().value());
+    }
+
+    @Test
+    void rejectsMalformedInvitationSecretsBeforeAnyRepositoryLookup() {
+        assertThrows(ResponseStatusException.class, () -> service.accept("x".repeat(100_000), user));
+        org.mockito.Mockito.verifyNoInteractions(couples, members, invitations, users);
     }
 
     @Test

@@ -58,6 +58,8 @@ public final class Repositories {
 
    Optional<CoupleInvitation> findByIdAndCoupleId(Long id, java.util.UUID coupleId);
 
+   long countByCoupleIdAndCreatedAtAfter(java.util.UUID coupleId, java.time.Instant since);
+
    @Lock(LockModeType.PESSIMISTIC_WRITE)
    @Query("select i from CoupleInvitation i where i.id = :id and i.couple.id = :coupleId")
    Optional<CoupleInvitation> findLockedByIdAndCoupleId(@Param("id") Long id,

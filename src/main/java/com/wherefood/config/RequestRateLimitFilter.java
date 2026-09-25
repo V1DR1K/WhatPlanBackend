@@ -24,13 +24,13 @@ public class RequestRateLimitFilter extends OncePerRequestFilter {
         return !path.equals("/api/auth/login")
                 && !path.equals("/api/auth/refresh")
                 && !path.equals("/api/couple/invitations")
-                && !path.matches("/api/couple/invitations/[^/]+/accept");
+                && !path.equals("/api/couple/invitations/accept");
     }
 
     @Override
     protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain chain)
             throws ServletException, IOException {
-        String key = request.getRemoteAddr() + ":" + normalizedPath(request.getRequestURI());
+        String key = request.getRemoteAddr() + ":" + request.getRequestURI();
         Bucket bucket = buckets.compute(key, (ignored, current) -> current == null || current.expired() ? new Bucket() : current.next());
         if (bucket.count > MAX_ATTEMPTS) {
             response.setStatus(HttpServletResponse.SC_TOO_MANY_REQUESTS);
@@ -40,10 +40,6 @@ public class RequestRateLimitFilter extends OncePerRequestFilter {
             return;
         }
         chain.doFilter(request, response);
-    }
-
-    private static String normalizedPath(String path) {
-        return path.matches("/api/couple/invitations/[^/]+/accept") ? "/api/couple/invitations/*/accept" : path;
     }
 
     private static final class Bucket {
