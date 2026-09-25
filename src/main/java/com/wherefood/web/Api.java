@@ -100,20 +100,22 @@ public class Api {
 
  @GetMapping("/places") Slice<PlaceDto> list(@RequestParam(required = false) Long categoryId, @RequestParam(required = false) Long highlightTagId, @RequestParam(required = false) PlaceStatus status, @RequestParam(required = false) String search, @RequestParam(required = false) String sort, @RequestParam(required = false) Long cursor, @RequestParam(defaultValue = "12") int size) {
    int limit = Math.max(1, Math.min(size, 30));
-   String normalizedSearch = search == null || search.isBlank() ? null : search.trim().toLowerCase(Locale.ROOT);
-   List<Place> candidates = places.findAllByCoupleId(CoupleContext.current()).stream().filter(place -> place.deactivatedAt == null).filter(place -> categoryId == null || place.category.id.equals(categoryId)).filter(place -> highlightTagId == null || place.highlightTags.stream().anyMatch(tag -> tag.id.equals(highlightTagId))).filter(place -> status == null || place.status == status).filter(place -> normalizedSearch == null || place.name.toLowerCase(Locale.ROOT).contains(normalizedSearch) || place.category.name.toLowerCase(Locale.ROOT).contains(normalizedSearch) || place.address != null && place.address.toLowerCase(Locale.ROOT).contains(normalizedSearch)).toList();
-   Map<Long, PlaceSummary> summaries = placeSummaries(candidates);
    long offset = cursor == null ? 0 : Math.max(0, cursor);
-    Comparator<Place> ordering = switch (sort == null ? "date-desc" : sort.trim().toLowerCase(Locale.ROOT)) {
-     case "rating", "rating-desc" -> Comparator.comparingDouble((Place place) -> summaries.get(place.id).rating()).reversed();
-     case "rating-asc" -> Comparator.comparingDouble((Place place) -> summaries.get(place.id).rating());
-     case "date", "date-desc" -> Comparator.comparing((Place place) -> place.updatedAt, Comparator.nullsLast(Comparator.reverseOrder())).thenComparing(place -> place.createdAt, Comparator.nullsLast(Comparator.reverseOrder()));
-     case "date-asc" -> Comparator.comparing((Place place) -> place.updatedAt, Comparator.nullsLast(Comparator.naturalOrder())).thenComparing(place -> place.createdAt, Comparator.nullsLast(Comparator.naturalOrder()));
-    default -> throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Orden inválido");
-   };
-   List<Place> result = candidates.stream().sorted(ordering.thenComparing(place -> place.id, Comparator.reverseOrder())).skip(offset).limit(limit + 1).toList();
-  Long next = result.size() > limit ? offset + limit : null;
-  List<Place> page = result.stream().limit(limit).toList();
+   if (offset > 1_000_000) throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Cursor inválido");
+   String normalizedSearch = search == null || search.isBlank() ? null : search.trim().toLowerCase(Locale.ROOT);
+   String normalizedSort = sort == null ? "date-desc" : sort.trim().toLowerCase(Locale.ROOT);
+   if (!Set.of("rating", "rating-desc", "rating-asc", "date", "date-desc", "date-asc").contains(normalizedSort)) {
+    throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Orden inválido");
+   }
+   List<Long> ids = places.findPageIdsByCoupleId(CoupleContext.current(), categoryId, highlightTagId,
+           status == null ? null : status.name(), normalizedSearch, normalizedSort, limit + 1, offset);
+   Long next = ids.size() > limit ? offset + limit : null;
+   List<Long> pageIds = ids.stream().limit(limit).toList();
+   if (pageIds.isEmpty()) return new Slice<>(List.of(), next);
+   Map<Long, Place> byId = places.findActiveByIdInAndCoupleId(pageIds, CoupleContext.current()).stream()
+           .collect(java.util.stream.Collectors.toMap(place -> place.id, place -> place));
+   List<Place> page = pageIds.stream().map(byId::get).filter(Objects::nonNull).toList();
+   Map<Long, PlaceSummary> summaries = placeSummaries(page);
   return new Slice<>(page.stream().map(place -> place(place, summaries.get(place.id))).toList(), next);
  }
 

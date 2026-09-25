@@ -97,6 +97,72 @@ public final class Repositories {
 
   public interface Places extends CoupleScopedRepository<Place> {
   @EntityGraph(attributePaths = {"category", "createdBy", "highlightTags"}) List<Place> findAllByCoupleId(java.util.UUID coupleId);
+  @Query(value = """
+          with visit_metrics as (
+              select visit.place_id, count(distinct visit.id) as visit_count,
+                     avg(review.taste) filter (where review.taste is not null) as taste,
+                     avg(review.price) filter (where review.price is not null) as price
+              from place_visits visit
+              left join place_visit_reviews review
+                on review.visit_id = visit.id and review.couple_id = visit.couple_id
+              where visit.couple_id = :coupleId
+              group by visit.place_id
+          ), venue_metrics as (
+              select review.place_id, avg(score.value) as venue
+              from place_reviews review
+              cross join lateral (values (review.location), (review.heating), (review.bathrooms),
+                                        (review.exterior), (review.seating), (review.service),
+                                        (review.ambiance)) as score(value)
+              where review.couple_id = :coupleId and score.value is not null
+              group by review.place_id
+          ), rating_parts as (
+              select place.id,
+                     coalesce(nullif(visit.taste, 0), 0) + coalesce(nullif(visit.price, 0), 0)
+                       + coalesce(nullif(venue.venue, 0), 0) as rating_total,
+                     (case when nullif(visit.taste, 0) is null then 0 else 1 end
+                       + case when nullif(visit.price, 0) is null then 0 else 1 end
+                       + case when nullif(venue.venue, 0) is null then 0 else 1 end) as rating_count
+              from places place
+              left join visit_metrics visit on visit.place_id = place.id
+              left join venue_metrics venue on venue.place_id = place.id
+              where place.couple_id = :coupleId and place.deactivated_at is null
+          ), place_ratings as (
+              select id, case when rating_count = 0 then 0 else rating_total / rating_count end as rating
+              from rating_parts
+          )
+          select place.id
+          from places place
+          left join categories category on category.id = place.category_id
+          join place_ratings rating on rating.id = place.id
+          where place.couple_id = :coupleId and place.deactivated_at is null
+            and (cast(:categoryId as bigint) is null or place.category_id = cast(:categoryId as bigint))
+            and (cast(:status as text) is null or place.status = cast(:status as text))
+            and (cast(:highlightTagId as bigint) is null
+                 or exists (select 1 from place_highlight_tags tag
+                            where tag.place_id = place.id and tag.couple_id = place.couple_id
+                              and tag.tag_id = cast(:highlightTagId as bigint)))
+            and (cast(:search as text) is null
+                 or position(cast(:search as text) in lower(place.name)) > 0
+                 or position(cast(:search as text) in lower(category.name)) > 0
+                 or position(cast(:search as text) in lower(place.address)) > 0)
+          order by
+            case when cast(:sort as text) in ('rating', 'rating-desc') then rating.rating end desc,
+            case when cast(:sort as text) = 'rating-asc' then rating.rating end asc,
+            case when cast(:sort as text) in ('date', 'date-desc') then place.updated_at end desc,
+            case when cast(:sort as text) in ('date', 'date-desc') then place.created_at end desc,
+            case when cast(:sort as text) = 'date-asc' then place.updated_at end asc,
+            case when cast(:sort as text) = 'date-asc' then place.created_at end asc,
+            place.id desc
+          limit :limit offset :offset
+          """, nativeQuery = true)
+  List<Long> findPageIdsByCoupleId(@Param("coupleId") java.util.UUID coupleId,
+          @Param("categoryId") Long categoryId, @Param("highlightTagId") Long highlightTagId,
+          @Param("status") String status, @Param("search") String search, @Param("sort") String sort,
+          @Param("limit") int limit, @Param("offset") long offset);
+  @EntityGraph(attributePaths = {"category", "createdBy", "updatedBy", "highlightTags"})
+  @Query("select place from Place place where place.id in :ids and place.coupleId = :coupleId and place.deactivatedAt is null")
+  List<Place> findActiveByIdInAndCoupleId(@Param("ids") Collection<Long> ids,
+          @Param("coupleId") java.util.UUID coupleId);
   @EntityGraph(attributePaths = {"category", "createdBy", "highlightTags"}) @Query("select p from Place p where p.id=:id and p.coupleId=:coupleId") Optional<Place> findDetailedByIdAndCoupleId(@Param("id") Long id, @Param("coupleId") java.util.UUID coupleId);
   boolean existsByCategoryId(Long categoryId);
   boolean existsByHighlightTagsId(Long tagId);
