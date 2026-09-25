@@ -28,6 +28,30 @@ SELECT current_database() = :'database_name' AS database_name_matches \gset
     \quit 3
 \endif
 
+SELECT rolsuper AS administrator_is_superuser
+FROM pg_roles
+WHERE rolname = current_user
+\gset
+\if :administrator_is_superuser
+\else
+    \echo Connect using the PostgreSQL superuser for this controlled ownership and role change
+    \quit 3
+\endif
+
+SELECT length(:'runtime_password') >= 32
+   AND length(:'migration_password') >= 32
+   AND :'runtime_password' <> :'migration_password' AS passwords_are_safe
+\gset
+\if :passwords_are_safe
+\else
+    \echo Supply two distinct passwords of at least 32 characters
+    \quit 3
+\endif
+
+-- Keep role, ownership and privilege changes atomic. Any later guard or SQL
+-- error aborts the transaction when psql exits with ON_ERROR_STOP enabled.
+BEGIN;
+
 SELECT format(
     'CREATE ROLE %I LOGIN PASSWORD %L NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT NOBYPASSRLS',
     :'migration_role',
@@ -99,3 +123,5 @@ WHERE rolname IN (:'runtime_role', :'migration_role')\gset
     \echo Runtime and migration roles must not be superuser or BYPASSRLS
     \quit 3
 \endif
+
+COMMIT;
