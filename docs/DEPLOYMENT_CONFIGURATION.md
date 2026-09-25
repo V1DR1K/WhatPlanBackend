@@ -1,0 +1,9 @@
+# Deployment configuration
+
+`RuntimeProperties` validates the production configuration during application startup. Startup fails if the auth service URL is malformed, the PostgreSQL JDBC URL embeds credentials, the runtime/migration/admin database users overlap, runtime and migration passwords are reused or shorter than 32 characters, the Redis password is weak/placeholder, or secure session cookies are disabled. The JWT key/issuer/audience/TTL and allowed browser origins are validated by their owning auth components.
+
+Use independently generated secrets from the deployment secret manager. `.env.example` contains placeholders only; it is not a runnable secret file. Keep `POSTGRES_USER` as the administrative/bootstrap account and provide separate `DATABASE_RUNTIME_USER` and `DATABASE_MIGRATION_USER` credentials provisioned by `infra/provision-runtime-role.sql`. The backend receives only the admin username for a non-secret distinctness check; it never receives the PostgreSQL admin password.
+
+The Compose backend is attached to both its private application network and the existing external `kaza_default` network, where the central auth service is expected to be reachable at the configured `AUTH_SERVICE_URL`. Create/verify that external network and attach the auth service to it before deployment. Do not publish PostgreSQL or Redis ports. The Compose file does not terminate public TLS: the public reverse proxy must do so, enforce HTTPS/HSTS/security headers, restrict access to the frontend/backend routes, and ensure only its known addresses are trusted in `TRUSTED_PROXY_ADDRESSES`.
+
+These checks validate configuration shape and separation, not the effective PostgreSQL role flags, firewall, DNS, TLS certificate, proxy chain, or central-auth deployment. Verify those in the target environment with the procedures in `infra/postgres-runtime-role.md` and the public smoke tests before release.

@@ -35,6 +35,15 @@ app.auth-refresh-cookie-ttl-seconds: ${AUTH_REFRESH_COOKIE_TTL_SECONDS:604800}
 app.auth-service-connect-timeout-seconds: ${AUTH_SERVICE_CONNECT_TIMEOUT_SECONDS:3}
 app.auth-service-read-timeout-seconds: ${AUTH_SERVICE_READ_TIMEOUT_SECONDS:5}
 app.rate-limit.trusted-proxy-addresses: ${TRUSTED_PROXY_ADDRESSES:}
+app.runtime.auth-service-url: ${AUTH_SERVICE_URL}
+app.runtime.database-url: ${DATABASE_URL}
+app.runtime.database-admin-user: ${DATABASE_ADMIN_USER}
+app.runtime.database-runtime-user: ${DATABASE_USER}
+app.runtime.database-runtime-password: ${DATABASE_PASSWORD}
+app.runtime.database-migration-user: ${DATABASE_MIGRATION_USER}
+app.runtime.database-migration-password: ${DATABASE_MIGRATION_PASSWORD}
+app.runtime.redis-password: ${REDIS_PASSWORD}
+app.runtime.auth-cookie-secure: ${AUTH_COOKIE_SECURE:true}
 app.tmdb.read-access-token: ${TMDB_READ_ACCESS_TOKEN}
 app.tmdb.connect-timeout-seconds: ${TMDB_CONNECT_TIMEOUT_SECONDS:5}
 app.tmdb.request-timeout-seconds: ${TMDB_REQUEST_TIMEOUT_SECONDS:8}
