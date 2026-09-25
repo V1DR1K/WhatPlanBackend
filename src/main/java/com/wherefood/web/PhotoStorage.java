@@ -19,6 +19,7 @@ import java.nio.file.Path;
 import java.time.Instant;
 import java.util.Base64;
 import java.util.Iterator;
+import java.util.concurrent.Semaphore;
 import java.util.concurrent.TimeUnit;
 
 @Service
@@ -28,14 +29,23 @@ public class PhotoStorage {
  private static final long DEFAULT_MAX_PIXELS = 25_000_000L;
  private static final int DEFAULT_MAX_DIMENSION = 8_000;
  private static final long DEFAULT_PROCESS_TIMEOUT_SECONDS = 10;
+ private static final int DEFAULT_MAX_CONCURRENT_PROCESSES = 2;
  private final long maxUploadBytes;
  private final long maxDecodedBytes;
  private final long maxPixels;
  private final int maxDimension;
  private final long processTimeoutSeconds;
+ private final Semaphore processingSlots;
 
  public PhotoStorage() {
-  this(DEFAULT_MAX_UPLOAD_BYTES, DEFAULT_MAX_DECODED_BYTES, DEFAULT_MAX_PIXELS, DEFAULT_MAX_DIMENSION, DEFAULT_PROCESS_TIMEOUT_SECONDS);
+  this(DEFAULT_MAX_UPLOAD_BYTES, DEFAULT_MAX_DECODED_BYTES, DEFAULT_MAX_PIXELS, DEFAULT_MAX_DIMENSION,
+          DEFAULT_PROCESS_TIMEOUT_SECONDS, DEFAULT_MAX_CONCURRENT_PROCESSES);
+ }
+
+ public PhotoStorage(
+   long maxUploadBytes, long maxDecodedBytes, long maxPixels, int maxDimension, long processTimeoutSeconds) {
+  this(maxUploadBytes, maxDecodedBytes, maxPixels, maxDimension, processTimeoutSeconds,
+          DEFAULT_MAX_CONCURRENT_PROCESSES);
  }
 
  @org.springframework.beans.factory.annotation.Autowired
@@ -44,8 +54,10 @@ public class PhotoStorage {
    @org.springframework.beans.factory.annotation.Value("${app.images.max-decoded-bytes:52428800}") long maxDecodedBytes,
    @org.springframework.beans.factory.annotation.Value("${app.images.max-pixels:25000000}") long maxPixels,
    @org.springframework.beans.factory.annotation.Value("${app.images.max-dimension:8000}") int maxDimension,
-   @org.springframework.beans.factory.annotation.Value("${app.images.process-timeout-seconds:10}") long processTimeoutSeconds) {
-  if (maxUploadBytes <= 0 || maxDecodedBytes <= 0 || maxPixels <= 0 || maxDimension <= 0 || processTimeoutSeconds <= 0) {
+   @org.springframework.beans.factory.annotation.Value("${app.images.process-timeout-seconds:10}") long processTimeoutSeconds,
+   @org.springframework.beans.factory.annotation.Value("${app.images.max-concurrent-processes:2}") int maxConcurrentProcesses) {
+  if (maxUploadBytes <= 0 || maxDecodedBytes <= 0 || maxPixels <= 0 || maxDimension <= 0
+          || processTimeoutSeconds <= 0 || maxConcurrentProcesses <= 0) {
    throw new IllegalArgumentException("Image processing limits must be positive");
   }
   this.maxUploadBytes = maxUploadBytes;
@@ -53,6 +65,7 @@ public class PhotoStorage {
   this.maxPixels = maxPixels;
   this.maxDimension = maxDimension;
   this.processTimeoutSeconds = processTimeoutSeconds;
+  this.processingSlots = new Semaphore(maxConcurrentProcesses);
  }
 
  public ItemPhoto store(Item item, MultipartFile upload) throws IOException {
@@ -111,17 +124,26 @@ public class PhotoStorage {
   }
  private ImageData imageData(MultipartFile upload) throws IOException {
    if (upload == null || upload.isEmpty() || upload.getSize() > maxUploadBytes) throw new ResponseStatusException(HttpStatus.PAYLOAD_TOO_LARGE, "El archivo de imagen supera el límite permitido");
+   if (!processingSlots.tryAcquire()) {
+    throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE, "El procesamiento de imágenes está ocupado. Intentá nuevamente en unos instantes.");
+   }
+   try {
     byte[] source = upload.getBytes();
     if (source.length > maxUploadBytes) throw new ResponseStatusException(HttpStatus.PAYLOAD_TOO_LARGE, "El archivo de imagen supera el límite permitido");
     BufferedImage image = read(source);
     if (image == null) throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "La foto debe ser una imagen válida");
     validateDimensions(image);
-   image = orient(image, source);
-   return new ImageData(Base64.getEncoder().encodeToString(render(image, 1600)),Base64.getEncoder().encodeToString(render(image, 480)),image.getWidth(),image.getHeight());
+    image = orient(image, source);
+    return new ImageData(Base64.getEncoder().encodeToString(render(image, 1600)),
+            Base64.getEncoder().encodeToString(render(image, 480)), image.getWidth(), image.getHeight());
+   } finally {
+    processingSlots.release();
+   }
   }
 
   private BufferedImage read(byte[] source) throws IOException {
     ImageIO.setUseCache(false);
+    validateWebpDimensions(source);
     if (!isWebp(source)) {
      try (ImageInputStream input = ImageIO.createImageInputStream(new ByteArrayInputStream(source))) {
       if (input == null) return null;
@@ -161,9 +183,68 @@ public class PhotoStorage {
 
   private void validateDimensions(int width, int height) {
    long pixels = (long) width * height;
-   if (width > maxDimension || height > maxDimension || pixels > maxPixels) {
+   if (width <= 0 || height <= 0 || width > maxDimension || height > maxDimension
+           || pixels > maxPixels || pixels > maxDecodedBytes / Integer.BYTES) {
     throw new ResponseStatusException(HttpStatus.PAYLOAD_TOO_LARGE, "Las dimensiones de la imagen superan el límite permitido");
    }
+  }
+
+  private void validateWebpDimensions(byte[] source) {
+   if (!isWebp(source)) return;
+   if (source.length < 20 || unsignedInt32(source, 4) != source.length - 8L) {
+    throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "La foto WebP no es válida");
+   }
+
+   long offset = 12;
+   while (offset + 8 <= source.length) {
+    int chunk = (int) offset;
+    long chunkSize = unsignedInt32(source, chunk + 4);
+    long payload = offset + 8;
+    long end = payload + chunkSize;
+    if (end > source.length) throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "La foto WebP no es válida");
+
+    int width = 0;
+    int height = 0;
+    int data = (int) payload;
+    if (matches(source, chunk, "VP8X") && chunkSize >= 10) {
+     width = 1 + unsignedInt24(source, data + 4);
+     height = 1 + unsignedInt24(source, data + 7);
+    } else if (matches(source, chunk, "VP8 ") && chunkSize >= 10
+            && source[data + 3] == (byte) 0x9d && source[data + 4] == 0x01 && source[data + 5] == 0x2a) {
+     width = littleEndian16(source, data + 6) & 0x3fff;
+     height = littleEndian16(source, data + 8) & 0x3fff;
+    } else if (matches(source, chunk, "VP8L") && chunkSize >= 5 && source[data] == 0x2f) {
+     width = 1 + (source[data + 1] & 0x3f) + ((source[data + 2] & 0x3f) << 8);
+     height = 1 + ((source[data + 2] & 0xc0) >> 6) + ((source[data + 3] & 0xff) << 2)
+             + ((source[data + 4] & 0x0f) << 10);
+    }
+    if (width > 0 && height > 0) {
+     validateDimensions(width, height);
+     return;
+    }
+    offset = end + (chunkSize & 1);
+   }
+   throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "La foto WebP no contiene dimensiones reconocibles");
+  }
+
+  private static boolean matches(byte[] source, int offset, String value) {
+   for (int index = 0; index < value.length(); index++) {
+    if (source[offset + index] != (byte) value.charAt(index)) return false;
+   }
+   return true;
+  }
+
+  private static int littleEndian16(byte[] source, int offset) {
+   return (source[offset] & 0xff) | ((source[offset + 1] & 0xff) << 8);
+  }
+
+  private static int unsignedInt24(byte[] source, int offset) {
+   return (source[offset] & 0xff) | ((source[offset + 1] & 0xff) << 8) | ((source[offset + 2] & 0xff) << 16);
+  }
+
+  private static long unsignedInt32(byte[] source, int offset) {
+   return (source[offset] & 0xffL) | ((source[offset + 1] & 0xffL) << 8)
+           | ((source[offset + 2] & 0xffL) << 16) | ((source[offset + 3] & 0xffL) << 24);
   }
 
   private BufferedImage readDecoded(Path output) throws IOException {

@@ -49,6 +49,7 @@ services:
       REDIS_HOST: redis
       REDIS_PORT: 6379
       REDIS_PASSWORD: ${REDIS_PASSWORD:?REDIS_PASSWORD is required}
+      IMAGE_MAX_CONCURRENT_PROCESSES: ${IMAGE_MAX_CONCURRENT_PROCESSES:-2}
     depends_on:
       postgres:
         condition: service_healthy
