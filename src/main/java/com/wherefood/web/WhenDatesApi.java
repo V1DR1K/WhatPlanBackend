@@ -95,7 +95,7 @@ public class WhenDatesApi {
  }
 
  @GetMapping(value = "/photos/{photoId}", produces = "image/webp") ResponseEntity<byte[]> photo(@PathVariable Long photoId, @RequestParam(defaultValue = "false") boolean thumbnail) {
-   SpecialDateOccurrencePhoto photo = photos.findDetailedByIdAndCoupleId(photoId, CoupleContext.current()).orElseThrow(() -> notFound("Foto")); return ResponseEntity.ok().cacheControl(CacheControl.maxAge(Duration.ofDays(30)).cachePrivate()).contentType(MediaType.valueOf("image/webp")).body(storage.bytes(thumbnail ? photo.thumbnailBase64 : photo.imageBase64));
+   SpecialDateOccurrencePhoto photo = photos.findDetailedByIdAndCoupleId(photoId, CoupleContext.current()).orElseThrow(() -> notFound("Foto")); return ResponseEntity.ok().cacheControl(CacheControl.noStore()).contentType(MediaType.valueOf("image/webp")).body(storage.bytes(thumbnail ? photo.thumbnailBase64 : photo.imageBase64));
  }
 
   private List<WhenDateEntryDto> entries(LocalDate from, LocalDate to, Long requestedSpecialDateId) {

@@ -28,7 +28,7 @@ class ApiMediaTest {
  }
 
  @Test
-  void servesTheRequestedItemPhotoVariantAsCacheableWebp() {
+  void servesTheRequestedItemPhotoVariantWithoutCachingIt() {
   Items items = mock(Items.class);
     Photos photos = mock(Photos.class);
     Item item = new Item();
@@ -44,6 +44,7 @@ class ApiMediaTest {
    var response = new Api(null, null, null, null, null, items, photos, null, null, null, null, null, new PhotoStorage()).itemPhoto(42L, true);
 
   assertEquals("image/webp", response.getHeaders().getContentType().toString());
+  assertEquals("no-store", response.getHeaders().getCacheControl());
   assertArrayEquals(new byte[] {4, 5}, response.getBody());
   }
 

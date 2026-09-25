@@ -32,6 +32,7 @@ public final class ProblemDetailsSupport {
         problem.setProperty("requestId", requestId);
         extensions.forEach((key, value) -> problem.setProperty(key, value));
         return ResponseEntity.status(status).contentType(MediaType.APPLICATION_PROBLEM_JSON)
+                .header("Cache-Control", "no-store").header("Pragma", "no-cache")
                 .header("X-Request-Id", requestId).body(problem);
     }
 
