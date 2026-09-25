@@ -28,7 +28,6 @@ import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
-import org.flywaydb.core.Flyway;
 import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.containers.PostgreSQLContainer;
 import org.testcontainers.junit.jupiter.Container;
@@ -52,29 +51,8 @@ class CoupleHttpIsolationIntegrationTest {
     private static final UUID COUPLE_B_ID = UUID.fromString("c8f36af3-4259-4648-aace-dd135a9f0102");
     private static final KeyPair JWT_KEYS = newRsaKeyPair();
 
-    private static final class LegacyPostgresContainer extends PostgreSQLContainer<LegacyPostgresContainer> {
-        private LegacyPostgresContainer() {
-            super("postgres:16-alpine");
-        }
-
-        @Override
-        public void start() {
-            super.start();
-            Flyway.configure().dataSource(getJdbcUrl(), "whatplan_migrator",
-                            "test-only-migration-password-0123456789")
-                    .target("44").load().migrate();
-            try (Connection connection = DriverManager.getConnection(getJdbcUrl(), getUsername(), getPassword());
-                    PreparedStatement statement = connection.prepareStatement(
-                            "insert into users(username, role) values ('tomas', 'USER'), ('avril', 'USER')")) {
-                statement.executeUpdate();
-            } catch (Exception exception) {
-                throw new IllegalStateException("Unable to seed legacy users for tenant migration test", exception);
-            }
-        }
-    }
-
     @Container
-    private static final LegacyPostgresContainer POSTGRES = new LegacyPostgresContainer()
+    private static final PostgreSQLContainer<?> POSTGRES = new PostgreSQLContainer<>("postgres:16-alpine")
                     .withDatabaseName("whatplan_test")
                     .withUsername("whatplan_admin")
                     .withPassword(ADMIN_PASSWORD)

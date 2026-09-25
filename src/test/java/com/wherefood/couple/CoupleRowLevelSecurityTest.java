@@ -54,7 +54,7 @@ class CoupleRowLevelSecurityTest {
                 .migrate();
 
         try (Connection admin = adminConnection(); Statement statement = admin.createStatement()) {
-            statement.executeUpdate("insert into users(username, role) values ('tomas', 'USER'), ('avril', 'USER'), ('charlie', 'USER'), ('dana', 'USER'), ('erin', 'USER'), ('frank', 'USER'), ('grace', 'USER'), ('hannah', 'USER')");
+            statement.executeUpdate("insert into users(username, role) values ('charlie', 'USER'), ('dana', 'USER'), ('erin', 'USER'), ('frank', 'USER'), ('grace', 'USER'), ('hannah', 'USER')");
             statement.executeUpdate("insert into places(name, category_id, created_by, updated_by) values ('Legacy place', 1, 1, 1)");
         }
 
