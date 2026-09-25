@@ -103,6 +103,16 @@ class CoupleHttpIsolationIntegrationTest {
     void productionHttpChainKeepsReadsWritesReviewsAndPhotosInsideTheAuthenticatedCouple() throws Exception {
         Fixture fixture = seedFixture();
 
+        ResponseEntity<String> unauthenticated = http.getForEntity(url("/api/places"), String.class);
+        JsonNode unauthenticatedProblem = objectMapper.readTree(unauthenticated.getBody());
+        assertThat(unauthenticated.getStatusCode().value()).isEqualTo(401);
+        assertThat(unauthenticated.getHeaders().getContentType().isCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON)).isTrue();
+        assertThat(unauthenticatedProblem.path("type").asText()).isEqualTo("about:blank");
+        assertThat(unauthenticatedProblem.path("status").asInt()).isEqualTo(401);
+        assertThat(unauthenticatedProblem.path("errorCode").asText()).isEqualTo("UNAUTHORIZED");
+        assertThat(unauthenticated.getHeaders().getFirst("X-Request-Id"))
+                .isEqualTo(unauthenticatedProblem.path("requestId").asText());
+
         ResponseEntity<String> placesForA = get("/api/places", USER_A1_AUTH_ID, null);
         ResponseEntity<String> placesForB = get("/api/places", USER_B_AUTH_ID, null);
         assertThat(placesForA.getStatusCode().value()).isEqualTo(200);

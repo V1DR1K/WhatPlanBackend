@@ -12,6 +12,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ProblemDetail;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.server.ResponseStatusException;
+import org.springframework.web.ErrorResponseException;
 
 class ApiExceptionHandlerTest {
     private final ApiExceptionHandler handler = new ApiExceptionHandler();
@@ -57,5 +58,25 @@ class ApiExceptionHandlerTest {
         assertEquals(HttpStatus.INTERNAL_SERVER_ERROR, response.getStatusCode());
         assertEquals("INTERNAL_ERROR", response.getBody().getProperties().get("errorCode"));
         assertFalse(response.getBody().getDetail().contains("secret stack detail"));
+    }
+
+    @Test
+    void usesStableRateLimitCodeForStatusExceptions() {
+        ResponseEntity<ProblemDetail> response = handler.status(
+                new ResponseStatusException(HttpStatus.TOO_MANY_REQUESTS, "internal limiter detail"));
+
+        assertEquals(HttpStatus.TOO_MANY_REQUESTS, response.getStatusCode());
+        assertEquals("RATE_LIMITED", response.getBody().getProperties().get("errorCode"));
+        assertEquals("Demasiadas solicitudes. Intentá nuevamente más tarde.", response.getBody().getDetail());
+    }
+
+    @Test
+    void mapsFrameworkErrorsToSanitizedProblemDetails() {
+        ResponseEntity<ProblemDetail> response = handler.frameworkError(new ErrorResponseException(HttpStatus.BAD_REQUEST));
+
+        assertEquals(HttpStatus.BAD_REQUEST, response.getStatusCode());
+        assertEquals("application/problem+json", response.getHeaders().getContentType().toString());
+        assertEquals("INVALID_REQUEST", response.getBody().getProperties().get("errorCode"));
+        assertEquals(400, response.getBody().getStatus());
     }
 }

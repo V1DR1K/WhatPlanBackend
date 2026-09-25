@@ -14,6 +14,7 @@ import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 import org.springframework.web.server.ResponseStatusException;
+import org.springframework.web.ErrorResponseException;
 import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.web.HttpRequestMethodNotSupportedException;
 import org.springframework.web.HttpMediaTypeNotSupportedException;
@@ -21,9 +22,13 @@ import org.springframework.web.servlet.resource.NoResourceFoundException;
 import org.springframework.web.multipart.MaxUploadSizeExceededException;
 import jakarta.validation.ConstraintViolationException;
 import org.springframework.web.servlet.NoHandlerFoundException;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 @RestControllerAdvice
 public class ApiExceptionHandler {
+    private static final Logger LOG = LoggerFactory.getLogger(ApiExceptionHandler.class);
+
     @ExceptionHandler(DataIntegrityViolationException.class)
     ResponseEntity<ProblemDetail> conflict(DataIntegrityViolationException exception) {
         if (isCoupleMediaQuotaViolation(exception)) {
@@ -64,7 +69,27 @@ public class ApiExceptionHandler {
             case BAD_GATEWAY, SERVICE_UNAVAILABLE, GATEWAY_TIMEOUT -> "El servicio requerido no está disponible temporalmente.";
             default -> resolved.is5xxServerError() ? "Ocurrió un error interno." : "No se pudo completar la solicitud.";
         };
-        return ProblemDetailsSupport.response(resolved, resolved.name(), detail);
+        return ProblemDetailsSupport.response(resolved, stableErrorCode(resolved), detail);
+    }
+
+    @ExceptionHandler(ErrorResponseException.class)
+    ResponseEntity<ProblemDetail> frameworkError(ErrorResponseException exception) {
+        HttpStatus status = HttpStatus.resolve(exception.getStatusCode().value());
+        HttpStatus resolved = status == null ? HttpStatus.INTERNAL_SERVER_ERROR : status;
+        String detail = switch (resolved) {
+            case BAD_REQUEST -> "La solicitud tiene un formato o parámetro inválido.";
+            case NOT_FOUND -> "No se encontró el recurso solicitado.";
+            case METHOD_NOT_ALLOWED -> "El método HTTP no está permitido para esta ruta.";
+            case NOT_ACCEPTABLE -> "El formato de respuesta solicitado no está disponible.";
+            case UNSUPPORTED_MEDIA_TYPE -> "El formato de contenido no está soportado.";
+            case PAYLOAD_TOO_LARGE -> "La solicitud supera el tamaño permitido.";
+            case UNAUTHORIZED -> "Autenticación requerida.";
+            case FORBIDDEN -> "La solicitud no está permitida.";
+            default -> resolved.is5xxServerError()
+                    ? "Ocurrió un error interno. Intentá nuevamente más tarde."
+                    : "No se pudo completar la solicitud.";
+        };
+        return ProblemDetailsSupport.response(resolved, stableErrorCode(resolved), detail);
     }
 
     @ExceptionHandler(MethodArgumentNotValidException.class)
@@ -121,8 +146,29 @@ public class ApiExceptionHandler {
     }
 
     @ExceptionHandler(Exception.class)
-    ResponseEntity<ProblemDetail> internalError(Exception ignored) {
-        return ProblemDetailsSupport.response(HttpStatus.INTERNAL_SERVER_ERROR, "INTERNAL_ERROR",
-                "Ocurrió un error interno. Intentá nuevamente más tarde.");
+    ResponseEntity<ProblemDetail> internalError(Exception exception) {
+        ResponseEntity<ProblemDetail> response = ProblemDetailsSupport.response(HttpStatus.INTERNAL_SERVER_ERROR,
+                "INTERNAL_ERROR", "Ocurrió un error interno. Intentá nuevamente más tarde.");
+        Object requestId = response.getBody().getProperties().get("requestId");
+        LOG.error("Unhandled API error; requestId={}, exceptionType={}", requestId, exception.getClass().getName());
+        return response;
+    }
+
+    private static String stableErrorCode(HttpStatus status) {
+        return switch (status) {
+            case BAD_REQUEST -> "INVALID_REQUEST";
+            case UNAUTHORIZED -> "UNAUTHORIZED";
+            case FORBIDDEN -> "FORBIDDEN";
+            case NOT_FOUND -> "NOT_FOUND";
+            case METHOD_NOT_ALLOWED -> "METHOD_NOT_ALLOWED";
+            case NOT_ACCEPTABLE -> "NOT_ACCEPTABLE";
+            case CONFLICT -> "CONFLICT";
+            case PAYLOAD_TOO_LARGE -> "UPLOAD_TOO_LARGE";
+            case UNSUPPORTED_MEDIA_TYPE -> "UNSUPPORTED_MEDIA_TYPE";
+            case TOO_MANY_REQUESTS -> "RATE_LIMITED";
+            case BAD_GATEWAY, GATEWAY_TIMEOUT -> "UPSTREAM_UNAVAILABLE";
+            case SERVICE_UNAVAILABLE -> "SERVICE_UNAVAILABLE";
+            default -> status.is5xxServerError() ? "INTERNAL_ERROR" : status.name();
+        };
     }
 }
