@@ -125,6 +125,17 @@ class CoupleHttpIsolationIntegrationTest {
         assertThat(activitiesForB.getStatusCode().value()).isEqualTo(200);
         assertThat(activitiesForB.getBody()).contains("Museo pareja B").doesNotContain("Museo pareja A");
 
+        ResponseEntity<String> plansForA = get("/api/why-fun/plans?categoryId=" + fixture.activityCategoryId()
+                + "&subcategoryId=" + fixture.activitySubcategoryId() + "&timeline=UNSCHEDULED&size=30",
+                USER_A1_AUTH_ID, null);
+        ResponseEntity<String> plansForB = get("/api/why-fun/plans?categoryId=" + fixture.activityCategoryId()
+                + "&subcategoryId=" + fixture.activitySubcategoryId() + "&timeline=UNSCHEDULED&size=30",
+                USER_B_AUTH_ID, null);
+        assertThat(plansForA.getStatusCode().value()).isEqualTo(200);
+        assertThat(plansForA.getBody()).contains("Museo pareja A").doesNotContain("Museo pareja B");
+        assertThat(plansForB.getStatusCode().value()).isEqualTo(200);
+        assertThat(plansForB.getBody()).contains("Museo pareja B").doesNotContain("Museo pareja A");
+
         ResponseEntity<String> filmsForA = get("/api/films?search=private&size=30", USER_A1_AUTH_ID, null);
         ResponseEntity<String> filmsForB = get("/api/films?search=private&size=30", USER_B_AUTH_ID, null);
         assertThat(filmsForA.getStatusCode().value()).isEqualTo(200);

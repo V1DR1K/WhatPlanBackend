@@ -65,14 +65,18 @@ public class WhyFunApi {
  @GetMapping("/plans") Slice<FunPlanDto> listPlans(@RequestParam(required = false) Long categoryId, @RequestParam(required = false) Long subcategoryId, @RequestParam(required = false) String timeline, @RequestParam(required = false) Long cursor, @RequestParam(defaultValue = "12") int size) {
   int limit = Math.max(1, Math.min(size, 30));
   LocalDate now = RosarioClock.today();
-  Comparator<WhyFunVenue> order = "UPCOMING".equals(timeline) ? Comparator.comparing((WhyFunVenue value) -> value.scheduledAt, Comparator.nullsLast(Comparator.naturalOrder())) : "PAST".equals(timeline) ? Comparator.comparing((WhyFunVenue value) -> value.scheduledAt, Comparator.nullsLast(Comparator.reverseOrder())) : Comparator.comparing((WhyFunVenue value) -> value.createdAt).reversed();
-  List<WhyFunVenue> values = venues.findAllByCoupleId(CoupleContext.current()).stream().filter(value -> categoryId == null || value.category.id.equals(categoryId)).filter(value -> subcategoryId == null || value.subcategory.id.equals(subcategoryId)).filter(value -> matchesTimeline(value, timeline, now)).sorted(order.thenComparing(value -> value.id, Comparator.reverseOrder())).toList();
-  int offset = cursor == null ? 0 : Math.max(0, cursor.intValue());
-  List<WhyFunVenue> page = values.stream().skip(offset).limit(limit).toList();
-  List<Long> ids = page.stream().map(value -> value.id).toList();
-  Map<Long, List<FunReviewDto>> reviewMap = reviewMap(ids);
+  long offset = cursor == null ? 0 : Math.max(0, cursor);
+  if (offset > 1_000_000) throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Cursor inválido");
+  List<Long> ids = venues.findPlanPageIdsByCoupleId(CoupleContext.current(), categoryId, subcategoryId,
+          timeline, now, limit + 1, offset);
+  Long next = ids.size() > limit ? offset + limit : null;
+  List<Long> pageIds = ids.stream().limit(limit).toList();
+  if (pageIds.isEmpty()) return new Slice<>(List.of(), next);
+  Map<Long, WhyFunVenue> byId = venues.findPlansByIdInAndCoupleId(pageIds, CoupleContext.current()).stream()
+          .collect(Collectors.toMap(value -> value.id, value -> value));
+  List<WhyFunVenue> page = pageIds.stream().map(byId::get).filter(Objects::nonNull).toList();
+  Map<Long, List<FunReviewDto>> reviewMap = reviewMap(pageIds);
   Map<Long, FunPhotoDto> coverMap = covers(page);
-  Long next = offset + page.size() < values.size() ? (long) offset + page.size() : null;
   return new Slice<>(page.stream().map(value -> plan(value, coverMap.get(value.id), List.of(), reviewMap.getOrDefault(value.id, List.of()))).toList(), next);
  }
  @GetMapping("/plans/{id}") FunPlanDto getPlan(@PathVariable Long id) { return plan(findPlan(id)); }
@@ -88,7 +92,7 @@ public class WhyFunApi {
  private WhyFunVenue findPlan(Long id) { return venues.findDetailedByIdAndCoupleId(id, CoupleContext.current()).orElseThrow(() -> notFound("Plan")); }
  private FunPlanDto plan(WhyFunVenue value) { List<WhyFunVenuePhoto> planPhotos = photos.findByVenueIdAndCoupleIdOrderByIdAsc(value.id, CoupleContext.current()); List<FunReviewDto> planReviews = reviews.summariesByVenueIdAndCoupleId(value.id, CoupleContext.current()).stream().map(WhyFunApi::review).toList(); return plan(value, cover(value, planPhotos), planPhotos.stream().map(WhyFunApi::photo).toList(), planReviews); }
   private static FunPlanDto plan(WhyFunVenue value, FunPhotoDto cover, List<FunPhotoDto> planPhotos, List<FunReviewDto> planReviews) { double rating = planReviews.stream().mapToInt(FunReviewDto::rating).average().orElse(0); List<ActivityScheduleDto> schedules = value.schedules.stream().sorted(Comparator.comparing((WhyFunVenueSchedule schedule) -> schedule.dayOfWeek).thenComparing(schedule -> schedule.opensAt)).map(schedule -> new ActivityScheduleDto(schedule.dayOfWeek, schedule.opensAt, schedule.closesAt)).toList(); return new FunPlanDto(value.id, value.name, value.address, value.scheduledAt, categorySummary(value.category), categorySummary(value.subcategory), value.createdBy.username, round(rating), planReviews.size(), cover, planPhotos, planReviews, schedules, value.createdAt, value.updatedAt); }
- private Map<Long, FunPhotoDto> covers(List<WhyFunVenue> plans) { if (plans.isEmpty()) return Map.of(); Map<Long, List<WhyFunVenuePhoto>> photosByPlan = photos.findByVenueIdInAndCoupleIdOrderByVenueIdAscIdAsc(plans.stream().map(value -> value.id).toList(), CoupleContext.current()).stream().collect(Collectors.groupingBy(value -> value.venue.id)); return plans.stream().collect(Collectors.toMap(value -> value.id, value -> cover(value, photosByPlan.getOrDefault(value.id, List.of())), (first, ignored) -> first)); }
+ private Map<Long, FunPhotoDto> covers(List<WhyFunVenue> plans) { if (plans.isEmpty()) return Map.of(); Map<Long, List<WhyFunVenuePhoto>> photosByPlan = photos.findByVenueIdInAndCoupleIdOrderByVenueIdAscIdAsc(plans.stream().map(value -> value.id).toList(), CoupleContext.current()).stream().collect(Collectors.groupingBy(value -> value.venue.id)); Map<Long, FunPhotoDto> result = new HashMap<>(); for (WhyFunVenue plan : plans) { FunPhotoDto cover = cover(plan, photosByPlan.getOrDefault(plan.id, List.of())); if (cover != null) result.put(plan.id, cover); } return result; }
  private static FunPhotoDto cover(WhyFunVenue plan, List<WhyFunVenuePhoto> values) { WhyFunVenuePhoto selected = values.stream().filter(value -> value.id.equals(plan.coverPhotoId)).findFirst().orElse(values.isEmpty() ? null : values.getFirst()); return selected == null ? null : photo(selected); }
  private Map<Long, List<FunReviewDto>> reviewMap(List<Long> ids) { if (ids.isEmpty()) return Map.of(); return reviews.summariesByVenueIdInAndCoupleId(ids, CoupleContext.current()).stream().collect(Collectors.groupingBy(WhyFunReviewSummary::getVenueId, Collectors.mapping(WhyFunApi::review, Collectors.toList()))); }
  private static boolean matchesTimeline(WhyFunVenue value, String timeline, LocalDate now) { return switch (timeline == null ? "ALL" : timeline) { case "UPCOMING" -> value.scheduledAt != null && !value.scheduledAt.isBefore(now); case "PAST" -> value.scheduledAt != null && value.scheduledAt.isBefore(now); case "UNSCHEDULED" -> value.scheduledAt == null; default -> true; }; }

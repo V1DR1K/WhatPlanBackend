@@ -394,6 +394,32 @@ public final class Repositories {
   public interface WhyFunVenues extends CoupleScopedRepository<WhyFunVenue> {
      @EntityGraph(attributePaths = {"category", "subcategory", "createdBy", "updatedBy", "schedules"}) List<WhyFunVenue> findAllByCoupleId(java.util.UUID coupleId);
    @Query(value = """
+           select venue.id
+           from why_fun_venues venue
+           where venue.couple_id = :coupleId
+             and (cast(:categoryId as bigint) is null or venue.category_id = cast(:categoryId as bigint))
+             and (cast(:subcategoryId as bigint) is null or venue.subcategory_id = cast(:subcategoryId as bigint))
+             and (cast(:timeline as text) is null
+                  or cast(:timeline as text) not in ('UPCOMING', 'PAST', 'UNSCHEDULED')
+                  or (cast(:timeline as text) = 'UPCOMING' and venue.scheduled_at is not null and venue.scheduled_at >= :today)
+                  or (cast(:timeline as text) = 'PAST' and venue.scheduled_at is not null and venue.scheduled_at < :today)
+                  or (cast(:timeline as text) = 'UNSCHEDULED' and venue.scheduled_at is null))
+           order by
+             case when cast(:timeline as text) = 'UPCOMING' then venue.scheduled_at end asc nulls last,
+             case when cast(:timeline as text) = 'PAST' then venue.scheduled_at end desc nulls last,
+             case when cast(:timeline as text) not in ('UPCOMING', 'PAST') or cast(:timeline as text) is null then venue.created_at end desc,
+             venue.id desc
+           limit :limit offset :offset
+           """, nativeQuery = true)
+   List<Long> findPlanPageIdsByCoupleId(@Param("coupleId") java.util.UUID coupleId,
+           @Param("categoryId") Long categoryId, @Param("subcategoryId") Long subcategoryId,
+           @Param("timeline") String timeline, @Param("today") java.time.LocalDate today,
+           @Param("limit") int limit, @Param("offset") long offset);
+   @EntityGraph(attributePaths = {"category", "subcategory", "createdBy", "updatedBy", "schedules"})
+   @Query("select venue from WhyFunVenue venue where venue.id in :ids and venue.coupleId = :coupleId")
+   List<WhyFunVenue> findPlansByIdInAndCoupleId(@Param("ids") Collection<Long> ids,
+           @Param("coupleId") java.util.UUID coupleId);
+   @Query(value = """
            with activity_ratings as (
                select visit.venue_id, avg(review.rating) as rating
                from why_fun_visits visit

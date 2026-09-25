@@ -37,7 +37,29 @@ class WhyFunApiTest {
    LocalDate now = LocalDate.of(2026, 7, 22);
    plan.scheduledAt = now.plusDays(1);
   assertTrue((Boolean) matcher.invoke(null, plan, "UPCOMING", now));
-   assertFalse((Boolean) matcher.invoke(null, plan, "PAST", now));
+  assertFalse((Boolean) matcher.invoke(null, plan, "PAST", now));
+  }
+
+  @Test
+  void paginatesPlansByTimelineWithinCurrentCouple() {
+   WhyFunVenues venues = mock(WhyFunVenues.class);
+   WhyFunVenuePhotos photos = mock(WhyFunVenuePhotos.class);
+   WhyFunVenueReviews reviews = mock(WhyFunVenueReviews.class);
+   UUID coupleId = UUID.randomUUID(); CoupleContext.set(coupleId);
+   User tomas = new User(); tomas.username = "tomas";
+   WhyFunCategory category = category(1L, "Arte");
+   WhyFunCategory subcategory = category(2L, "Museos"); subcategory.parent = category;
+   WhyFunVenue plan = activity(4L, "Museo pendiente", category, subcategory, tomas, "2026-07-23T00:00:00Z");
+   when(venues.findPlanPageIdsByCoupleId(coupleId, 1L, 2L, "UNSCHEDULED", RosarioClock.today(), 2, 0))
+           .thenReturn(List.of(4L, 5L));
+   when(venues.findPlansByIdInAndCoupleId(List.of(4L), coupleId)).thenReturn(List.of(plan));
+
+   Slice<FunPlanDto> result = new WhyFunApi(null, venues, photos, reviews, null)
+           .listPlans(1L, 2L, "UNSCHEDULED", null, 1);
+
+   assertEquals(List.of(4L), result.content().stream().map(FunPlanDto::id).toList());
+   assertEquals(1L, result.nextCursor());
+   verify(venues).findPlanPageIdsByCoupleId(coupleId, 1L, 2L, "UNSCHEDULED", RosarioClock.today(), 2, 0);
   }
 
   @Test
