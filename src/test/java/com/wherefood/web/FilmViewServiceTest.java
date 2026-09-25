@@ -60,7 +60,7 @@ class FilmViewServiceTest {
             view.id = 90L;
             return view;
         });
-        when(views.findByFilmIdAndCoupleIdOrderByWatchedOnDescIdDesc(42L, null)).thenAnswer(call -> {
+        when(views.findByFilmIdAndCoupleIdOrderByWatchedOnDescIdDesc(42L, coupleId)).thenAnswer(call -> {
             FilmView view = new FilmView();
             view.watchedOn = today;
             return List.of(view);

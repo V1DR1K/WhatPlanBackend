@@ -11,6 +11,7 @@ import com.wherefood.domain.Item;
 import com.wherefood.domain.ItemPhoto;
 import com.wherefood.domain.Place;
 import com.wherefood.domain.PlaceVisit;
+import com.wherefood.config.CoupleContext;
 import com.wherefood.repo.Repositories.Items;
 import com.wherefood.repo.Repositories.Photos;
 import java.util.Base64;
@@ -19,8 +20,12 @@ import java.awt.image.BufferedImage;
 import java.io.ByteArrayOutputStream;
 import javax.imageio.ImageIO;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.AfterEach;
 
 class ApiMediaTest {
+ @AfterEach
+ void clearCoupleContext() { CoupleContext.clear(); }
+
  @Test
  void identifiesWebpBeforeImageIoDecodesIt() {
   assertTrue(PhotoStorage.isWebp(new byte[] {'R', 'I', 'F', 'F', 0, 0, 0, 0, 'W', 'E', 'B', 'P'}));

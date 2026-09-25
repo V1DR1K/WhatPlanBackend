@@ -73,7 +73,9 @@ class CentralJwtTest {
         assertEquals(USER_ID, jwt.subject(token(newKey, Claims.valid())));
         assertThrows(IllegalStateException.class, () -> new CentralJwt(
                 publicPem((RSAPublicKey) newKey.getPublic()), ISSUER, AUDIENCE,
-                String.join(",", publicPem((RSAPublicKey) oldKey.getPublic()), publicPem((RSAPublicKey) rsaKeys().getPublic())), 900));
+                String.join(",", publicPem((RSAPublicKey) oldKey.getPublic()),
+                        publicPem((RSAPublicKey) rsaKeys().getPublic()),
+                        publicPem((RSAPublicKey) rsaKeys().getPublic())), 900));
     }
 
     @Test

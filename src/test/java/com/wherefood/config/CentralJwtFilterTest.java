@@ -44,9 +44,8 @@ class CentralJwtFilterTest {
 
         MockHttpServletRequest request = new MockHttpServletRequest();
         request.addHeader("Authorization", "bearer valid-token");
-        filter.doFilterInternal(request, new MockHttpServletResponse(), mock(FilterChain.class));
-
-        assertEquals(user, SecurityContextHolder.getContext().getAuthentication().getPrincipal());
+        filter.doFilterInternal(request, new MockHttpServletResponse(), (req, res) ->
+                assertEquals(user, SecurityContextHolder.getContext().getAuthentication().getPrincipal()));
     }
 
     @Test
@@ -72,9 +71,8 @@ class CentralJwtFilterTest {
 
         MockHttpServletRequest request = new MockHttpServletRequest();
         request.addHeader("Authorization", "Bearer valid-token");
-        filter.doFilterInternal(request, new MockHttpServletResponse(), mock(FilterChain.class));
-
-        assertEquals(user, SecurityContextHolder.getContext().getAuthentication().getPrincipal());
+        filter.doFilterInternal(request, new MockHttpServletResponse(), (req, res) ->
+                assertEquals(user, SecurityContextHolder.getContext().getAuthentication().getPrincipal()));
     }
 
     @Test

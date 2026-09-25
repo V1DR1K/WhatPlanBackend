@@ -51,7 +51,7 @@ class RuntimePropertiesTest {
         properties.setDatabaseRuntimePassword("runtime-secret-32-characters-long");
         properties.setDatabaseMigrationUser("whatplan_migrator");
         properties.setDatabaseMigrationPassword("migration-secret-32-characters-long");
-        properties.setRedisPassword("redis-secret-32-characters-long");
+        properties.setRedisPassword("redis-secret-with-at-least-32-chars");
         properties.setAuthCookieSecure(true);
         return properties;
     }
