@@ -82,24 +82,23 @@ public class WhyFunActivityApi {
 
   @GetMapping("/activities") @Transactional(readOnly = true) Slice<ActivityDto> listActivities(@RequestParam(required = false) Long categoryId, @RequestParam(required = false) Long subcategoryId, @RequestParam(required = false) String search, @RequestParam(required = false) Boolean visited, @RequestParam(required = false) String sort, @RequestParam(required = false) Long cursor, @RequestParam(defaultValue = "5") int size) {
     int limit = Math.max(1, Math.min(size, 30));
-    String normalizedSearch = search == null || search.isBlank() ? null : search.trim().toLowerCase(Locale.ROOT);
-    List<WhyFunVenue> values = activities.findAllByCoupleId(CoupleContext.current()).stream().filter(value -> categoryId == null || value.category.id.equals(categoryId)).filter(value -> subcategoryId == null || value.subcategory.id.equals(subcategoryId)).filter(value -> normalizedSearch == null || contains(value.name, normalizedSearch) || contains(value.address, normalizedSearch) || contains(value.category.name, normalizedSearch) || contains(value.subcategory.name, normalizedSearch)).toList();
-    Map<Long, Double> ratings = activityRatings(values.stream().map(value -> value.id).toList());
-    Map<Long, Long> visitCounts = activityVisitCounts(values.stream().map(value -> value.id).toList());
-    List<WhyFunVenue> candidates = values.stream().filter(value -> visited == null || visited == (visitCounts.getOrDefault(value.id, 0L) > 0)).toList();
-     Comparator<WhyFunVenue> dateDescending = Comparator.comparing((WhyFunVenue value) -> value.updatedAt, Comparator.nullsLast(Comparator.reverseOrder())).thenComparing(value -> value.createdAt, Comparator.nullsLast(Comparator.reverseOrder())).thenComparing(value -> value.id, Comparator.reverseOrder());
-     Comparator<WhyFunVenue> ordering = switch (sort == null ? "date-desc" : sort.trim().toLowerCase(Locale.ROOT)) {
-     case "name" -> Comparator.comparing((WhyFunVenue value) -> value.name, String.CASE_INSENSITIVE_ORDER).thenComparing(value -> value.id);
-     case "date", "date-desc" -> dateDescending;
-      case "date-asc" -> Comparator.comparing((WhyFunVenue value) -> value.updatedAt, Comparator.nullsLast(Comparator.naturalOrder())).thenComparing(value -> value.createdAt, Comparator.nullsLast(Comparator.naturalOrder())).thenComparing(value -> value.id, Comparator.reverseOrder());
-     case "rating", "rating-desc" -> Comparator.comparing((WhyFunVenue value) -> ratings.get(value.id), Comparator.nullsLast(Comparator.reverseOrder())).thenComparing(dateDescending);
-     case "rating-asc" -> Comparator.comparing((WhyFunVenue value) -> ratings.get(value.id), Comparator.nullsLast(Comparator.naturalOrder())).thenComparing(dateDescending);
-     default -> throw badRequest("Orden inválido");
-    };
     long offset = cursor == null ? 0 : Math.max(0, cursor);
-    List<WhyFunVenue> result = candidates.stream().sorted(ordering).skip(offset).limit(limit + 1L).toList();
-    Long next = result.size() > limit ? offset + limit : null;
-    List<WhyFunVenue> page = result.stream().limit(limit).toList();
+    if (offset > 1_000_000) throw badRequest("Cursor inválido");
+    String normalizedSearch = search == null || search.isBlank() ? null : search.trim().toLowerCase(Locale.ROOT);
+    String normalizedSort = sort == null ? "date-desc" : sort.trim().toLowerCase(Locale.ROOT);
+    if (!Set.of("name", "date", "date-desc", "date-asc", "rating", "rating-desc", "rating-asc").contains(normalizedSort)) {
+     throw badRequest("Orden inválido");
+    }
+    List<Long> ids = activities.findPageIdsByCoupleId(CoupleContext.current(), categoryId, subcategoryId,
+            normalizedSearch, visited, normalizedSort, limit + 1, offset);
+    Long next = ids.size() > limit ? offset + limit : null;
+    List<Long> pageIds = ids.stream().limit(limit).toList();
+    if (pageIds.isEmpty()) return new Slice<>(List.of(), next);
+    Map<Long, WhyFunVenue> byId = activities.findAllByIdInAndCoupleId(pageIds, CoupleContext.current()).stream()
+            .collect(java.util.stream.Collectors.toMap(value -> value.id, value -> value));
+    List<WhyFunVenue> page = pageIds.stream().map(byId::get).filter(Objects::nonNull).toList();
+    Map<Long, Double> ratings = activityRatings(pageIds);
+    Map<Long, Long> visitCounts = activityVisitCounts(pageIds);
     Map<Long, PhotoMetadata> profilesById = profilePhotos(page);
     return new Slice<>(page.stream().map(value -> activity(value, ratings.get(value.id), visitCounts.getOrDefault(value.id, 0L), value.coverPhotoId == null ? null : profilesById.get(value.coverPhotoId))).toList(), next);
   }

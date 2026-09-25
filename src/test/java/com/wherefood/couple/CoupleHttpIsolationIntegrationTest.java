@@ -114,6 +114,17 @@ class CoupleHttpIsolationIntegrationTest {
         assertThat(recipesForB.getStatusCode().value()).isEqualTo(200);
         assertThat(recipesForB.getBody()).contains("Torta pareja B").doesNotContain("Torta pareja A");
 
+        ResponseEntity<String> activitiesForA = get("/api/activities?search=museo&categoryId=" + fixture.activityCategoryId()
+                + "&subcategoryId=" + fixture.activitySubcategoryId() + "&visited=true&sort=rating-asc&size=30",
+                USER_A1_AUTH_ID, null);
+        ResponseEntity<String> activitiesForB = get("/api/activities?search=museo&categoryId=" + fixture.activityCategoryId()
+                + "&subcategoryId=" + fixture.activitySubcategoryId() + "&visited=true&sort=rating-desc&size=30",
+                USER_B_AUTH_ID, null);
+        assertThat(activitiesForA.getStatusCode().value()).isEqualTo(200);
+        assertThat(activitiesForA.getBody()).contains("Museo pareja A").doesNotContain("Museo pareja B");
+        assertThat(activitiesForB.getStatusCode().value()).isEqualTo(200);
+        assertThat(activitiesForB.getBody()).contains("Museo pareja B").doesNotContain("Museo pareja A");
+
         ResponseEntity<String> spoofedCoupleHeader = get("/api/places", USER_A1_AUTH_ID, COUPLE_B_ID.toString());
         assertThat(spoofedCoupleHeader.getStatusCode().value()).isEqualTo(200);
         assertThat(spoofedCoupleHeader.getBody()).contains("Private place A").doesNotContain("Private place B");
@@ -242,7 +253,83 @@ class CoupleHttpIsolationIntegrationTest {
             long cookingB = insertCooking(connection, recipeB, userB, COUPLE_B_ID, "AVRIL");
             insertCookingReview(connection, cookingA, userA1, COUPLE_A_ID, 5);
             insertCookingReview(connection, cookingB, userB, COUPLE_B_ID, 1);
-            return new Fixture(placeA, placeB, categoryId);
+            long activityCategoryId = insertActivityCategory(connection, "HTTP Activity Test", "http-activity-test", null);
+            long activitySubcategoryId = insertActivityCategory(connection, "HTTP Activity Subtest", "http-activity-subtest", activityCategoryId);
+            long activityA = insertActivity(connection, "Museo pareja A", activityCategoryId, activitySubcategoryId, userA1, COUPLE_A_ID);
+            long activityB = insertActivity(connection, "Museo pareja B", activityCategoryId, activitySubcategoryId, userB, COUPLE_B_ID);
+            long activityVisitA = insertActivityVisit(connection, activityA, userA1, COUPLE_A_ID);
+            long activityVisitB = insertActivityVisit(connection, activityB, userB, COUPLE_B_ID);
+            insertActivityReview(connection, activityVisitA, userA1, COUPLE_A_ID, 5);
+            insertActivityReview(connection, activityVisitB, userB, COUPLE_B_ID, 1);
+            return new Fixture(placeA, placeB, categoryId, activityCategoryId, activitySubcategoryId);
+        }
+    }
+
+    private static long insertActivityCategory(Connection connection, String name, String slug, Long parentId)
+            throws Exception {
+        try (PreparedStatement statement = connection.prepareStatement("""
+                insert into why_fun_categories(parent_id, name, slug, icon, active)
+                values (?, ?, ?, 'T', true) returning id
+                """)) {
+            if (parentId == null) statement.setNull(1, java.sql.Types.BIGINT);
+            else statement.setLong(1, parentId);
+            statement.setString(2, name);
+            statement.setString(3, slug);
+            try (ResultSet result = statement.executeQuery()) {
+                result.next();
+                return result.getLong(1);
+            }
+        }
+    }
+
+    private static long insertActivity(Connection connection, String name, long categoryId, long subcategoryId,
+            long authorId, UUID coupleId) throws Exception {
+        try (PreparedStatement statement = connection.prepareStatement("""
+                insert into why_fun_venues(name, address, category_id, subcategory_id, created_by, updated_by, couple_id)
+                values (?, 'Centro', ?, ?, ?, ?, ?) returning id
+                """)) {
+            statement.setString(1, name);
+            statement.setLong(2, categoryId);
+            statement.setLong(3, subcategoryId);
+            statement.setLong(4, authorId);
+            statement.setLong(5, authorId);
+            statement.setObject(6, coupleId);
+            try (ResultSet result = statement.executeQuery()) {
+                result.next();
+                return result.getLong(1);
+            }
+        }
+    }
+
+    private static long insertActivityVisit(Connection connection, long activityId, long authorId, UUID coupleId)
+            throws Exception {
+        try (PreparedStatement statement = connection.prepareStatement("""
+                insert into why_fun_visits(venue_id, created_by, updated_by, couple_id)
+                values (?, ?, ?, ?) returning id
+                """)) {
+            statement.setLong(1, activityId);
+            statement.setLong(2, authorId);
+            statement.setLong(3, authorId);
+            statement.setObject(4, coupleId);
+            try (ResultSet result = statement.executeQuery()) {
+                result.next();
+                return result.getLong(1);
+            }
+        }
+    }
+
+    private static void insertActivityReview(Connection connection, long visitId, long authorId, UUID coupleId,
+            int rating) throws Exception {
+        try (PreparedStatement statement = connection.prepareStatement("""
+                insert into why_fun_visit_reviews(visit_id, author_id, updated_by, rating, couple_id)
+                values (?, ?, ?, ?, ?)
+                """)) {
+            statement.setLong(1, visitId);
+            statement.setLong(2, authorId);
+            statement.setLong(3, authorId);
+            statement.setInt(4, rating);
+            statement.setObject(5, coupleId);
+            statement.executeUpdate();
         }
     }
 
@@ -444,5 +531,6 @@ class CoupleHttpIsolationIntegrationTest {
                 + "\n-----END PUBLIC KEY-----";
     }
 
-    private record Fixture(Long placeA, Long placeB, Long categoryId) {}
+    private record Fixture(Long placeA, Long placeB, Long categoryId, Long activityCategoryId,
+            Long activitySubcategoryId) {}
 }

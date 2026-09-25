@@ -290,6 +290,54 @@ public final class Repositories {
 
   public interface WhyFunVenues extends CoupleScopedRepository<WhyFunVenue> {
      @EntityGraph(attributePaths = {"category", "subcategory", "createdBy", "updatedBy", "schedules"}) List<WhyFunVenue> findAllByCoupleId(java.util.UUID coupleId);
+   @Query(value = """
+           with activity_ratings as (
+               select visit.venue_id, avg(review.rating) as rating
+               from why_fun_visits visit
+               join why_fun_visit_reviews review
+                 on review.visit_id = visit.id and review.couple_id = visit.couple_id
+               where visit.couple_id = :coupleId
+               group by visit.venue_id
+           )
+           select venue.id
+           from why_fun_venues venue
+           join why_fun_categories category on category.id = venue.category_id
+           join why_fun_categories subcategory on subcategory.id = venue.subcategory_id
+           left join activity_ratings rating on rating.venue_id = venue.id
+           where venue.couple_id = :coupleId
+             and (cast(:categoryId as bigint) is null or venue.category_id = cast(:categoryId as bigint))
+             and (cast(:subcategoryId as bigint) is null or venue.subcategory_id = cast(:subcategoryId as bigint))
+             and (cast(:search as text) is null
+                  or position(cast(:search as text) in lower(venue.name)) > 0
+                  or position(cast(:search as text) in lower(venue.address)) > 0
+                  or position(cast(:search as text) in lower(category.name)) > 0
+                  or position(cast(:search as text) in lower(subcategory.name)) > 0)
+             and (cast(:visited as boolean) is null
+                  or exists (select 1 from why_fun_visits v
+                             where v.couple_id = venue.couple_id and v.venue_id = venue.id)
+                     = cast(:visited as boolean))
+           order by
+             case when cast(:sort as text) = 'name' then lower(venue.name) end asc,
+             case when cast(:sort as text) in ('date', 'date-desc') then venue.updated_at end desc,
+             case when cast(:sort as text) in ('date', 'date-desc') then venue.created_at end desc,
+             case when cast(:sort as text) = 'date-asc' then venue.updated_at end asc,
+             case when cast(:sort as text) = 'date-asc' then venue.created_at end asc,
+             case when cast(:sort as text) in ('rating', 'rating-desc') then rating.rating end desc nulls last,
+             case when cast(:sort as text) = 'rating-asc' then rating.rating end asc nulls last,
+             case when cast(:sort as text) in ('rating', 'rating-desc', 'rating-asc') then venue.updated_at end desc,
+             case when cast(:sort as text) in ('rating', 'rating-desc', 'rating-asc') then venue.created_at end desc,
+             case when cast(:sort as text) = 'name' then venue.id end asc,
+             venue.id desc
+           limit :limit offset :offset
+           """, nativeQuery = true)
+   List<Long> findPageIdsByCoupleId(@Param("coupleId") java.util.UUID coupleId,
+           @Param("categoryId") Long categoryId, @Param("subcategoryId") Long subcategoryId,
+           @Param("search") String search, @Param("visited") Boolean visited, @Param("sort") String sort,
+           @Param("limit") int limit, @Param("offset") long offset);
+   @EntityGraph(attributePaths = {"category", "subcategory", "createdBy", "updatedBy", "schedules"})
+   @Query("select venue from WhyFunVenue venue where venue.id in :ids and venue.coupleId = :coupleId")
+   List<WhyFunVenue> findAllByIdInAndCoupleId(@Param("ids") Collection<Long> ids,
+           @Param("coupleId") java.util.UUID coupleId);
    @Query("select v from WhyFunVenue v join fetch v.category join fetch v.subcategory join fetch v.createdBy where v.coupleId = :coupleId and (:categoryId is null or v.category.id = :categoryId) and (:subcategoryId is null or v.subcategory.id = :subcategoryId) and (:cursor is null or v.id < :cursor) order by v.id desc") List<WhyFunVenue> list(@Param("coupleId") java.util.UUID coupleId, @Param("categoryId") Long categoryId, @Param("subcategoryId") Long subcategoryId, @Param("cursor") Long cursor, Pageable pageable);
      @EntityGraph(attributePaths = {"category", "subcategory", "createdBy", "updatedBy", "schedules"}) @Query("select v from WhyFunVenue v where v.id=:id and v.coupleId=:coupleId") Optional<WhyFunVenue> findDetailedByIdAndCoupleId(@Param("id") Long id, @Param("coupleId") java.util.UUID coupleId);
    long countBySubcategoryId(Long subcategoryId);

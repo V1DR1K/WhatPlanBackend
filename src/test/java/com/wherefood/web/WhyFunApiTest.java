@@ -62,7 +62,14 @@ class WhyFunApiTest {
    WhyFunVenue best = activity(1L, "Museo de arte", category, subcategory, tomas, "2026-07-23T00:00:00Z");
    WhyFunVenue other = activity(2L, "Museo historico", category, subcategory, tomas, "2026-07-22T00:00:00Z");
     WhyFunVenue pending = activity(3L, "Archivo de arte", category, subcategory, tomas, "2026-07-21T00:00:00Z");
-   when(activities.findAllByCoupleId(null)).thenReturn(List.of(best, other, pending));
+   when(activities.findPageIdsByCoupleId(null, 1L, 2L, "museo", true, "rating-desc", 2, 0)).thenReturn(List.of(1L, 2L));
+   when(activities.findPageIdsByCoupleId(null, 1L, 2L, "museo", true, "rating-desc", 2, 1)).thenReturn(List.of(2L));
+   when(activities.findPageIdsByCoupleId(null, 1L, 2L, null, false, "date-desc", 6, 0)).thenReturn(List.of(3L));
+   when(activities.findPageIdsByCoupleId(null, 1L, 2L, null, null, "date-desc", 6, 0)).thenReturn(List.of(1L, 2L, 3L));
+   when(activities.findAllByIdInAndCoupleId(List.of(1L), null)).thenReturn(List.of(best));
+   when(activities.findAllByIdInAndCoupleId(List.of(2L), null)).thenReturn(List.of(other));
+   when(activities.findAllByIdInAndCoupleId(List.of(3L), null)).thenReturn(List.of(pending));
+   when(activities.findAllByIdInAndCoupleId(List.of(1L, 2L, 3L), null)).thenReturn(List.of(best, other, pending));
    when(reviews.ratingsByActivityIdInAndCoupleId(any(), isNull())).thenReturn(List.of(rating(1L, 5.0), rating(2L, 3.0)));
    when(visits.countsByActivityIdInAndCoupleId(any(), isNull())).thenReturn(List.of(count(1L, 2L), count(2L, 1L)));
 
@@ -79,6 +86,8 @@ class WhyFunApiTest {
     assertEquals(null, second.nextCursor());
     assertEquals(List.of(3L), unvisited.content().stream().map(ActivityDto::id).toList());
     assertEquals(List.of(1L, 2L, 3L), defaultOrder.content().stream().map(ActivityDto::id).toList());
+    verify(activities).findPageIdsByCoupleId(null, 1L, 2L, "museo", true, "rating-desc", 2, 0);
+    verify(activities).findPageIdsByCoupleId(null, 1L, 2L, null, false, "date-desc", 6, 0);
    }
 
   @Test
