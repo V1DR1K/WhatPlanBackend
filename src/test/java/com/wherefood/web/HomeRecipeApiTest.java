@@ -149,6 +149,21 @@ class HomeRecipeApiTest {
    verify(recipes).findPageIdsByCoupleId(null, "pan", null, false, "date-desc", 6, 0);
   }
 
+  @Test
+  void paginatesCookingHistoryWithTheActiveCoupleAndStableCursor() {
+   Cookings cookings = mock(Cookings.class);
+   UUID coupleId = UUID.randomUUID(); CoupleContext.set(coupleId);
+   when(cookings.findPageIdsByCoupleId(coupleId, 42L, null, 3, 0)).thenReturn(List.of(9L, 8L, 7L));
+
+   Slice<CookingDto> result = new HomeRecipeApi(null, null, cookings, null, null)
+           .listCookings(null, 42L, null, 2);
+
+   assertEquals(List.of(), result.content());
+   assertEquals(2L, result.nextCursor());
+   verify(cookings).findPageIdsByCoupleId(coupleId, 42L, null, 3, 0);
+   verify(cookings).findAllByIdInAndCoupleId(List.of(9L, 8L), coupleId);
+  }
+
   private static User user(Long id, String username) { User user = new User(); user.id = id; user.username = username; user.role = Role.USER; return user; }
   private static HomeRecipeApi authorizedApi(Recipes recipes, RecipePhotos photos, Cookings cookings,
           CookingReviews reviews, PhotoStorage storage, User user, UUID coupleId) {
@@ -165,5 +180,5 @@ class HomeRecipeApiTest {
   private static RecipePhotoMetadata photo(Long id, Long recipeId, Integer width, Integer height) { return new RecipePhotoMetadata() { public Long getId() { return id; } public Long getRecipeId() { return recipeId; } public Integer getWidth() { return width; } public Integer getHeight() { return height; } public Instant getCreatedAt() { return Instant.parse("2026-07-23T00:00:00Z"); } }; }
   private static RecipeCookingCount count(Long recipeId, Long cookingCount) { return new RecipeCookingCount() { public Long getRecipeId() { return recipeId; } public Long getCookingCount() { return cookingCount; } }; }
   private static RecipeHome home(Long recipeId, Home home) { return new RecipeHome() { public Long getRecipeId() { return recipeId; } public Home getHome() { return home; } }; }
-  private static RecipeRating rating(Long recipeId, Double rating) { return new RecipeRating() { public Long getRecipeId() { return recipeId; } public Double getRating() { return rating; } }; }
+  private static RecipeRating rating(Long recipeId, Double rating) { return new RecipeRating() { public Long getRecipeId() { return recipeId; } public Double getRating() { return rating; } public Double getComplexityRating() { return rating; } public Double getTasteRating() { return rating; } }; }
 }

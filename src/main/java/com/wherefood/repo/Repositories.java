@@ -605,12 +605,17 @@ public final class Repositories {
 
     public interface RecipeCookingCount { Long getRecipeId(); Long getCookingCount(); }
     public interface RecipeHome { Long getRecipeId(); Home getHome(); }
-    public interface RecipeRating { Long getRecipeId(); Double getRating(); }
+   public interface RecipeRating { Long getRecipeId(); Double getRating(); Double getComplexityRating(); Double getTasteRating(); }
 
     public interface Cookings extends CoupleScopedRepository<Cooking> {
     @EntityGraph(attributePaths = {"recipe", "recipe.ingredients", "recipe.steps", "createdBy", "updatedBy"}) List<Cooking> findAllByCoupleId(java.util.UUID coupleId);
     @EntityGraph(attributePaths = {"recipe", "recipe.ingredients", "recipe.steps", "createdBy", "updatedBy"}) List<Cooking> findByCoupleIdAndHomeOrderByCookedOnDescIdDesc(java.util.UUID coupleId, Home home);
-     @EntityGraph(attributePaths = {"recipe", "recipe.ingredients", "recipe.steps", "createdBy", "updatedBy"}) List<Cooking> findByRecipeIdAndCoupleIdOrderByCookedOnDescIdDesc(Long recipeId, java.util.UUID coupleId);
+    @Query(value = "select c.id from cookings c where c.couple_id = :coupleId and (cast(:recipeId as bigint) is null or c.recipe_id = :recipeId) and (cast(:home as text) is null or c.home = :home) order by c.cooked_on desc, c.id desc limit :limit offset :offset", nativeQuery = true)
+    List<Long> findPageIdsByCoupleId(@Param("coupleId") java.util.UUID coupleId, @Param("recipeId") Long recipeId,
+            @Param("home") String home, @Param("limit") int limit, @Param("offset") long offset);
+    @EntityGraph(attributePaths = {"recipe", "recipe.ingredients", "recipe.steps", "createdBy", "updatedBy"})
+    @Query("select c from Cooking c where c.id in :ids and c.coupleId = :coupleId")
+    List<Cooking> findAllByIdInAndCoupleId(@Param("ids") Collection<Long> ids, @Param("coupleId") java.util.UUID coupleId);
      @EntityGraph(attributePaths = {"recipe", "recipe.ingredients", "recipe.steps", "createdBy", "updatedBy"}) List<Cooking> findByCoupleIdAndCookedOnLessThanEqualOrderByCookedOnDescIdDesc(java.util.UUID coupleId, LocalDate cookedOn);
      @EntityGraph(attributePaths = {"recipe", "recipe.ingredients", "recipe.steps", "createdBy", "updatedBy"}) Optional<Cooking> findDetailedByIdAndCoupleId(Long id, java.util.UUID coupleId);
      boolean existsByRecipeId(Long recipeId);
@@ -626,7 +631,7 @@ public final class Repositories {
      @Query("select r.id as reviewId, author.username as author from CookingReview r join r.author author where r.cooking.id=:cookingId") List<ReviewAuthor> authorsByCookingId(@Param("cookingId") Long cookingId);
      @Query("select r.id as reviewId, author.username as author from CookingReview r join r.author author where r.cooking.id=:cookingId and r.coupleId=:coupleId") List<ReviewAuthor> authorsByCookingIdAndCoupleId(@Param("cookingId") Long cookingId, @Param("coupleId") java.util.UUID coupleId);
     @Query("select r.cooking.recipe.id as recipeId, avg(r.rating) as rating from CookingReview r where r.cooking.recipe.id in :recipeIds group by r.cooking.recipe.id") List<RecipeRating> ratingsByRecipeIdIn(@Param("recipeIds") Collection<Long> recipeIds);
-    @Query("select r.cooking.recipe.id as recipeId, avg(r.rating) as rating from CookingReview r where r.cooking.recipe.id in :recipeIds and r.coupleId=:coupleId group by r.cooking.recipe.id") List<RecipeRating> ratingsByRecipeIdInAndCoupleId(@Param("recipeIds") Collection<Long> recipeIds, @Param("coupleId") java.util.UUID coupleId);
+    @Query("select r.cooking.recipe.id as recipeId, avg(r.rating) as rating, avg(r.complexity) as complexityRating, avg(r.taste) as tasteRating from CookingReview r where r.cooking.recipe.id in :recipeIds and r.coupleId=:coupleId group by r.cooking.recipe.id") List<RecipeRating> ratingsByRecipeIdInAndCoupleId(@Param("recipeIds") Collection<Long> recipeIds, @Param("coupleId") java.util.UUID coupleId);
     @EntityGraph(attributePaths = {"cooking", "cooking.recipe", "author", "updatedBy"}) Optional<CookingReview> findDetailedByIdAndCoupleId(Long id, java.util.UUID coupleId);
     Optional<CookingReview> findByCookingIdAndAuthorIdAndCoupleId(Long cookingId, Long authorId, java.util.UUID coupleId);
    }

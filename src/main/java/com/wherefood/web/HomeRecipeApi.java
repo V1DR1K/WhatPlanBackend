@@ -24,7 +24,7 @@ record RecipeRequest(@NotBlank @Size(max = 160) String name, @Size(max = 1000) @
 record CookingRequest(@NotNull Home home, @Min(1) @Max(100) int servings, @NotNull LocalDate cookedOn, @NotNull MealType mealType) {}
 record RecipeIngredientDto(String name, BigDecimal quantity, String unit) {}
 record RecipeStepDto(String instruction) {}
-record RecipeDto(Long id, String name, String sourceUrl, String photoUrl, String thumbnailUrl, Integer photoWidth, Integer photoHeight, Double rating, long cookingCount, List<Home> homes, List<RecipeIngredientDto> ingredients, List<RecipeStepDto> steps, String createdBy, String updatedBy, Instant createdAt, Instant updatedAt) {}
+record RecipeDto(Long id, String name, String sourceUrl, String photoUrl, String thumbnailUrl, Integer photoWidth, Integer photoHeight, Double rating, Double complexityRating, Double tasteRating, long cookingCount, List<Home> homes, List<RecipeIngredientDto> ingredients, List<RecipeStepDto> steps, String createdBy, String updatedBy, Instant createdAt, Instant updatedAt) {}
 record CookingReviewRequest(@Min(1) @Max(5) short rating, @Min(1) @Max(5) short complexity, @Min(1) @Max(5) short taste, @Size(max = 1000) String comment) {}
 record CookingReviewDto(Long id, String author, String updatedBy, short rating, short complexity, short taste, String comment, Instant createdAt, Instant updatedAt) {}
 record CookingDto(Long id, RecipeDto recipe, Home home, int servings, LocalDate cookedOn, MealType mealType, String createdBy, String updatedBy, List<CookingReviewDto> reviews, Instant createdAt, Instant updatedAt) {}
@@ -114,8 +114,20 @@ public class HomeRecipeApi {
    return recipe(mediaService.replacePhoto(id, file, author));
   }
 
- @GetMapping("/cookings") @Transactional(readOnly = true) List<CookingDto> listCookings(@RequestParam(required = false) Home home, @RequestParam(required = false) Long recipeId) {
-  List<Cooking> values = recipeId != null ? cookings.findByRecipeIdAndCoupleIdOrderByCookedOnDescIdDesc(recipeId, CoupleContext.current()) : home != null ? cookings.findByCoupleIdAndHomeOrderByCookedOnDescIdDesc(CoupleContext.current(), home) : cookings.findAllByCoupleId(CoupleContext.current()); return values.stream().map(this::cooking).toList();
+ @GetMapping("/cookings") @Transactional(readOnly = true) Slice<CookingDto> listCookings(@RequestParam(required = false) Home home, @RequestParam(required = false) Long recipeId,
+         @RequestParam(required = false) Long cursor, @RequestParam(defaultValue = "10") int size) {
+  int limit = Math.max(1, Math.min(size, 30));
+  long offset = cursor == null ? 0 : Math.max(0, cursor);
+  if (offset > 1_000_000) throw badRequest("Cursor inválido");
+  UUID coupleId = CoupleContext.current();
+  List<Long> ids = cookings.findPageIdsByCoupleId(coupleId, recipeId, home == null ? null : home.name(), limit + 1, offset);
+  Long next = ids.size() > limit ? offset + limit : null;
+  List<Long> pageIds = ids.stream().limit(limit).toList();
+  if (pageIds.isEmpty()) return new Slice<>(List.of(), null);
+  Map<Long, Cooking> byId = cookings.findAllByIdInAndCoupleId(pageIds, coupleId).stream()
+          .collect(java.util.stream.Collectors.toMap(value -> value.id, value -> value));
+  List<CookingDto> page = pageIds.stream().map(byId::get).filter(Objects::nonNull).map(this::cooking).toList();
+  return new Slice<>(page, next);
  }
   @PostMapping("/recipes/{recipeId}/cookings") @ResponseStatus(HttpStatus.CREATED) CookingDto addCooking(@PathVariable Long recipeId, @RequestBody @Valid CookingRequest request, @AuthenticationPrincipal User author) {
    return cooking(cookingService.create(recipeId, request, author));
@@ -148,23 +160,26 @@ public class HomeRecipeApi {
    return recipe(value, recipeSummaries(List.of(value.id)).get(value.id), recipePhotos(List.of(value)).get(value.id));
   }
   private RecipeDto recipe(Recipe value, RecipeSummary summary, PhotoMetadata photo) {
-   return new RecipeDto(value.id, value.name, value.sourceUrl, photo == null ? null : recipePhotoUrl(value.id, false, photo.getId()), photo == null ? null : recipePhotoUrl(value.id, true, photo.getId()), photo == null ? null : photo.getWidth(), photo == null ? null : photo.getHeight(), summary.rating(), summary.cookingCount(), summary.homes(), value.ingredients.stream().map(ingredient -> new RecipeIngredientDto(ingredient.name, ingredient.quantity, ingredient.unit)).toList(), value.steps.stream().map(step -> new RecipeStepDto(step.instruction)).toList(), value.createdBy.username, value.updatedBy.username, value.createdAt, value.updatedAt);
+   return new RecipeDto(value.id, value.name, value.sourceUrl, photo == null ? null : recipePhotoUrl(value.id, false, photo.getId()), photo == null ? null : recipePhotoUrl(value.id, true, photo.getId()), photo == null ? null : photo.getWidth(), photo == null ? null : photo.getHeight(), summary.rating(), summary.complexityRating(), summary.tasteRating(), summary.cookingCount(), summary.homes(), value.ingredients.stream().map(ingredient -> new RecipeIngredientDto(ingredient.name, ingredient.quantity, ingredient.unit)).toList(), value.steps.stream().map(step -> new RecipeStepDto(step.instruction)).toList(), value.createdBy.username, value.updatedBy.username, value.createdAt, value.updatedAt);
   }
   private Map<Long, RecipeSummary> recipeSummaries(Collection<Long> recipeIds) {
    if (recipeIds.isEmpty()) return Map.of();
    Map<Long, Long> counts = cookings == null ? Map.of() : cookings.cookingCountsByRecipeIdInAndCoupleId(recipeIds, CoupleContext.current()).stream().collect(java.util.stream.Collectors.toMap(RecipeCookingCount::getRecipeId, RecipeCookingCount::getCookingCount));
    Map<Long, EnumSet<Home>> homes = new HashMap<>();
    if (cookings != null) for (RecipeHome value : cookings.homesByRecipeIdInAndCoupleId(recipeIds, CoupleContext.current())) homes.computeIfAbsent(value.getRecipeId(), ignored -> EnumSet.noneOf(Home.class)).add(value.getHome());
-   Map<Long, Double> ratings = reviews == null ? Map.of() : reviews.ratingsByRecipeIdInAndCoupleId(recipeIds, CoupleContext.current()).stream().collect(java.util.stream.Collectors.toMap(RecipeRating::getRecipeId, RecipeRating::getRating));
+   Map<Long, RecipeRating> ratings = reviews == null ? Map.of() : reviews.ratingsByRecipeIdInAndCoupleId(recipeIds, CoupleContext.current()).stream().collect(java.util.stream.Collectors.toMap(RecipeRating::getRecipeId, value -> value));
    Map<Long, RecipeSummary> result = new HashMap<>();
-   for (Long recipeId : recipeIds) result.put(recipeId, new RecipeSummary(counts.getOrDefault(recipeId, 0L), homes.containsKey(recipeId) ? List.copyOf(homes.get(recipeId)) : List.of(), ratings.get(recipeId)));
+   for (Long recipeId : recipeIds) {
+    RecipeRating rating = ratings.get(recipeId);
+    result.put(recipeId, new RecipeSummary(counts.getOrDefault(recipeId, 0L), homes.containsKey(recipeId) ? List.copyOf(homes.get(recipeId)) : List.of(), rating == null ? null : rating.getRating(), rating == null ? null : rating.getComplexityRating(), rating == null ? null : rating.getTasteRating()));
+   }
    return result;
   }
   private Map<Long, RecipePhotoMetadata> recipePhotos(Collection<Recipe> values) {
    if (values.isEmpty() || recipePhotos == null) return Map.of();
    return recipePhotos.metadataByRecipeIdInAndCoupleId(values.stream().map(recipe -> recipe.id).toList(), CoupleContext.current()).stream().collect(java.util.stream.Collectors.toMap(RecipePhotoMetadata::getRecipeId, photo -> photo));
   }
-  private record RecipeSummary(long cookingCount, List<Home> homes, Double rating) {}
+  private record RecipeSummary(long cookingCount, List<Home> homes, Double rating, Double complexityRating, Double tasteRating) {}
  private static String recipePhotoUrl(Long recipeId, boolean thumbnail, Long photoId) { return "/how-cook/recipes/" + recipeId + "/photo?" + (thumbnail ? "thumbnail=true&" : "") + "v=" + photoId; }
  private static CookingReviewDto review(CookingReview value) { return review(value, value.author.username); }
   private static CookingReviewDto review(CookingReview value, String author) { return new CookingReviewDto(value.id, author, value.updatedBy.username, value.rating, value.complexity, value.taste, value.comment, value.createdAt, value.updatedAt); }
