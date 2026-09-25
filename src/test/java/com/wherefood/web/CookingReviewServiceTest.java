@@ -92,6 +92,18 @@ class CookingReviewServiceTest {
         verify(reviews, never()).save(org.mockito.ArgumentMatchers.any(CookingReview.class));
     }
 
+    @Test
+    void delete_whenAnotherMemberOwnsReview_returns404WithoutDeleting() {
+        User owner = user(4L, Role.USER);
+        User other = user(5L, Role.USER);
+        CookingReview review = review(owner);
+        when(reviews.findDetailedByIdAndCoupleId(9L, coupleId)).thenReturn(Optional.of(review));
+
+        assertEquals(404, assertThrows(ResponseStatusException.class,
+                () -> service.delete(9L, other)).getStatusCode().value());
+        verify(reviews, never()).delete(org.mockito.ArgumentMatchers.any(CookingReview.class));
+    }
+
     private static CookingReview review(User owner) {
         CookingReview review = new CookingReview();
         review.id = 9L;

@@ -11,6 +11,8 @@ import com.wherefood.config.CoupleContext;
 import com.wherefood.couple.CoupleAuthorizationService;
 import com.wherefood.domain.Role;
 import com.wherefood.domain.User;
+import com.wherefood.domain.WhyFunVenue;
+import com.wherefood.domain.WhyFunVenueReview;
 import com.wherefood.repo.Repositories.CoupleMembers;
 import com.wherefood.repo.Repositories.WhyFunCategories;
 import com.wherefood.repo.Repositories.WhyFunVenueReviews;
@@ -52,6 +54,27 @@ class WhyFunPlanServiceTest {
 
         assertEquals(HttpStatus.NOT_FOUND, error.getStatusCode());
         verify(venues, never()).save(org.mockito.ArgumentMatchers.any());
+    }
+
+    @Test
+    void saveOwnReview_whenSecondMemberRatesPlan_savesOnlyUnderThatAuthor() {
+        User secondMember = member();
+        secondMember.id = 13L;
+        when(members.findActiveCoupleIdByUserId(secondMember.id)).thenReturn(Optional.of(coupleId));
+        WhyFunVenue plan = new WhyFunVenue();
+        plan.id = 66L;
+        when(venues.findDetailedByIdAndCoupleId(plan.id, coupleId)).thenReturn(Optional.of(plan));
+        when(reviews.findByVenueIdAndAuthorIdAndCoupleId(plan.id, secondMember.id, coupleId))
+                .thenReturn(Optional.empty());
+        when(reviews.save(org.mockito.ArgumentMatchers.any(WhyFunVenueReview.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+
+        WhyFunVenueReview saved = service.saveOwnReview(plan.id, new FunReviewRequest((short) 4, "Buena"), secondMember);
+
+        assertEquals(secondMember, saved.author);
+        assertEquals(plan, saved.venue);
+        verify(reviews).findByVenueIdAndAuthorIdAndCoupleId(plan.id, secondMember.id, coupleId);
+        verify(reviews).save(saved);
     }
 
     private static User member() {

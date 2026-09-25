@@ -84,6 +84,17 @@ class WhyFunVisitReviewServiceTest {
     }
 
     @Test
+    void delete_whenAnotherCoupleMemberOwnsReview_returns404WithoutDeleting() {
+        User owner = user(7L, Role.USER);
+        User other = user(8L, Role.USER);
+        when(reviews.findDetailedByIdAndCoupleId(11L, coupleId)).thenReturn(Optional.of(review(owner)));
+
+        assertEquals(404, assertThrows(ResponseStatusException.class,
+                () -> service.delete(11L, other)).getStatusCode().value());
+        verify(reviews, never()).delete(org.mockito.ArgumentMatchers.any(WhyFunVisitReview.class));
+    }
+
+    @Test
     void reviewMutationTransactionLivesInServiceRatherThanController() throws Exception {
         assertTrue(WhyFunVisitReviewService.class.getMethod("update", Long.class,
                 ActivityReviewRequest.class, User.class).isAnnotationPresent(Transactional.class));

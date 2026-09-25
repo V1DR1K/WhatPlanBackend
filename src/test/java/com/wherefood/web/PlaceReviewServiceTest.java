@@ -72,6 +72,25 @@ class PlaceReviewServiceTest {
         verify(reviews, never()).save(any(PlaceReview.class));
     }
 
+    @Test
+    void saveOwn_whenAnotherMemberRatesPlace_createsReviewForThatMemberOnly() {
+        User otherMember = user(8L, Role.USER);
+        when(members.findActiveCoupleIdByUserId(otherMember.id)).thenReturn(Optional.of(coupleId));
+        Place place = new Place();
+        place.id = 4L;
+        when(places.findByIdAndCoupleId(4L, coupleId)).thenReturn(Optional.of(place));
+        when(reviews.findByPlaceIdAndAuthorIdAndCoupleId(4L, otherMember.id, coupleId)).thenReturn(Optional.empty());
+        when(reviews.save(any(PlaceReview.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        PlaceReview saved = service.saveOwn(4L,
+                new PlaceReviewRequest("Mi opinión", (short) 3, null, null, null, null, null, null), otherMember);
+
+        assertEquals(otherMember, saved.author);
+        assertEquals("Mi opinión", saved.comment);
+        verify(reviews).findByPlaceIdAndAuthorIdAndCoupleId(4L, otherMember.id, coupleId);
+        verify(reviews).save(saved);
+    }
+
     private static User user(Long id, Role role) {
         User user = new User();
         user.id = id;
