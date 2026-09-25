@@ -36,6 +36,8 @@ public class SecurityConfig {
     }
 
     private static void writeError(HttpServletResponse response, int status, String code) throws java.io.IOException {
+        response.setHeader(HttpHeaders.CACHE_CONTROL, "no-store");
+        response.setHeader(HttpHeaders.PRAGMA, "no-cache");
         response.setStatus(status);
         response.setContentType(MediaType.APPLICATION_JSON_VALUE);
         response.getWriter().write("{\"type\":\"about:blank\",\"title\":\"" + code + "\",\"status\":" + status + ",\"detail\":\"" + (status == HttpServletResponse.SC_FORBIDDEN ? "Access denied" : "Authentication required") + "\"}");

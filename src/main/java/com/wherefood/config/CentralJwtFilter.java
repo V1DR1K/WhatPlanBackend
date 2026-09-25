@@ -45,6 +45,10 @@ public class CentralJwtFilter extends OncePerRequestFilter {
         CoupleContext.clear();
         SecurityContextHolder.clearContext();
         try {
+            if (request.getServletPath().startsWith("/api/auth/")) {
+                response.setHeader("Cache-Control", "no-store");
+                response.setHeader("Pragma", "no-cache");
+            }
             String header = request.getHeader("Authorization");
             if (header != null && header.regionMatches(true, 0, "Bearer ", 0, 7)) {
                 UUID subject = null;

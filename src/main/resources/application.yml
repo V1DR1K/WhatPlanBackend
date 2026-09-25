@@ -24,7 +24,8 @@ app.auth-default-role: ${AUTH_DEFAULT_ROLE}
 app.auth-audience: ${AUTH_JWT_AUDIENCE}
 app.auth-previous-public-key-pems: ${AUTH_PREVIOUS_PUBLIC_KEY_PEMS:}
 app.auth-max-access-token-ttl-seconds: ${AUTH_MAX_ACCESS_TOKEN_TTL_SECONDS:900}
-app.auth-cookie-secure: ${AUTH_COOKIE_SECURE:true}
+app.auth-cookie-allowed-origins: ${AUTH_COOKIE_ALLOWED_ORIGINS}
+app.auth-refresh-cookie-ttl-seconds: ${AUTH_REFRESH_COOKIE_TTL_SECONDS:604800}
 app.tmdb.read-access-token: ${TMDB_READ_ACCESS_TOKEN}
 app.tmdb.connect-timeout-seconds: ${TMDB_CONNECT_TIMEOUT_SECONDS:5}
 app.tmdb.request-timeout-seconds: ${TMDB_REQUEST_TIMEOUT_SECONDS:8}

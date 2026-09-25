@@ -75,6 +75,7 @@ Dep.: C05. Hacer obligatorios `issuer`, `audience`, `sub` UUID, `exp`, `nbf` seg
 
 **C08 · Backend · P1 · `fix(auth): harden refresh cookie and revocation`**
 Dep.: C07. Contrato de refresh rotatorio y revocable con el servicio central; invalidación en logout/cambio de contraseña/deshabilitación, detección de reutilización y TTL explícito. Eliminar compatibilidad de refresh por body si ya no hay clientes legítimos; cookie `HttpOnly; Secure; SameSite` y `Path` mínimo. Proteger las mutaciones que usan cookie con validación Origin/CSRF acorde al despliegue y probar solicitudes de origen ajeno; `Cache-Control: no-store` también en respuestas de error auth. No almacenar refresh en JS.
+Estado de WhatPlan: implementado en `fix(auth): harden refresh cookie and revocation`; el frontend usa cookie, `AUTH_COOKIE_ALLOWED_ORIGINS` es obligatorio y se retira el refresh/logout por body. Rotación, revocación y reutilización siguen pendientes de evidencia del servicio central externo; no considerar la sesión end-to-end lista hasta verificarlo.
 
 **C09 · Backend · P1 · `fix(invites): make invitation flows bounded and auditable`**
 Dep.: C04, C07. Acotar creación/aceptación/revocación por membresía; proteger contra replay, expiración, carrera y enumeración; rechazar valores demasiado largos antes de hash. Limitar número de invitaciones y longitud del path, no registrar tokens ni URL completa, añadir eventos auditables sin secretos. Tests concurrentes de aceptación, revocación y salida. Evitar mensajes que revelen identidad de otra pareja.

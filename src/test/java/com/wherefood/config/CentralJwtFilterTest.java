@@ -111,4 +111,17 @@ class CentralJwtFilterTest {
         assertNull(SecurityContextHolder.getContext().getAuthentication());
         assertNull(CoupleContext.current());
     }
+
+    @Test
+    void marksAuthEndpointResponsesAsNonCacheable() throws Exception {
+        MockHttpServletRequest request = new MockHttpServletRequest();
+        request.setRequestURI("/api/auth/refresh");
+        request.setServletPath("/api/auth/refresh");
+        MockHttpServletResponse response = new MockHttpServletResponse();
+
+        filter.doFilterInternal(request, response, mock(FilterChain.class));
+
+        assertEquals("no-store", response.getHeader("Cache-Control"));
+        assertEquals("no-cache", response.getHeader("Pragma"));
+    }
 }
