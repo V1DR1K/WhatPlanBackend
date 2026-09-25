@@ -49,7 +49,7 @@ class CookingReviewServiceTest {
         Cooking cooking = new Cooking();
         cooking.id = 3L;
         when(cookings.findDetailedByIdAndCoupleId(3L, coupleId)).thenReturn(Optional.of(cooking));
-        when(reviews.findByCookingIdAndAuthorId(3L, owner.id)).thenReturn(Optional.empty());
+        when(reviews.findByCookingIdAndAuthorIdAndCoupleId(3L, owner.id, coupleId)).thenReturn(Optional.empty());
         when(reviews.save(org.mockito.ArgumentMatchers.any(CookingReview.class)))
                 .thenAnswer(call -> call.getArgument(0));
 

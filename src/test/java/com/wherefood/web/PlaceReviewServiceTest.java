@@ -49,7 +49,7 @@ class PlaceReviewServiceTest {
         Place place = new Place();
         place.id = 4L;
         when(places.findByIdAndCoupleId(4L, coupleId)).thenReturn(Optional.of(place));
-        when(reviews.findByPlaceIdAndAuthorId(4L, actor.id)).thenReturn(Optional.empty());
+        when(reviews.findByPlaceIdAndAuthorIdAndCoupleId(4L, actor.id, coupleId)).thenReturn(Optional.empty());
         when(reviews.save(any(PlaceReview.class))).thenAnswer(invocation -> invocation.getArgument(0));
 
         PlaceReview saved = service.saveOwn(4L,

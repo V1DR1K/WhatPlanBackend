@@ -111,7 +111,7 @@ class WhyFunApiTest {
     User tomas = new User(); tomas.id = 7L; tomas.username = "tomas"; tomas.role = Role.USER; when(members.findActiveCoupleIdByUserId(tomas.id)).thenReturn(Optional.of(coupleId));
     WhyFunVenue activity = new WhyFunVenue(); activity.id = 4L;
     WhyFunVisit visit = new WhyFunVisit(); visit.id = 10L; visit.venue = activity; visit.createdBy = visit.updatedBy = tomas;
-    when(visits.findDetailedByIdAndCoupleId(10L, coupleId)).thenReturn(Optional.of(visit)); when(reviews.findByVisitIdAndAuthorId(10L, 7L)).thenReturn(Optional.empty());
+    when(visits.findDetailedByIdAndCoupleId(10L, coupleId)).thenReturn(Optional.of(visit)); when(reviews.findByVisitIdAndAuthorIdAndCoupleId(10L, 7L, coupleId)).thenReturn(Optional.empty());
     when(reviews.save(any(WhyFunVisitReview.class))).thenAnswer(invocation -> invocation.getArgument(0));
 
     WhyFunVisitReviewService reviewService = new WhyFunVisitReviewService(reviews, visits, new CoupleAuthorizationService(members));

@@ -32,7 +32,7 @@ public class PlaceVisitReviewService {
     public PlaceVisitReview create(Long visitId, PlaceVisitReviewRequest request, User actor) {
         var coupleId = authorization.requireActiveMember(actor);
         PlaceVisit visit = findActiveVisit(visitId, coupleId);
-        if (reviews.findByVisitIdAndAuthorId(visitId, actor.id).isPresent()) {
+        if (reviews.findByVisitIdAndAuthorIdAndCoupleId(visitId, actor.id, coupleId).isPresent()) {
             throw new ResponseStatusException(HttpStatus.CONFLICT,
                     "Ya existe una reseña de este autor para la visita");
         }
@@ -48,7 +48,7 @@ public class PlaceVisitReviewService {
     public PlaceVisitReview saveOwn(Long visitId, PlaceVisitReviewRequest request, User actor) {
         var coupleId = authorization.requireActiveMember(actor);
         PlaceVisit visit = findActiveVisit(visitId, coupleId);
-        PlaceVisitReview review = reviews.findByVisitIdAndAuthorId(visitId, actor.id).orElseGet(() -> {
+        PlaceVisitReview review = reviews.findByVisitIdAndAuthorIdAndCoupleId(visitId, actor.id, coupleId).orElseGet(() -> {
             PlaceVisitReview value = new PlaceVisitReview();
             value.visit = visit;
             value.author = actor;

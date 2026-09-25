@@ -29,9 +29,9 @@ public class WhyFunVisitReviewService {
 
     @Transactional
     public WhyFunVisitReview create(Long visitId, ActivityReviewRequest request, User actor) {
-        authorization.requireActiveMember(actor);
+        var coupleId = authorization.requireActiveMember(actor);
         WhyFunVisit visit = findVisit(visitId);
-        if (reviews.findByVisitIdAndAuthorId(visitId, actor.id).isPresent()) {
+        if (reviews.findByVisitIdAndAuthorIdAndCoupleId(visitId, actor.id, coupleId).isPresent()) {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "Ya existe una reseña de este autor para la visita");
         }
         WhyFunVisitReview review = new WhyFunVisitReview();
@@ -44,9 +44,9 @@ public class WhyFunVisitReviewService {
 
     @Transactional
     public WhyFunVisitReview saveOwn(Long visitId, ActivityReviewRequest request, User actor) {
-        authorization.requireActiveMember(actor);
+        var coupleId = authorization.requireActiveMember(actor);
         WhyFunVisit visit = findVisit(visitId);
-        WhyFunVisitReview review = reviews.findByVisitIdAndAuthorId(visitId, actor.id).orElseGet(() -> {
+        WhyFunVisitReview review = reviews.findByVisitIdAndAuthorIdAndCoupleId(visitId, actor.id, coupleId).orElseGet(() -> {
             WhyFunVisitReview value = new WhyFunVisitReview();
             value.visit = visit;
             value.author = actor;

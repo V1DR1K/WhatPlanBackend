@@ -35,7 +35,7 @@ public class ItemReviewService {
                         && value.visit.place != null && value.visit.place.deactivatedAt == null)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND,
                         "Ítem no encontrado"));
-        ItemReview review = reviews.findByItemIdAndAuthorId(itemId, actor.id).orElseGet(() -> {
+        ItemReview review = reviews.findByItemIdAndAuthorIdAndCoupleId(itemId, actor.id, CoupleContext.current()).orElseGet(() -> {
             ItemReview value = new ItemReview();
             value.item = item;
             value.author = actor;

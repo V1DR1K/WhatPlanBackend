@@ -70,7 +70,7 @@ class PlaceVisitReviewServiceTest {
         visit.id = 21L;
         visit.place = place;
         when(visits.findDetailedByIdAndCoupleId(21L, coupleId)).thenReturn(Optional.of(visit));
-        when(reviews.findByVisitIdAndAuthorId(21L, owner.id)).thenReturn(Optional.empty());
+        when(reviews.findByVisitIdAndAuthorIdAndCoupleId(21L, owner.id, coupleId)).thenReturn(Optional.empty());
         when(reviews.save(org.mockito.ArgumentMatchers.any(PlaceVisitReview.class)))
                 .thenAnswer(invocation -> invocation.getArgument(0));
 
@@ -91,7 +91,7 @@ class PlaceVisitReviewServiceTest {
         visit.id = 21L;
         visit.place = new Place();
         when(visits.findDetailedByIdAndCoupleId(21L, coupleId)).thenReturn(Optional.of(visit));
-        when(reviews.findByVisitIdAndAuthorId(21L, owner.id)).thenReturn(Optional.empty());
+        when(reviews.findByVisitIdAndAuthorIdAndCoupleId(21L, owner.id, coupleId)).thenReturn(Optional.empty());
         when(reviews.save(org.mockito.ArgumentMatchers.any(PlaceVisitReview.class)))
                 .thenAnswer(invocation -> invocation.getArgument(0));
 

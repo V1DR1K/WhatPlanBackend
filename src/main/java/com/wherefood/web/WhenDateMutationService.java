@@ -50,7 +50,7 @@ public class WhenDateMutationService {
             WhenDateCommentRequest request, User actor) {
         requireMember(actor);
         SpecialDateOccurrence occurrence = ensureOccurrence(findDate(specialDateId), date, actor);
-        SpecialDateOccurrenceComment comment = comments.findByOccurrenceIdAndAuthorId(occurrence.id, actor.id)
+        SpecialDateOccurrenceComment comment = comments.findByOccurrenceIdAndAuthorIdAndCoupleId(occurrence.id, actor.id, CoupleContext.current())
                 .orElseGet(() -> {
                     SpecialDateOccurrenceComment value = new SpecialDateOccurrenceComment();
                     value.occurrence = occurrence;
@@ -72,7 +72,7 @@ public class WhenDateMutationService {
         SpecialDateOccurrence occurrence = occurrences
                 .findDetailedBySpecialDateIdAndOccurredOnAndCoupleId(specialDateId, date, CoupleContext.current())
                 .orElseThrow(() -> notFound("Recuerdo"));
-        comments.findByOccurrenceIdAndAuthorId(occurrence.id, actor.id).ifPresent(comments::delete);
+        comments.findByOccurrenceIdAndAuthorIdAndCoupleId(occurrence.id, actor.id, CoupleContext.current()).ifPresent(comments::delete);
         touch(occurrence, actor);
     }
 

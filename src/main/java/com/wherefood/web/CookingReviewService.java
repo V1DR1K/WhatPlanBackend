@@ -31,7 +31,7 @@ public class CookingReviewService {
     public CookingReview create(Long cookingId, CookingReviewRequest request, User actor) {
         authorization.requireActiveMember(actor);
         Cooking cooking = findCooking(cookingId);
-        if (reviews.findByCookingIdAndAuthorId(cookingId, actor.id).isPresent()) {
+        if (reviews.findByCookingIdAndAuthorIdAndCoupleId(cookingId, actor.id, CoupleContext.current()).isPresent()) {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "Ya existe una reseña de este autor para la preparación");
         }
         CookingReview review = new CookingReview();
@@ -46,7 +46,7 @@ public class CookingReviewService {
     public CookingReview saveOwn(Long cookingId, CookingReviewRequest request, User actor) {
         authorization.requireActiveMember(actor);
         Cooking cooking = findCooking(cookingId);
-        CookingReview review = reviews.findByCookingIdAndAuthorId(cookingId, actor.id).orElseGet(() -> {
+        CookingReview review = reviews.findByCookingIdAndAuthorIdAndCoupleId(cookingId, actor.id, CoupleContext.current()).orElseGet(() -> {
             CookingReview value = new CookingReview();
             value.cooking = cooking;
             value.author = actor;

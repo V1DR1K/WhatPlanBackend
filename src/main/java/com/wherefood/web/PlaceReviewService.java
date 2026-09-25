@@ -42,7 +42,7 @@ public class PlaceReviewService {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
                     "Calificá al menos un aspecto del lugar");
         }
-        PlaceReview review = reviews.findByPlaceIdAndAuthorId(placeId, actor.id).orElseGet(() -> {
+        PlaceReview review = reviews.findByPlaceIdAndAuthorIdAndCoupleId(placeId, actor.id, CoupleContext.current()).orElseGet(() -> {
             PlaceReview value = new PlaceReview();
             value.place = place;
             value.author = actor;
