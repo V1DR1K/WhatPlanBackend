@@ -23,7 +23,9 @@ jobs:
         with: {context: ., push: true, tags: 'ghcr.io/v1dr1k/whatplan-backend:latest,ghcr.io/v1dr1k/whatplan-backend:${{ github.sha }}'}
   deploy:
     needs: build
-    if: github.event_name == 'push'
+    # Fail closed until the production environment has required reviewers and
+    # the main branch is protected. The repository currently has neither.
+    if: false
     runs-on: ubuntu-latest
     permissions: {contents: read}
     environment: production
