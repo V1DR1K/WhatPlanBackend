@@ -3,6 +3,7 @@ package com.wherefood.web;
 import com.wherefood.config.ProblemDetailsSupport;
 import java.util.Map;
 import java.util.stream.Collectors;
+import org.hibernate.exception.ConstraintViolationException;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.dao.OptimisticLockingFailureException;
 import org.springframework.http.HttpStatus;
@@ -25,9 +26,23 @@ import org.springframework.web.servlet.NoHandlerFoundException;
 @RestControllerAdvice
 public class ApiExceptionHandler {
     @ExceptionHandler(DataIntegrityViolationException.class)
-    ResponseEntity<ProblemDetail> conflict(DataIntegrityViolationException ignored) {
+    ResponseEntity<ProblemDetail> conflict(DataIntegrityViolationException exception) {
+        if (isCoupleMediaQuotaViolation(exception)) {
+            return ProblemDetailsSupport.response(HttpStatus.PAYLOAD_TOO_LARGE, "MEDIA_QUOTA_EXCEEDED",
+                    "La pareja alcanzó el límite de almacenamiento de fotos.");
+        }
         return ProblemDetailsSupport.response(HttpStatus.CONFLICT, "CONFLICT",
                 "El registro entra en conflicto con datos existentes.");
+    }
+
+    private static boolean isCoupleMediaQuotaViolation(Throwable exception) {
+        for (Throwable cause = exception; cause != null; cause = cause.getCause()) {
+            if (cause instanceof ConstraintViolationException violation
+                    && "chk_couples_media_quota".equals(violation.getConstraintName())) {
+                return true;
+            }
+        }
+        return false;
     }
 
     @ExceptionHandler(OptimisticLockingFailureException.class)

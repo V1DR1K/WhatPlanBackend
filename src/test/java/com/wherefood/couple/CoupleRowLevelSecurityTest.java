@@ -101,6 +101,53 @@ class CoupleRowLevelSecurityTest {
     }
 
     @Test
+    void mediaQuotaBackfillsLegacyPhotosAndTracksReplacementAndRemoval() throws Exception {
+        try (Connection admin = adminConnection()) {
+            assertMediaUsage(admin, ORIGINAL_COUPLE, 2L, 1, 536870912L, 2000);
+
+            try (PreparedStatement update = admin.prepareStatement(
+                    "update special_date_occurrence_photos set image_base64 = 'larger' where id = 1301")) {
+                assertEquals(1, update.executeUpdate());
+            }
+            assertMediaUsage(admin, ORIGINAL_COUPLE, 7L, 1, 536870912L, 2000);
+
+            try (PreparedStatement delete = admin.prepareStatement(
+                    "delete from special_date_occurrence_photos where id = 1301")) {
+                assertEquals(1, delete.executeUpdate());
+            }
+            assertMediaUsage(admin, ORIGINAL_COUPLE, 0L, 0, 536870912L, 2000);
+        }
+    }
+
+    @Test
+    void concurrentPhotoUploadsCannotExceedCoupleQuota() throws Exception {
+        UUID coupleId = UUID.fromString("00000000-0000-0000-0000-000000000007");
+        try (Connection admin = adminConnection(); Statement statement = admin.createStatement()) {
+            statement.executeUpdate("insert into couples(id, status, created_by, media_quota_bytes, media_quota_photos) values ('"
+                    + coupleId + "', 'PENDING', 3, 2, 10)");
+            statement.executeUpdate("insert into special_dates(id, special_date, label, couple_id) values (9007, date '2026-09-25', 'Quota test', '"
+                    + coupleId + "')");
+            statement.executeUpdate("insert into special_date_occurrences(id, special_date_id, occurred_on, created_by, updated_by, couple_id) values (9107, 9007, date '2026-09-25', 3, 3, '"
+                    + coupleId + "')");
+        }
+
+        CountDownLatch start = new CountDownLatch(1);
+        ExecutorService executor = Executors.newFixedThreadPool(2);
+        try {
+            Future<Boolean> first = executor.submit(() -> tryInsertQuotaPhoto(coupleId, 9107L, 3L, start));
+            Future<Boolean> second = executor.submit(() -> tryInsertQuotaPhoto(coupleId, 9107L, 3L, start));
+            start.countDown();
+            assertEquals(1, (first.get() ? 1 : 0) + (second.get() ? 1 : 0));
+        } finally {
+            executor.shutdownNow();
+        }
+
+        try (Connection admin = adminConnection()) {
+            assertMediaUsage(admin, coupleId, 2L, 1, 2L, 10);
+        }
+    }
+
+    @Test
     void runtimeRoleCannotReadOrChangeAnotherCouplesRowsAndUnsetContextSeesNothing() throws Exception {
         try (Connection runtime = runtimeConnection()) {
             assertEquals(0, countPlaces(runtime, null), "queries without tenant context must fail closed");
@@ -433,6 +480,37 @@ class CoupleRowLevelSecurityTest {
         try (PreparedStatement count = connection.prepareStatement("select count(*) from couple_members where couple_id = ? and status = 'ACTIVE'")) {
             count.setObject(1, coupleId);
             try (ResultSet result = count.executeQuery()) { result.next(); return result.getInt(1); }
+        }
+    }
+
+    private static boolean tryInsertQuotaPhoto(UUID coupleId, long occurrenceId, long userId,
+            CountDownLatch start) throws Exception {
+        start.await();
+        try (Connection connection = adminConnection(); PreparedStatement insert = connection.prepareStatement(
+                "insert into special_date_occurrence_photos(occurrence_id, image_base64, thumbnail_base64, width, height, position, created_by, couple_id) values (?, 'a', 'a', 1, 1, 0, ?, ?)")) {
+            insert.setLong(1, occurrenceId);
+            insert.setLong(2, userId);
+            insert.setObject(3, coupleId);
+            insert.executeUpdate();
+            return true;
+        } catch (SQLException quotaExceeded) {
+            if (!"23514".equals(quotaExceeded.getSQLState())) throw quotaExceeded;
+            return false;
+        }
+    }
+
+    private static void assertMediaUsage(Connection connection, UUID coupleId, long usedBytes, int photoCount,
+            long quotaBytes, int photoQuota) throws SQLException {
+        try (PreparedStatement statement = connection.prepareStatement(
+                "select media_used_bytes, media_photo_count, media_quota_bytes, media_quota_photos from couples where id = ?")) {
+            statement.setObject(1, coupleId);
+            try (ResultSet result = statement.executeQuery()) {
+                assertTrue(result.next());
+                assertEquals(usedBytes, result.getLong(1));
+                assertEquals(photoCount, result.getInt(2));
+                assertEquals(quotaBytes, result.getLong(3));
+                assertEquals(photoQuota, result.getInt(4));
+            }
         }
     }
 

@@ -4,6 +4,8 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 
+import java.sql.SQLException;
+import org.hibernate.exception.ConstraintViolationException;
 import org.junit.jupiter.api.Test;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
@@ -33,6 +35,20 @@ class ApiExceptionHandlerTest {
         assertEquals(HttpStatus.CONFLICT, response.getStatusCode());
         assertEquals("CONFLICT", response.getBody().getProperties().get("errorCode"));
         assertFalse(response.getBody().getDetail().contains("private SQL detail"));
+    }
+
+    @Test
+    void mapsCoupleMediaQuotaToPayloadTooLargeWithoutLeakingDatabaseDetails() {
+        SQLException sql = new SQLException("media_quota_exceeded", "23514");
+        ConstraintViolationException database = new ConstraintViolationException(
+                "media_quota_exceeded", sql, "chk_couples_media_quota");
+        ResponseEntity<ProblemDetail> response = handler.conflict(
+                new DataIntegrityViolationException("database internals", database));
+
+        assertEquals(HttpStatus.PAYLOAD_TOO_LARGE, response.getStatusCode());
+        assertEquals("MEDIA_QUOTA_EXCEEDED", response.getBody().getProperties().get("errorCode"));
+        assertEquals("La pareja alcanzó el límite de almacenamiento de fotos.", response.getBody().getDetail());
+        assertFalse(response.getBody().getDetail().contains("database internals"));
     }
 
     @Test
