@@ -2,6 +2,7 @@ package com.wherefood.couple;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.when;
@@ -11,10 +12,12 @@ import com.wherefood.domain.CoupleInvitation;
 import com.wherefood.domain.CoupleInvitationStatus;
 import com.wherefood.domain.CoupleMember;
 import com.wherefood.domain.CoupleMemberStatus;
+import com.wherefood.domain.CoupleStatus;
 import com.wherefood.domain.User;
 import com.wherefood.repo.Repositories.CoupleInvitations;
 import com.wherefood.repo.Repositories.CoupleMembers;
 import com.wherefood.repo.Repositories.Couples;
+import com.wherefood.repo.Repositories.Users;
 import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
@@ -31,12 +34,13 @@ class CoupleServiceTest {
     @Mock Couples couples;
     @Mock CoupleMembers members;
     @Mock CoupleInvitations invitations;
+    @Mock Users users;
     private CoupleService service;
     private User user;
 
     @BeforeEach
     void setUp() {
-        service = new CoupleService(couples, members, invitations);
+        service = new CoupleService(couples, members, invitations, users);
         user = new User();
         user.id = 10L;
         user.username = "new-user";
@@ -44,6 +48,7 @@ class CoupleServiceTest {
 
     @Test
     void createsPrivateCoupleForUserWithoutOne() {
+        when(users.findLockedById(user.id)).thenReturn(Optional.of(user));
         when(members.findActiveCoupleIdByUserId(user.id)).thenReturn(Optional.empty());
         when(couples.save(any())).thenAnswer(invocation -> {
             Couple value = invocation.getArgument(0);
@@ -67,13 +72,15 @@ class CoupleServiceTest {
     void rejectsExpiredInvitationAndMarksItExpired() {
         Couple couple = couple();
         CoupleInvitation invitation = new CoupleInvitation();
+        invitation.id = 15L;
         invitation.couple = couple;
         invitation.status = CoupleInvitationStatus.PENDING;
         invitation.expiresAt = Instant.now().minusSeconds(1);
+        when(users.findLockedById(user.id)).thenReturn(Optional.of(user));
         when(members.findActiveCoupleIdByUserId(user.id)).thenReturn(Optional.empty());
         when(invitations.findByTokenHash(any())).thenReturn(Optional.of(invitation));
         when(couples.findLockedById(couple.id)).thenReturn(Optional.of(couple));
-        when(invitations.findLockedById(any())).thenReturn(Optional.of(invitation));
+        when(invitations.findLockedByIdAndCoupleId(invitation.id, couple.id)).thenReturn(Optional.of(invitation));
 
         assertThrows(ResponseStatusException.class, () -> service.accept("token", user));
         assertEquals(CoupleInvitationStatus.EXPIRED, invitation.status);
@@ -92,6 +99,32 @@ class CoupleServiceTest {
         assertNotNull(result.token());
         assertEquals(43, result.token().length());
         assertEquals(CoupleInvitationStatus.PENDING, capturedStatus());
+    }
+
+    @Test
+    void leavingKeepsOpenPairWhileOneMemberRemainsAndClosesAfterTheLastLeaves() {
+        Couple couple = couple();
+        couple.status = CoupleStatus.ACTIVE;
+        CoupleMember member = new CoupleMember();
+        member.couple = couple;
+        member.user = user;
+        member.status = CoupleMemberStatus.ACTIVE;
+        when(members.findActiveCoupleIdByUserId(user.id)).thenReturn(Optional.of(couple.id));
+        when(couples.findLockedById(couple.id)).thenReturn(Optional.of(couple));
+        when(members.findLockedByCoupleIdAndUserIdAndStatus(couple.id, user.id, CoupleMemberStatus.ACTIVE))
+                .thenReturn(Optional.of(member));
+        when(invitations.findByCoupleIdAndStatusOrderByCreatedAtDesc(couple.id, CoupleInvitationStatus.PENDING))
+                .thenReturn(List.of());
+        when(members.countByCoupleIdAndStatus(couple.id, CoupleMemberStatus.ACTIVE)).thenReturn(1L, 0L);
+
+        service.leave(user);
+        assertEquals(CoupleStatus.ACTIVE, couple.status);
+        assertNull(couple.closedAt);
+
+        service.leave(user);
+        assertEquals(CoupleStatus.CLOSED, couple.status);
+        assertNotNull(couple.closedAt);
+        assertEquals(CoupleMemberStatus.LEFT, member.status);
     }
 
     private CoupleInvitationStatus capturedStatus() {

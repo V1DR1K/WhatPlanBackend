@@ -13,6 +13,9 @@ public final class Repositories {
  private Repositories() {}
 
  public interface Users extends JpaRepository<User, Long> {
+   @Lock(LockModeType.PESSIMISTIC_WRITE)
+   @Query("select u from User u where u.id = :id")
+   Optional<User> findLockedById(@Param("id") Long id);
    @Query("select u from User u where lower(u.username) = lower(:username)")
    Optional<User> findByUsernameIgnoreCase(@Param("username") String username);
    Optional<User> findByAuthUserId(java.util.UUID authUserId);
@@ -34,6 +37,11 @@ public final class Repositories {
    @EntityGraph(attributePaths = {"couple", "user"})
    Optional<CoupleMember> findByCoupleIdAndUserIdAndStatus(java.util.UUID coupleId, Long userId, CoupleMemberStatus status);
 
+   @Lock(LockModeType.PESSIMISTIC_WRITE)
+   @Query("select m from CoupleMember m where m.couple.id = :coupleId and m.user.id = :userId and m.status = :status")
+   Optional<CoupleMember> findLockedByCoupleIdAndUserIdAndStatus(@Param("coupleId") java.util.UUID coupleId,
+           @Param("userId") Long userId, @Param("status") CoupleMemberStatus status);
+
    long countByCoupleIdAndStatus(java.util.UUID coupleId, CoupleMemberStatus status);
  }
 
@@ -49,6 +57,11 @@ public final class Repositories {
    List<CoupleInvitation> findByCoupleIdAndStatusOrderByCreatedAtDesc(java.util.UUID coupleId, CoupleInvitationStatus status);
 
    Optional<CoupleInvitation> findByIdAndCoupleId(Long id, java.util.UUID coupleId);
+
+   @Lock(LockModeType.PESSIMISTIC_WRITE)
+   @Query("select i from CoupleInvitation i where i.id = :id and i.couple.id = :coupleId")
+   Optional<CoupleInvitation> findLockedByIdAndCoupleId(@Param("id") Long id,
+           @Param("coupleId") java.util.UUID coupleId);
  }
 
  public interface Categories extends JpaRepository<Category, Long> {

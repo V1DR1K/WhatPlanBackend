@@ -11,12 +11,11 @@ import jakarta.persistence.Id;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
-import jakarta.persistence.UniqueConstraint;
 import jakarta.persistence.Version;
 import java.time.Instant;
 
 @Entity
-@Table(name = "couple_members", uniqueConstraints = @UniqueConstraint(columnNames = {"couple_id", "user_id"}))
+@Table(name = "couple_members")
 public class CoupleMember {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)

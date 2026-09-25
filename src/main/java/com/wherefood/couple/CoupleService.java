@@ -11,6 +11,7 @@ import com.wherefood.config.CoupleContext;
 import com.wherefood.repo.Repositories.CoupleInvitations;
 import com.wherefood.repo.Repositories.CoupleMembers;
 import com.wherefood.repo.Repositories.Couples;
+import com.wherefood.repo.Repositories.Users;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
@@ -35,12 +36,14 @@ public class CoupleService {
     private final Couples couples;
     private final CoupleMembers members;
     private final CoupleInvitations invitations;
+    private final Users users;
     private final SecureRandom random = new SecureRandom();
 
-    public CoupleService(Couples couples, CoupleMembers members, CoupleInvitations invitations) {
+    public CoupleService(Couples couples, CoupleMembers members, CoupleInvitations invitations, Users users) {
         this.couples = couples;
         this.members = members;
         this.invitations = invitations;
+        this.users = users;
     }
 
     @Transactional(readOnly = true)
@@ -56,6 +59,7 @@ public class CoupleService {
 
     @Transactional
     public CoupleSnapshot create(User user) {
+        user = users.findLockedById(user.id).orElseThrow(() -> notFound("Usuario"));
         if (members.findActiveCoupleIdByUserId(user.id).isPresent()) throw conflict("Ya pertenecés a una pareja activa");
         Couple couple = new Couple();
         couple.createdBy = user;
@@ -72,12 +76,14 @@ public class CoupleService {
     public InvitationSnapshot createInvitation(User user) {
         UUID coupleId = activeCoupleId(user);
         Couple couple = couples.findLockedById(coupleId).orElseThrow(() -> notFound("Pareja"));
+        if (couple.status == CoupleStatus.CLOSED) throw notFound("Pareja");
         if (members.countByCoupleIdAndStatus(coupleId, CoupleMemberStatus.ACTIVE) >= 2) throw conflict("La pareja ya tiene dos integrantes");
         Instant now = Instant.now();
         invitations.findByCoupleIdAndStatusOrderByCreatedAtDesc(coupleId, CoupleInvitationStatus.PENDING).forEach(value -> {
             value.status = CoupleInvitationStatus.REVOKED;
             value.revokedAt = now;
         });
+        invitations.flush();
         String token = randomToken();
         CoupleInvitation invitation = new CoupleInvitation();
         invitation.couple = couple;
@@ -93,24 +99,22 @@ public class CoupleService {
     @Transactional(noRollbackFor = ExpiredInvitationException.class)
     public CoupleSnapshot accept(String rawToken, User user) {
         if (rawToken == null || rawToken.isBlank()) throw notFound("Invitación");
+        user = users.findLockedById(user.id).orElseThrow(() -> notFound("Usuario"));
         if (members.findActiveCoupleIdByUserId(user.id).isPresent()) throw conflict("Primero tenés que dejar tu pareja actual");
         CoupleInvitation invitation = invitations.findByTokenHash(hash(rawToken.trim())).orElseThrow(() -> notFound("Invitación"));
         Couple couple = couples.findLockedById(invitation.couple.id).orElseThrow(() -> notFound("Pareja"));
         CoupleContext.set(couple.id);
-        invitation = invitations.findLockedById(invitation.id).orElseThrow(() -> notFound("Invitación"));
+        invitation = invitations.findLockedByIdAndCoupleId(invitation.id, couple.id).orElseThrow(() -> notFound("Invitación"));
         Instant now = Instant.now();
-        if (invitation.status != CoupleInvitationStatus.PENDING) throw notFound("Invitación");
+        if (couple.status == CoupleStatus.CLOSED || invitation.status != CoupleInvitationStatus.PENDING) throw notFound("Invitación");
         if (!invitation.expiresAt.isAfter(now)) {
             invitation.status = CoupleInvitationStatus.EXPIRED;
             audit.info("couple_invitation_expired invitationId={} userId={}", invitation.id, user.id);
             throw new ExpiredInvitationException();
         }
         if (members.countByCoupleIdAndStatus(couple.id, CoupleMemberStatus.ACTIVE) >= 2) throw conflict("La pareja ya está completa");
-        short slot = members.findByCoupleIdAndStatusOrderBySlot(couple.id, CoupleMemberStatus.ACTIVE).stream()
-                .map(member -> member.slot)
-                .filter(value -> value == 1)
-                .findFirst()
-                .isEmpty() ? (short) 1 : (short) 2;
+        List<CoupleMember> activeMembers = members.findByCoupleIdAndStatusOrderBySlot(couple.id, CoupleMemberStatus.ACTIVE);
+        short slot = activeMembers.stream().anyMatch(member -> member.slot == 1) ? (short) 2 : (short) 1;
         addMember(couple, user, slot);
         couple.status = CoupleStatus.ACTIVE;
         invitation.status = CoupleInvitationStatus.ACCEPTED;
@@ -124,7 +128,8 @@ public class CoupleService {
     @Transactional
     public void revoke(Long invitationId, User user) {
         UUID coupleId = activeCoupleId(user);
-        CoupleInvitation invitation = invitations.findByIdAndCoupleId(invitationId, coupleId).orElseThrow(() -> notFound("Invitación"));
+        couples.findLockedById(coupleId).orElseThrow(() -> notFound("Pareja"));
+        CoupleInvitation invitation = invitations.findLockedByIdAndCoupleId(invitationId, coupleId).orElseThrow(() -> notFound("Invitación"));
         if (invitation.status == CoupleInvitationStatus.PENDING) {
             invitation.status = CoupleInvitationStatus.REVOKED;
             invitation.revokedAt = Instant.now();
@@ -136,7 +141,7 @@ public class CoupleService {
     public void leave(User user) {
         UUID coupleId = activeCoupleId(user);
         Couple couple = couples.findLockedById(coupleId).orElseThrow(() -> notFound("Pareja"));
-        CoupleMember member = members.findByCoupleIdAndUserIdAndStatus(coupleId, user.id, CoupleMemberStatus.ACTIVE)
+        CoupleMember member = members.findLockedByCoupleIdAndUserIdAndStatus(coupleId, user.id, CoupleMemberStatus.ACTIVE)
                 .orElseThrow(() -> notFound("Integrante"));
         member.status = CoupleMemberStatus.LEFT;
         member.leftAt = Instant.now();
@@ -144,6 +149,7 @@ public class CoupleService {
             value.status = CoupleInvitationStatus.REVOKED;
             value.revokedAt = Instant.now();
         });
+        members.flush();
         if (members.countByCoupleIdAndStatus(coupleId, CoupleMemberStatus.ACTIVE) == 0) {
             couple.status = CoupleStatus.CLOSED;
             couple.closedAt = Instant.now();
