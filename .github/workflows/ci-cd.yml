@@ -1,27 +1,32 @@
 name: Backend CI/CD
 on: {push: {branches: [main]}, pull_request: {branches: [main]}}
-permissions: {contents: read, packages: write}
+permissions: {contents: read}
 concurrency:
   group: whatplan-backend-${{ github.ref }}
   cancel-in-progress: true
 jobs:
   build:
     runs-on: ubuntu-latest
+    permissions: {contents: read, packages: write}
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-java@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6.0.1
         with: {distribution: temurin, java-version: '21', cache: maven}
       - run: mvn -B verify
-      - uses: docker/login-action@v3
+      - uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
         if: github.event_name == 'push'
         with: {registry: ghcr.io, username: '${{ github.actor }}', password: '${{ secrets.GITHUB_TOKEN }}'}
-      - uses: docker/build-push-action@v6
+      - uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
         if: github.event_name == 'push'
         with: {context: ., push: true, tags: 'ghcr.io/v1dr1k/whatplan-backend:latest,ghcr.io/v1dr1k/whatplan-backend:${{ github.sha }}'}
   deploy:
     needs: build
     if: github.event_name == 'push'
     runs-on: ubuntu-latest
+    permissions: {contents: read}
+    environment: production
     steps:
-      - uses: appleboy/ssh-action@v1.2.0
+      - uses: appleboy/ssh-action@0ff4204d59e8e51228ff73bce53f80d53301dee2 # v1.2.5
         with: {host: '${{ secrets.VPS_HOST }}', username: '${{ secrets.VPS_USER }}', key: '${{ secrets.VPS_SSH_KEY }}', script: '/opt/infra/bin/deploy-service whatplan api ${{ github.sha }}'}
