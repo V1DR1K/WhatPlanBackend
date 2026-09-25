@@ -80,6 +80,7 @@ class CoupleHttpIsolationIntegrationTest {
         properties.add("DATABASE_ADMIN_USER", POSTGRES::getUsername);
         properties.add("DATABASE_MIGRATION_USER", () -> "whatplan_migrator");
         properties.add("DATABASE_MIGRATION_PASSWORD", () -> "test-only-migration-password-0123456789");
+        properties.add("spring.flyway.url", POSTGRES::getJdbcUrl);
         properties.add("spring.flyway.user", () -> "whatplan_migrator");
         properties.add("spring.flyway.password", () -> "test-only-migration-password-0123456789");
         properties.add("REDIS_HOST", REDIS::getHost);
