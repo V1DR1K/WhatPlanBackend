@@ -21,6 +21,11 @@ class LocalUserProvisionerTest {
     private final LocalUserProvisioner provisioner = new LocalUserProvisioner(users, "USER");
 
     @Test
+    void refusesAdminAsAutomaticProvisioningRole() {
+        assertThrows(IllegalArgumentException.class, () -> new LocalUserProvisioner(users, "ADMIN"));
+    }
+
+    @Test
     void provision_tomasUsernameWithDifferentCentralId_requiresVerifiedMigration() {
         rejectsLegacyUsernameTakeover("tomas");
     }

@@ -47,6 +47,20 @@ class AuthApiTest {
     }
 
     @Test
+    void loginRejectsInactiveCentralAccountBeforeLocalProvisioning() {
+        UUID userId = UUID.randomUUID();
+        when(central.login("new-user", "password")).thenReturn(new CentralAuthClient.TokenResponse(
+                "access", "refresh", "Bearer", 300,
+                new CentralAuthClient.CentralUser(userId, "new-user", "DISABLED", null, null, false)));
+
+        ResponseStatusException error = org.junit.jupiter.api.Assertions.assertThrows(ResponseStatusException.class,
+                () -> api.login(new LoginRequest("new-user", "password"), new MockHttpServletResponse()));
+
+        org.junit.jupiter.api.Assertions.assertEquals(HttpStatus.FORBIDDEN, error.getStatusCode());
+        verify(provisioner, org.mockito.Mockito.never()).provision(userId, "new-user");
+    }
+
+    @Test
     void refreshesAnAuthenticatedUserAndDoesNotReturnRefreshTokenInJson() {
         UUID userId = UUID.randomUUID();
         CentralAuthClient.TokenResponse response = new CentralAuthClient.TokenResponse(

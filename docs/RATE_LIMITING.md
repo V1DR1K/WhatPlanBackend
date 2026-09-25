@@ -7,6 +7,7 @@ Current fixed-window policies:
 | Request | Limit | Window | Identity |
 | --- | ---: | ---: | --- |
 | `POST /api/auth/login` | 10 | 15 minutes | Client IP |
+| `POST /api/auth/register` (reserved for the central-auth integration) | 5 | 30 minutes | Client IP |
 | `POST /api/auth/refresh` | 60 per IP and 10 per refresh cookie | 5 minutes | Separate IP and refresh-cookie counters (cookie hashed before Redis key storage) |
 | `POST /api/couple/invitations` | 20 | 5 minutes | Authenticated local account, otherwise client IP |
 | `POST /api/couple/invitations/accept` | 15 | 5 minutes | Authenticated local account, otherwise client IP |

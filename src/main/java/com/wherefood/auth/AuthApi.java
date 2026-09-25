@@ -144,6 +144,12 @@ public class AuthApi {
                     "El servicio de autenticación devolvió un token inválido", invalidCentralToken);
         }
         CentralUser centralUser = response.user();
+        if (centralUser.status() == null || !"ACTIVE".equalsIgnoreCase(centralUser.status())) {
+            clearRefreshCookie(servletResponse);
+            throw new org.springframework.web.server.ResponseStatusException(
+                    org.springframework.http.HttpStatus.FORBIDDEN,
+                    "La cuenta no está habilitada para iniciar sesión");
+        }
         if (!subject.equals(centralUser.id())) {
             clearRefreshCookie(servletResponse);
             throw new org.springframework.web.server.ResponseStatusException(

@@ -18,11 +18,16 @@ public class LocalUserProvisioner {
     @org.springframework.beans.factory.annotation.Autowired
     public LocalUserProvisioner(Users users, @Value("${app.auth-default-role}") String defaultRole) {
         this.users = users;
+        Role configuredRole;
         try {
-            this.defaultRole = Role.valueOf(defaultRole.trim().toUpperCase());
+            configuredRole = Role.valueOf(defaultRole.trim().toUpperCase());
         } catch (Exception ex) {
-            throw new IllegalArgumentException("AUTH_DEFAULT_ROLE must be USER or ADMIN", ex);
+            throw new IllegalArgumentException("AUTH_DEFAULT_ROLE must be USER", ex);
         }
+        if (configuredRole != Role.USER) {
+            throw new IllegalArgumentException("AUTH_DEFAULT_ROLE must be USER; administrator promotion is an audited operation");
+        }
+        this.defaultRole = configuredRole;
     }
 
     @Transactional

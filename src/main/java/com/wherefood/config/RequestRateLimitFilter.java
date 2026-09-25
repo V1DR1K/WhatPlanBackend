@@ -119,6 +119,7 @@ public class RequestRateLimitFilter extends OncePerRequestFilter {
         String path = request.getRequestURI();
         String method = request.getMethod();
         if ("POST".equals(method) && "/api/auth/login".equals(path)) return new Policy("login", 10, Duration.ofMinutes(15));
+        if ("POST".equals(method) && "/api/auth/register".equals(path)) return new Policy("register", 5, Duration.ofMinutes(30));
         if ("POST".equals(method) && "/api/auth/refresh".equals(path)) return new Policy("refresh", 60, Duration.ofMinutes(5));
         if ("POST".equals(method) && "/api/couple/invitations".equals(path)) return new Policy("invite-create", 20, Duration.ofMinutes(5));
         if ("POST".equals(method) && "/api/couple/invitations/accept".equals(path)) return new Policy("invite-accept", 15, Duration.ofMinutes(5));
