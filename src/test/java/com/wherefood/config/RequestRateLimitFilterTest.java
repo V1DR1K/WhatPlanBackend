@@ -44,6 +44,18 @@ class RequestRateLimitFilterTest {
         MockHttpServletResponse response = invoke("203.0.113.8", null, "");
         assertEquals(503, response.getStatus());
         assertEquals("no-store", response.getHeader("Cache-Control"));
+        assertEquals("application/problem+json", response.getContentType());
+        org.junit.jupiter.api.Assertions.assertNotNull(response.getHeader("X-Request-Id"));
+    }
+
+    @Test
+    void returnsProblemDetailsAndRetryAfterWhenLimitIsExceeded() throws Exception {
+        when(limiter.allow(eq("login"), eq("203.0.113.8"), eq(10), any(Duration.class))).thenReturn(false);
+        MockHttpServletResponse response = invoke("203.0.113.8", null, "");
+        assertEquals(429, response.getStatus());
+        assertEquals("application/problem+json", response.getContentType());
+        assertEquals("900", response.getHeader("Retry-After"));
+        org.junit.jupiter.api.Assertions.assertTrue(response.getContentAsString().contains("\"errorCode\":\"RATE_LIMITED\""));
     }
 
     private MockHttpServletResponse invoke(String remote, String forwarded, String trusted) throws Exception {

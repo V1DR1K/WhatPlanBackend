@@ -13,6 +13,7 @@ import java.util.Arrays;
 import java.util.Set;
 import java.util.stream.Collectors;
 import org.springframework.http.MediaType;
+import org.springframework.http.HttpStatus;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.filter.OncePerRequestFilter;
@@ -63,11 +64,13 @@ public class RequestRateLimitFilter extends OncePerRequestFilter {
                 allowed = limiter.allow(policy.name, identity, policy.limit, policy.window);
             }
         } catch (RuntimeException unavailable) {
-            writeError(response, HttpServletResponse.SC_SERVICE_UNAVAILABLE, "RATE_LIMIT_UNAVAILABLE", Duration.ofSeconds(5));
+            ProblemDetailsSupport.write(response, HttpStatus.SERVICE_UNAVAILABLE, "RATE_LIMIT_UNAVAILABLE",
+                    "El control de solicitudes no está disponible temporalmente.", 5L);
             return;
         }
         if (allowed) chain.doFilter(request, response);
-        else writeError(response, HttpServletResponse.SC_TOO_MANY_REQUESTS, "RATE_LIMITED", policy.window);
+        else ProblemDetailsSupport.write(response, HttpStatus.TOO_MANY_REQUESTS, "RATE_LIMITED",
+                "Demasiadas solicitudes. Intentá nuevamente más tarde.", policy.window.toSeconds());
     }
 
     private String clientIp(HttpServletRequest request) {
@@ -134,18 +137,6 @@ public class RequestRateLimitFilter extends OncePerRequestFilter {
     private static boolean isMultipart(HttpServletRequest request) {
         String contentType = request.getContentType();
         return contentType != null && contentType.toLowerCase(java.util.Locale.ROOT).startsWith(MediaType.MULTIPART_FORM_DATA_VALUE);
-    }
-
-    private static void writeError(HttpServletResponse response, int status, String title, Duration retryAfter) throws IOException {
-        response.setStatus(status);
-        response.setContentType(MediaType.APPLICATION_PROBLEM_JSON_VALUE);
-        response.setHeader("Cache-Control", "no-store");
-        response.setHeader("Retry-After", Long.toString(Math.max(1, retryAfter.toSeconds())));
-        String detail = status == HttpServletResponse.SC_TOO_MANY_REQUESTS
-                ? "Demasiadas solicitudes. Intentá nuevamente más tarde."
-                : "El control de solicitudes no está disponible temporalmente.";
-        response.getWriter().write("{\"type\":\"about:blank\",\"title\":\"" + title + "\",\"status\":" + status
-                + ",\"detail\":\"" + detail + "\"}");
     }
 
     private record Policy(String name, int limit, Duration window) {}

@@ -95,3 +95,13 @@ most recently modified entry first.
 
 All collections are ordered by their explicit photo position or their relevant
 experience date. A visit/cooking cover is selected with `PUT .../cover/{photoId}`.
+
+## Error responses
+
+API errors use `application/problem+json` (RFC 9457) with `type`, `title`,
+`status`, `detail`, and an opaque `instance` URN. Stable `errorCode` and
+non-PII `requestId` extensions are included; the same request ID is returned in
+`X-Request-Id`. Validation errors may include an `errors` map by field. A 404
+for a missing or out-of-couple resource uses the same generic detail so it does
+not reveal whether another couple's identifier exists. Rate-limit errors add
+`Retry-After`; filter-generated errors are never cached.
