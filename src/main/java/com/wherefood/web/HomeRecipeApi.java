@@ -77,7 +77,22 @@ public class HomeRecipeApi {
 
   @GetMapping("/recipes") @Transactional(readOnly = true) Slice<RecipeDto> listRecipes(@RequestParam(required = false) String search, @RequestParam(required = false) Home home, @RequestParam(required = false) Boolean cooked, @RequestParam(required = false) String sort, @RequestParam(required = false) Long cursor, @RequestParam(defaultValue = "5") int size) {
    int limit = Math.max(1, Math.min(size, 30));
+   long offset = cursor == null ? 0 : Math.max(0, cursor);
+   if (offset > 1_000_000) throw badRequest("Cursor inválido");
    String normalizedSearch = search == null || search.isBlank() ? null : search.trim().toLowerCase(Locale.ROOT);
+   String normalizedSort = sort == null ? "date-desc" : sort.trim().toLowerCase(Locale.ROOT);
+   if (normalizedSearch == null && home == null && cooked == null && (normalizedSort.equals("date") || normalizedSort.equals("date-desc"))) {
+    List<Long> ids = recipes.findPageIdsByCoupleIdOrderByUpdatedAtDesc(CoupleContext.current(), limit + 1, offset);
+    Long next = ids.size() > limit ? offset + limit : null;
+    List<Long> pageIds = ids.stream().limit(limit).toList();
+    if (pageIds.isEmpty()) return new Slice<>(List.of(), next);
+    Map<Long, Recipe> byId = recipes.findAllByIdInAndCoupleId(pageIds, CoupleContext.current()).stream()
+            .collect(java.util.stream.Collectors.toMap(recipe -> recipe.id, recipe -> recipe));
+    List<Recipe> page = pageIds.stream().map(byId::get).filter(Objects::nonNull).toList();
+    Map<Long, RecipeSummary> summaries = recipeSummaries(pageIds);
+    Map<Long, RecipePhotoMetadata> photosByRecipe = recipePhotos(page);
+    return new Slice<>(page.stream().map(recipe -> recipe(recipe, summaries.get(recipe.id), photosByRecipe.get(recipe.id))).toList(), next);
+   }
    List<Recipe> all = recipes.findAllByCoupleId(CoupleContext.current());
    Map<Long, RecipeSummary> summaries = recipeSummaries(all.stream().map(recipe -> recipe.id).toList());
    List<Recipe> candidates = all.stream()
@@ -85,14 +100,13 @@ public class HomeRecipeApi {
      .filter(recipe -> home == null || summaries.get(recipe.id).homes().contains(home))
      .filter(recipe -> cooked == null || cooked == (summaries.get(recipe.id).cookingCount() > 0)).toList();
    Comparator<Recipe> dateDescending = Comparator.comparing((Recipe recipe) -> recipe.updatedAt, Comparator.nullsLast(Comparator.reverseOrder())).thenComparing(recipe -> recipe.createdAt, Comparator.nullsLast(Comparator.reverseOrder())).thenComparing(recipe -> recipe.id, Comparator.reverseOrder());
-   Comparator<Recipe> ordering = switch (sort == null ? "date-desc" : sort.trim().toLowerCase(Locale.ROOT)) {
+   Comparator<Recipe> ordering = switch (normalizedSort) {
     case "date", "date-desc" -> dateDescending;
     case "date-asc" -> Comparator.comparing((Recipe recipe) -> recipe.updatedAt, Comparator.nullsLast(Comparator.naturalOrder())).thenComparing(recipe -> recipe.createdAt, Comparator.nullsLast(Comparator.naturalOrder())).thenComparing(recipe -> recipe.id, Comparator.reverseOrder());
     case "rating", "rating-desc" -> Comparator.comparing((Recipe recipe) -> summaries.get(recipe.id).rating(), Comparator.nullsLast(Comparator.reverseOrder())).thenComparing(dateDescending);
     case "rating-asc" -> Comparator.comparing((Recipe recipe) -> summaries.get(recipe.id).rating(), Comparator.nullsLast(Comparator.naturalOrder())).thenComparing(dateDescending);
     default -> throw badRequest("Orden inválido");
    };
-   long offset = cursor == null ? 0 : Math.max(0, cursor);
    List<Recipe> result = candidates.stream().sorted(ordering).skip(offset).limit(limit + 1L).toList();
    Long next = result.size() > limit ? offset + limit : null;
    List<Recipe> page = result.stream().limit(limit).toList();

@@ -62,7 +62,8 @@ class HomeRecipeApiTest {
   Recipes recipes = mock(Recipes.class); User tomas = user(7L, "tomas"); Recipe recipe = new Recipe(); recipe.id = 5L; recipe.name = "Tarta"; recipe.createdBy = recipe.updatedBy = tomas; recipe.updatedAt = Instant.parse("2026-07-23T00:00:00Z");
   RecipeIngredient ingredient = new RecipeIngredient(); ingredient.name = "Harina"; ingredient.quantity = BigDecimal.valueOf(250); ingredient.unit = "g"; ingredient.position = 0; recipe.ingredients.add(ingredient);
   RecipeStep step = new RecipeStep(); step.instruction = "Hornear."; step.position = 0; recipe.steps.add(step);
-  when(recipes.findAllByCoupleId(null)).thenReturn(List.of(recipe));
+  when(recipes.findPageIdsByCoupleIdOrderByUpdatedAtDesc(null, 6, 0)).thenReturn(List.of(5L));
+  when(recipes.findAllByIdInAndCoupleId(List.of(5L), null)).thenReturn(List.of(recipe));
 
    Slice<RecipeDto> result = new HomeRecipeApi(recipes, mock(RecipePhotos.class), null, null, null).listRecipes(null, null, null, null, null, 5);
 
@@ -86,14 +87,32 @@ class HomeRecipeApiTest {
   void projectsTheRecipeProfileSeparatelyFromCookings() {
    Recipes recipes = mock(Recipes.class); RecipePhotos profilePhotos = mock(RecipePhotos.class); User tomas = user(7L, "tomas");
    Recipe recipe = new Recipe(); recipe.id = 5L; recipe.name = "Tarta"; recipe.createdBy = recipe.updatedBy = tomas; recipe.updatedAt = Instant.parse("2026-07-23T00:00:00Z");
-   when(recipes.findAllByCoupleId(null)).thenReturn(List.of(recipe)); when(profilePhotos.metadataByRecipeIdInAndCoupleId(any(), isNull())).thenReturn(List.of(photo(12L, 5L, 1200, 800)));
+   when(recipes.findPageIdsByCoupleIdOrderByUpdatedAtDesc(null, 6, 0)).thenReturn(List.of(5L));
+   when(recipes.findAllByIdInAndCoupleId(List.of(5L), null)).thenReturn(List.of(recipe)); when(profilePhotos.metadataByRecipeIdInAndCoupleId(any(), isNull())).thenReturn(List.of(photo(12L, 5L, 1200, 800)));
 
    RecipeDto result = new HomeRecipeApi(recipes, profilePhotos, null, null, null).listRecipes(null, null, null, null, null, 5).content().getFirst();
 
    assertEquals("/how-cook/recipes/5/photo?v=12", result.photoUrl());
    assertEquals("/how-cook/recipes/5/photo?thumbnail=true&v=12", result.thumbnailUrl());
-   assertEquals(1200, result.photoWidth());
-   assertEquals(800, result.photoHeight());
+  assertEquals(1200, result.photoWidth());
+  assertEquals(800, result.photoHeight());
+  }
+
+  @Test
+  void paginatesUnfilteredRecipesInDatabaseWithinCurrentCouple() {
+   Recipes recipes = mock(Recipes.class);
+   Recipe recipe = recipe(8L, "Guiso", user(7L, "tomas"), "2026-07-23T00:00:00Z");
+   UUID coupleId = UUID.randomUUID(); CoupleContext.set(coupleId);
+   when(recipes.findPageIdsByCoupleIdOrderByUpdatedAtDesc(coupleId, 2, 30)).thenReturn(List.of(8L, 9L));
+   when(recipes.findAllByIdInAndCoupleId(List.of(8L), coupleId)).thenReturn(List.of(recipe));
+
+   Slice<RecipeDto> result = new HomeRecipeApi(recipes, mock(RecipePhotos.class), null, null, null)
+           .listRecipes(null, null, null, null, 30L, 1);
+
+   assertEquals(List.of(8L), result.content().stream().map(RecipeDto::id).toList());
+   assertEquals(31L, result.nextCursor());
+   verify(recipes).findPageIdsByCoupleIdOrderByUpdatedAtDesc(coupleId, 2, 30);
+   verify(recipes).findAllByIdInAndCoupleId(List.of(8L), coupleId);
   }
 
   @Test

@@ -360,6 +360,10 @@ public final class Repositories {
    public interface Recipes extends CoupleScopedRepository<Recipe> {
     @EntityGraph(attributePaths = {"createdBy", "updatedBy", "ingredients", "steps"}) Optional<Recipe> findByIdAndCoupleId(Long id, java.util.UUID coupleId);
     @EntityGraph(attributePaths = {"createdBy", "updatedBy", "ingredients", "steps"}) List<Recipe> findAllByCoupleId(java.util.UUID coupleId);
+    @Query(value = "select id from recipes where couple_id = :coupleId order by updated_at desc, created_at desc, id desc limit :limit offset :offset", nativeQuery = true)
+    List<Long> findPageIdsByCoupleIdOrderByUpdatedAtDesc(@Param("coupleId") java.util.UUID coupleId, @Param("limit") int limit, @Param("offset") long offset);
+    @EntityGraph(attributePaths = {"createdBy", "updatedBy", "ingredients", "steps"})
+    List<Recipe> findAllByIdInAndCoupleId(Collection<Long> ids, java.util.UUID coupleId);
    }
 
     public interface RecipePhotos extends CoupleScopedRepository<RecipePhoto> {
