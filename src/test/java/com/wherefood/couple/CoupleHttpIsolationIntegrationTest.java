@@ -114,6 +114,12 @@ class CoupleHttpIsolationIntegrationTest {
         assertThat(get("/api/places/" + fixture.placeA(), USER_A1_AUTH_ID, null).getStatusCode().value()).isEqualTo(200);
         assertThat(get("/api/places/" + fixture.placeB(), USER_A1_AUTH_ID, null).getStatusCode().value()).isEqualTo(404);
         assertThat(get("/api/places/" + fixture.placeA(), USER_B_AUTH_ID, null).getStatusCode().value()).isEqualTo(404);
+        assertThat(get("/api/places/" + fixture.placeB() + "/visits", USER_A1_AUTH_ID, null)
+                .getStatusCode().value()).isEqualTo(404);
+        assertThat(get("/api/places/" + fixture.placeB() + "/item-dates", USER_A1_AUTH_ID, null)
+                .getStatusCode().value()).isEqualTo(404);
+        assertThat(get("/api/items?placeId=" + fixture.placeB(), USER_A1_AUTH_ID, null)
+                .getStatusCode().value()).isEqualTo(404);
 
         ResponseEntity<String> attemptedCrossCoupleUpdate = putPlace(fixture.placeB(), USER_A1_AUTH_ID,
                 "Attempted cross-couple edit", fixture.categoryId());
