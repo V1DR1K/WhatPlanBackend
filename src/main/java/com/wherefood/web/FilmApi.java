@@ -14,6 +14,7 @@ import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 import org.springframework.web.server.ResponseStatusException;
 import com.wherefood.validation.SafeHttpUrl;
+import com.wherefood.couple.CoupleAuthorizationService;
 import org.springframework.validation.annotation.Validated;
 
 record PlatformRequest(@NotBlank @Size(max = 80) String name, @NotBlank @Size(max = 20) String icon, boolean active) {}
@@ -39,22 +40,68 @@ public class FilmApi {
   private final FilmGenreOptions genreOptions;
   private final PhotoStorage storage;
   private final TmdbClient tmdb;
+  private final FilmReviewService reviewService;
+  private final FilmViewService viewService;
+  private final FilmCatalogService catalogService;
+  private final FilmMediaService mediaService;
+  private final FilmCatalogAdminService catalogAdminService;
 
    public FilmApi(Films films, FilmReviews reviews, FilmViews views, WatchPlatforms platforms, FilmPhotos filmPhotos, FilmGenreOptions genreOptions, PhotoStorage storage, TmdbClient tmdb) {
-    this.films = films; this.reviews = reviews; this.views = views; this.platforms = platforms; this.filmPhotos = filmPhotos; this.genreOptions = genreOptions; this.storage = storage; this.tmdb = tmdb;
+    this(films, reviews, views, platforms, filmPhotos, genreOptions, storage, tmdb,
+            new FilmReviewService(reviews, new CoupleAuthorizationService(null), tmdb),
+            new FilmViewService(films, views, new CoupleAuthorizationService(null)),
+            new FilmCatalogService(films, genreOptions, platforms, tmdb,
+                    new CoupleAuthorizationService(null)));
+   }
+
+   public FilmApi(Films films, FilmReviews reviews, FilmViews views, WatchPlatforms platforms, FilmPhotos filmPhotos, FilmGenreOptions genreOptions, PhotoStorage storage, TmdbClient tmdb, FilmReviewService reviewService) {
+    this(films, reviews, views, platforms, filmPhotos, genreOptions, storage, tmdb, reviewService,
+            new FilmViewService(films, views, new CoupleAuthorizationService(null)),
+            new FilmCatalogService(films, genreOptions, platforms, tmdb,
+                    new CoupleAuthorizationService(null)));
+   }
+
+   public FilmApi(Films films, FilmReviews reviews, FilmViews views, WatchPlatforms platforms, FilmPhotos filmPhotos, FilmGenreOptions genreOptions, PhotoStorage storage, TmdbClient tmdb, FilmReviewService reviewService, FilmViewService viewService) {
+    this(films, reviews, views, platforms, filmPhotos, genreOptions, storage, tmdb, reviewService, viewService,
+            new FilmCatalogService(films, genreOptions, platforms, tmdb, new CoupleAuthorizationService(null)));
+   }
+
+   public FilmApi(Films films, FilmReviews reviews, FilmViews views, WatchPlatforms platforms, FilmPhotos filmPhotos, FilmGenreOptions genreOptions, PhotoStorage storage, TmdbClient tmdb, FilmReviewService reviewService, FilmViewService viewService, FilmCatalogService catalogService) {
+    this(films, reviews, views, platforms, filmPhotos, genreOptions, storage, tmdb, reviewService,
+            viewService, catalogService, new FilmMediaService(films, filmPhotos, storage,
+                    new CoupleAuthorizationService(null)));
+   }
+
+   public FilmApi(Films films, FilmReviews reviews, FilmViews views, WatchPlatforms platforms,
+           FilmPhotos filmPhotos, FilmGenreOptions genreOptions, PhotoStorage storage, TmdbClient tmdb,
+           FilmReviewService reviewService, FilmViewService viewService,
+           FilmCatalogService catalogService, FilmMediaService mediaService) {
+    this(films, reviews, views, platforms, filmPhotos, genreOptions, storage, tmdb, reviewService,
+            viewService, catalogService, mediaService,
+            new FilmCatalogAdminService(platforms, genreOptions, films));
+   }
+
+   @org.springframework.beans.factory.annotation.Autowired
+   public FilmApi(Films films, FilmReviews reviews, FilmViews views, WatchPlatforms platforms,
+           FilmPhotos filmPhotos, FilmGenreOptions genreOptions, PhotoStorage storage, TmdbClient tmdb,
+           FilmReviewService reviewService, FilmViewService viewService,
+           FilmCatalogService catalogService, FilmMediaService mediaService,
+           FilmCatalogAdminService catalogAdminService) {
+    this.films = films; this.reviews = reviews; this.views = views; this.platforms = platforms; this.filmPhotos = filmPhotos; this.genreOptions = genreOptions; this.storage = storage; this.tmdb = tmdb; this.reviewService = reviewService; this.viewService = viewService; this.catalogService = catalogService;
+    this.mediaService = mediaService; this.catalogAdminService = catalogAdminService;
    }
 
    @GetMapping("/tmdb/movies") List<TmdbMovieDto> searchTmdb(@RequestParam @Size(max = 100) String query) { return tmdb.search(query); }
    @GetMapping("/tmdb/movies/{tmdbId}/recommendations") List<TmdbMovieDto> recommendations(@PathVariable @Positive long tmdbId) { return tmdb.recommendations(tmdbId); }
   @GetMapping("/watch-platforms") List<PlatformDto> activePlatforms() { return platforms.findByActiveTrueOrderByNameAsc().stream().map(FilmApi::platform).toList(); }
  @GetMapping("/watch-platforms/all") @PreAuthorize("hasRole('ADMIN')") List<PlatformDto> allPlatforms() { return platforms.findAllByOrderByNameAsc().stream().map(FilmApi::platform).toList(); }
- @PostMapping("/watch-platforms") @PreAuthorize("hasRole('ADMIN')") PlatformDto addPlatform(@RequestBody @Valid PlatformRequest request) { WatchPlatform value = new WatchPlatform(); apply(value, request); value.createdAt = Instant.now(); return platform(platforms.save(value)); }
- @PutMapping("/watch-platforms/{id}") @PreAuthorize("hasRole('ADMIN')") PlatformDto updatePlatform(@PathVariable Long id, @RequestBody @Valid PlatformRequest request) { WatchPlatform value = platforms.findById(id).orElseThrow(() -> notFound("Plataforma")); apply(value, request); return platform(platforms.save(value)); }
- @DeleteMapping("/watch-platforms/{id}") @PreAuthorize("hasRole('ADMIN')") @ResponseStatus(HttpStatus.NO_CONTENT) void deletePlatform(@PathVariable Long id) { WatchPlatform platform = platforms.findById(id).orElseThrow(() -> notFound("Plataforma")); if (films.existsByPlatformId(id)) throw conflict("No podés borrar una plataforma usada por películas"); platforms.delete(platform); }
+ @PostMapping("/watch-platforms") @PreAuthorize("hasRole('ADMIN')") PlatformDto addPlatform(@RequestBody @Valid PlatformRequest request) { return platform(catalogAdminService.createPlatform(request)); }
+ @PutMapping("/watch-platforms/{id}") @PreAuthorize("hasRole('ADMIN')") PlatformDto updatePlatform(@PathVariable Long id, @RequestBody @Valid PlatformRequest request) { return platform(catalogAdminService.updatePlatform(id, request)); }
+ @DeleteMapping("/watch-platforms/{id}") @PreAuthorize("hasRole('ADMIN')") @ResponseStatus(HttpStatus.NO_CONTENT) void deletePlatform(@PathVariable Long id) { catalogAdminService.deletePlatform(id); }
   @GetMapping("/film-genres") List<FilmGenreOptionDto> genres() { return genreOptions.findAllByOrderByNameAsc().stream().map(FilmApi::genre).toList(); }
-  @PostMapping("/film-genres") @PreAuthorize("hasRole('ADMIN')") FilmGenreOptionDto addGenre(@RequestBody @Valid FilmGenreOptionRequest request) { FilmGenreOption value = new FilmGenreOption(); apply(value, request); value.createdAt = Instant.now(); return genre(genreOptions.save(value)); }
-  @PutMapping("/film-genres/{id}") @PreAuthorize("hasRole('ADMIN')") FilmGenreOptionDto updateGenre(@PathVariable Long id, @RequestBody @Valid FilmGenreOptionRequest request) { FilmGenreOption value = genreOptions.findById(id).orElseThrow(() -> notFound("Género")); apply(value, request); return genre(genreOptions.save(value)); }
-  @DeleteMapping("/film-genres/{id}") @PreAuthorize("hasRole('ADMIN')") @ResponseStatus(HttpStatus.NO_CONTENT) void deleteGenre(@PathVariable Long id) { genreOptions.delete(genreOptions.findById(id).orElseThrow(() -> notFound("Género"))); }
+  @PostMapping("/film-genres") @PreAuthorize("hasRole('ADMIN')") FilmGenreOptionDto addGenre(@RequestBody @Valid FilmGenreOptionRequest request) { return genre(catalogAdminService.createGenre(request)); }
+  @PutMapping("/film-genres/{id}") @PreAuthorize("hasRole('ADMIN')") FilmGenreOptionDto updateGenre(@PathVariable Long id, @RequestBody @Valid FilmGenreOptionRequest request) { return genre(catalogAdminService.updateGenre(id, request)); }
+  @DeleteMapping("/film-genres/{id}") @PreAuthorize("hasRole('ADMIN')") @ResponseStatus(HttpStatus.NO_CONTENT) void deleteGenre(@PathVariable Long id) { catalogAdminService.deleteGenre(id); }
 
   @GetMapping("/films") Slice<FilmDto> list(@RequestParam(required = false) String genre, @RequestParam(required = false) Long platformId, @RequestParam(required = false) Boolean watched, @RequestParam(required = false) String search, @RequestParam(required = false) String sort, @RequestParam(required = false) Long cursor, @RequestParam(defaultValue = "5") int size) {
    int limit = Math.max(1, Math.min(size, 30));
@@ -84,70 +131,50 @@ public class FilmApi {
   @GetMapping("/films/{id}") FilmDto get(@PathVariable Long id) { return film(findFilm(id), true); }
   @GetMapping(value = "/films/{id}/photo", produces = "image/webp") ResponseEntity<byte[]> photo(@PathVariable Long id, @RequestParam(defaultValue = "false") boolean thumbnail) {
    findFilm(id);
-   FilmPhoto photo = filmPhotos.findByFilmId(id).orElseThrow(() -> notFound("Foto"));
+   FilmPhoto photo = filmPhotos.findByFilmIdAndCoupleId(id, CoupleContext.current()).orElseThrow(() -> notFound("Foto"));
     return ResponseEntity.ok().cacheControl(CacheControl.maxAge(Duration.ofDays(30)).cachePrivate()).contentType(MediaType.valueOf("image/webp")).body(storage.bytes(thumbnail ? photo.thumbnailBase64 : photo.imageBase64));
   }
   @PostMapping("/films") @ResponseStatus(HttpStatus.CREATED) FilmDto add(@RequestBody @Valid FilmRequest request, @AuthenticationPrincipal User author) {
-   assertAvailableTmdbId(request.tmdbId(), null);
-   Film film = new Film();
-    apply(film, request); film.createdBy = film.updatedBy = author; film.createdAt = film.updatedAt = Instant.now();
-   return film(films.save(film), true);
+   return film(catalogService.create(request, author), true);
   }
   @PutMapping("/films/{id}") FilmDto update(@PathVariable Long id, @RequestBody @Valid FilmRequest request, @AuthenticationPrincipal User author) {
-    Film film = findFilm(id); assertAvailableTmdbId(request.tmdbId(), id); apply(film, request); film.updatedBy = author; film.updatedAt = Instant.now(); return film(films.save(film), true);
+    return film(catalogService.update(id, request, author), true);
   }
-  @DeleteMapping("/films/{id}") @ResponseStatus(HttpStatus.NO_CONTENT) void delete(@PathVariable Long id, @AuthenticationPrincipal User author) { films.delete(findFilm(id)); }
- @PostMapping(value = "/films/{id}/photo", consumes = MediaType.MULTIPART_FORM_DATA_VALUE) @Transactional FilmDto uploadPhoto(@PathVariable Long id, @RequestPart("file") MultipartFile file, @AuthenticationPrincipal User user) throws java.io.IOException {
-   Film film = findFilm(id); filmPhotos.findByFilmId(id).ifPresent(filmPhotos::delete); filmPhotos.flush(); film.updatedBy = user; film.updatedAt = Instant.now(); films.save(film); filmPhotos.save(storage.store(film, file)); return film(film);
+  @DeleteMapping("/films/{id}") @ResponseStatus(HttpStatus.NO_CONTENT) void delete(@PathVariable Long id, @AuthenticationPrincipal User author) { catalogService.delete(id, author); }
+ @PostMapping(value = "/films/{id}/photo", consumes = MediaType.MULTIPART_FORM_DATA_VALUE) FilmDto uploadPhoto(@PathVariable Long id, @RequestPart("file") MultipartFile file, @AuthenticationPrincipal User user) throws java.io.IOException {
+   return film(mediaService.replacePhoto(id, file, user));
  }
 
-   @PostMapping("/films/{id}/views") @Transactional FilmViewDto addView(@PathVariable Long id, @RequestBody @Valid FilmViewRequest request, @AuthenticationPrincipal User author) {
-     FilmView view = createView(findFilm(id), request, author); return view(view, List.of());
+   @PostMapping("/films/{id}/views") FilmViewDto addView(@PathVariable Long id, @RequestBody @Valid FilmViewRequest request, @AuthenticationPrincipal User author) {
+     FilmView view = viewService.create(id, request, author); return view(view, List.of());
   }
-  @PutMapping("/films/{filmId}/views/{viewId}") @Transactional FilmViewDto updateView(@PathVariable Long filmId, @PathVariable Long viewId, @RequestBody @Valid FilmViewRequest request, @AuthenticationPrincipal User author) {
-    FilmView view = findView(filmId, viewId);
-   validateViewMoment(request);
-    views.findByFilmIdAndWatchedOnAndCoupleId(filmId, request.watchedOn(), CoupleContext.current()).filter(other -> !other.id.equals(view.id)).ifPresent(other -> { throw conflict("Ya registraron una vista para esa fecha"); });
-     view.watchedOn = request.watchedOn(); view.updatedBy = author;
-     view.film.updatedBy = author; FilmView saved = views.save(view); refreshWatchSummary(saved.film); return view(saved, reviews.findByFilmIdOrderByViewWatchedOnDescIdDesc(filmId).stream().filter(review -> review.view.id.equals(saved.id)).map(FilmApi::review).toList());
+  @PutMapping("/films/{filmId}/views/{viewId}") FilmViewDto updateView(@PathVariable Long filmId, @PathVariable Long viewId, @RequestBody @Valid FilmViewRequest request, @AuthenticationPrincipal User author) {
+     FilmView saved = viewService.update(filmId, viewId, request, author); return view(saved, reviews.findByFilmIdAndCoupleIdOrderByViewWatchedOnDescIdDesc(filmId, CoupleContext.current()).stream().filter(review -> review.view.id.equals(saved.id)).map(FilmApi::review).toList());
   }
-  @DeleteMapping("/films/{filmId}/views/{viewId}") @ResponseStatus(HttpStatus.NO_CONTENT) @Transactional void deleteView(@PathVariable Long filmId, @PathVariable Long viewId, @AuthenticationPrincipal User author) {
-    FilmView view = findView(filmId, viewId); Film film = view.film; film.updatedBy = author; views.delete(view); views.flush(); refreshWatchSummary(film);
-  }
+  @DeleteMapping("/films/{filmId}/views/{viewId}") @ResponseStatus(HttpStatus.NO_CONTENT) void deleteView(@PathVariable Long filmId, @PathVariable Long viewId, @AuthenticationPrincipal User author) { viewService.delete(filmId, viewId, author); }
 
- @PostMapping("/films/{filmId}/views/{viewId}/reviews") @Transactional FilmReviewDto addReview(@PathVariable Long filmId, @PathVariable Long viewId, @RequestBody @Valid FilmReviewRequest request, @AuthenticationPrincipal User author) {
-  Film film = findFilm(filmId);
-  return saveReview(film, findView(filmId, viewId), request, author);
+ @PostMapping("/films/{filmId}/views/{viewId}/reviews") FilmReviewDto addReview(@PathVariable Long filmId, @PathVariable Long viewId, @RequestBody @Valid FilmReviewRequest request, @AuthenticationPrincipal User author) {
+  return review(reviewService.createForView(filmId, viewId, request, author));
  }
 
- @PostMapping("/films/{id}/reviews") @Transactional FilmReviewDto saveLegacyReview(@PathVariable Long id, @RequestBody @Valid FilmReviewRequest request, @AuthenticationPrincipal User author) {
-  Film film = findFilm(id);
-   LocalDate watchedOn = request.watchedOn() == null ? RosarioClock.today() : request.watchedOn();
-   FilmView view = views.findByFilmIdAndWatchedOnAndCoupleId(id, watchedOn, CoupleContext.current()).orElseGet(() -> createView(film, new FilmViewRequest(watchedOn), author));
-  return saveReview(film, view, request, author);
+ @PostMapping("/films/{id}/reviews") FilmReviewDto saveLegacyReview(@PathVariable Long id, @RequestBody @Valid FilmReviewRequest request, @AuthenticationPrincipal User author) {
+  return review(reviewService.saveLegacy(id, request, author));
  }
 
-  @PutMapping("/films/{filmId}/reviews/{reviewId}") @Transactional FilmReviewDto updateReview(@PathVariable Long filmId, @PathVariable Long reviewId, @RequestBody @Valid FilmReviewRequest request, @AuthenticationPrincipal User author) {
-    FilmReview review = reviews.findByIdAndFilmIdAndCoupleId(reviewId, filmId, CoupleContext.current()).orElseThrow(() -> notFound("Reseña"));
-   if (!review.author.id.equals(author.id)) throw notFound("Reseña");
-   review.rating = request.rating(); review.comment = emptyToNull(request.comment()); review.favoriteCharacter = favoriteCharacter(review.film, request.favoriteCharacter()); review.metrics.clear(); if (request.metrics() != null) review.metrics.putAll(request.metrics()); review.updatedBy = author; review.updatedAt = Instant.now();
-   return review(reviews.save(review));
+  @PutMapping("/films/{filmId}/reviews/{reviewId}") FilmReviewDto updateReview(@PathVariable Long filmId, @PathVariable Long reviewId, @RequestBody @Valid FilmReviewRequest request, @AuthenticationPrincipal User author) {
+   return review(reviewService.update(filmId, reviewId, request, author));
   }
-  @DeleteMapping("/films/{filmId}/reviews/{reviewId}") @ResponseStatus(HttpStatus.NO_CONTENT) void deleteReview(@PathVariable Long filmId, @PathVariable Long reviewId, @AuthenticationPrincipal User author) { FilmReview review = reviews.findByIdAndFilmIdAndCoupleId(reviewId, filmId, CoupleContext.current()).orElseThrow(() -> notFound("Reseña")); if (!review.author.id.equals(author.id)) throw notFound("Reseña"); reviews.delete(review); }
+  @DeleteMapping("/films/{filmId}/reviews/{reviewId}") @ResponseStatus(HttpStatus.NO_CONTENT) void deleteReview(@PathVariable Long filmId, @PathVariable Long reviewId, @AuthenticationPrincipal User author) { reviewService.delete(filmId, reviewId, author); }
 
   private Film findFilm(Long id) { return films.findDetailedByIdAndCoupleId(id, CoupleContext.current()).orElseThrow(() -> notFound("Película")); }
-  private void assertAvailableTmdbId(Long tmdbId, Long currentId) {
-   if (tmdbId == null) return;
-   films.findByTmdbIdAndCoupleId(tmdbId, CoupleContext.current()).filter(existing -> !existing.id.equals(currentId)).ifPresent(existing -> { throw new ResponseStatusException(HttpStatus.CONFLICT, "Esa película ya está en WhichFilm"); });
-  }
    private FilmDto film(Film film) { return film(film, true, filmPhotos(List.of(film)).get(film.id)); }
    private FilmDto film(Film film, boolean detailedTmdb) { return film(film, detailedTmdb, filmPhotos(List.of(film)).get(film.id)); }
    private FilmDto film(Film film, boolean detailedTmdb, PhotoMetadata photo) {
-   List<FilmReview> reviewValues = reviews.findByFilmIdOrderByViewWatchedOnDescIdDesc(film.id);
-   Map<Long, String> reviewAuthors = reviews.authorsByFilmId(film.id).stream().collect(java.util.stream.Collectors.toMap(ReviewAuthor::getReviewId, ReviewAuthor::getAuthor));
+   List<FilmReview> reviewValues = reviews.findByFilmIdAndCoupleIdOrderByViewWatchedOnDescIdDesc(film.id, CoupleContext.current());
+   Map<Long, String> reviewAuthors = reviews.authorsByFilmIdAndCoupleId(film.id, CoupleContext.current()).stream().collect(java.util.stream.Collectors.toMap(ReviewAuthor::getReviewId, ReviewAuthor::getAuthor));
    List<FilmReviewDto> filmReviews = reviewValues.stream().map(review -> review(review, reviewAuthors.get(review.id))).toList();
    Map<Long, List<FilmReviewDto>> reviewsByView = reviewValues.stream().collect(java.util.stream.Collectors.groupingBy(review -> review.view.id, java.util.stream.Collectors.mapping(review -> review(review, reviewAuthors.get(review.id)), java.util.stream.Collectors.toList())));
-    List<FilmViewDto> filmViews = views.findByFilmIdOrderByWatchedOnDescIdDesc(film.id).stream().map(view -> view(view, reviewsByView.getOrDefault(view.id, List.of()))).toList();
+    List<FilmViewDto> filmViews = views.findByFilmIdAndCoupleIdOrderByWatchedOnDescIdDesc(film.id, CoupleContext.current()).stream().map(view -> view(view, reviewsByView.getOrDefault(view.id, List.of()))).toList();
     TmdbMovieDto catalog = catalog(film.tmdbId, detailedTmdb);
      String posterUrl = photo != null ? photoUrl(film.id, false, photo.getId()) : posterUrl(film.posterPath);
      String thumbnailUrl = photo != null ? photoUrl(film.id, true, photo.getId()) : null;
@@ -155,28 +182,13 @@ public class FilmApi {
      Integer posterHeight = photo == null ? null : photo.getHeight();
       return new FilmDto(film.id, film.tmdbId, film.title, film.originalTitle, film.synopsis, film.releaseDate, posterUrl, thumbnailUrl, posterWidth, posterHeight, film.genres.stream().map(value -> value.name).sorted(String.CASE_INSENSITIVE_ORDER).toList(), film.platform == null ? null : platform(film.platform), film.watchedCount, film.lastWatchedOn, film.createdBy.username, filmReviews, filmViews, film.createdAt, film.updatedAt, catalog);
   }
-  private void apply(Film film, FilmRequest request) {
-   if (request.tmdbId() == null) {
-    if (request.title() == null || request.title().isBlank()) throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Indicá el título de la película");
-    film.tmdbId = null; film.title = request.title().trim(); film.originalTitle = blankToNull(request.originalTitle()); film.synopsis = blankToNull(request.synopsis()); film.releaseDate = request.releaseDate(); film.posterPath = blankToNull(request.posterPath());
-    Set<String> names = request.genres() == null ? Set.of() : request.genres().stream().map(String::trim).filter(value -> !value.isBlank()).limit(12).collect(java.util.stream.Collectors.toCollection(LinkedHashSet::new));
-    List<FilmGenreOption> selected = names.isEmpty() ? List.of() : genreOptions.findAllByNameIn(names);
-    if (selected.size() != names.size()) throw notFound("Género");
-    film.genres.clear(); film.genres.addAll(selected);
-   } else {
-    TmdbMovieDto source = tmdb.details(request.tmdbId());
-    if (source.title() == null) throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "TMDB no devolvió un título para esa película");
-    film.tmdbId = source.tmdbId(); film.title = source.title(); film.originalTitle = null; film.synopsis = null; film.releaseDate = null; film.posterPath = null; film.genres.clear();
-   }
-   film.platform = request.platformId() == null ? null : platforms.findById(request.platformId()).orElseThrow(() -> notFound("Plataforma"));
-  }
    private Map<Long, Double> filmRatings(Collection<Long> filmIds) {
     if (filmIds.isEmpty() || reviews == null) return Map.of();
-    return reviews.ratingsByFilmIdIn(filmIds).stream().collect(java.util.stream.Collectors.toMap(FilmRating::getFilmId, FilmRating::getRating));
+    return reviews.ratingsByFilmIdInAndCoupleId(filmIds, CoupleContext.current()).stream().collect(java.util.stream.Collectors.toMap(FilmRating::getFilmId, FilmRating::getRating));
    }
    private Map<Long, FilmPhotoMetadata> filmPhotos(Collection<Film> values) {
     if (values.isEmpty() || filmPhotos == null) return Map.of();
-    return filmPhotos.metadataByFilmIdIn(values.stream().map(film -> film.id).toList()).stream().collect(java.util.stream.Collectors.toMap(FilmPhotoMetadata::getFilmId, photo -> photo));
+    return filmPhotos.metadataByFilmIdInAndCoupleId(values.stream().map(film -> film.id).toList(), CoupleContext.current()).stream().collect(java.util.stream.Collectors.toMap(FilmPhotoMetadata::getFilmId, photo -> photo));
    }
   private TmdbMovieDto catalog(Long tmdbId, boolean detailed) {
    if (tmdbId == null) return null;
@@ -190,39 +202,13 @@ public class FilmApi {
   }
   private static String posterUrl(String posterPath) { return posterPath; }
     private static String photoUrl(Long filmId, boolean thumbnail, Long photoId) { return "/films/" + filmId + "/photo?" + (thumbnail ? "thumbnail=true&" : "") + "v=" + photoId; }
-  private static String blankToNull(String value) { return value == null || value.isBlank() ? null : value.trim(); }
-  private static String emptyToNull(String value) { return value == null || value.isEmpty() ? null : value; }
   private static PlatformDto platform(WatchPlatform value) { return new PlatformDto(value.id, value.name, value.icon, value.active); }
   private static FilmGenreOptionDto genre(FilmGenreOption value) { return new FilmGenreOptionDto(value.id, value.name, value.emoji); }
-  private static void apply(FilmGenreOption value, FilmGenreOptionRequest request) { value.name = request.name().trim(); value.emoji = request.emoji().trim(); }
-   private FilmView createView(Film film, FilmViewRequest request, User author) {
-    validateViewMoment(request);
-    if (views.findByFilmIdAndWatchedOnAndCoupleId(film.id, request.watchedOn(), CoupleContext.current()).isPresent()) throw conflict("Ya registraron una vista para esa fecha");
-     FilmView view = new FilmView(); view.film = film; film.updatedBy = author; view.createdBy = view.updatedBy = author; view.watchedOn = request.watchedOn(); view.createdAt = Instant.now();
-    FilmView saved = views.save(view); refreshWatchSummary(film);
-    return saved;
-   }
    private static boolean contains(String value, String search) { return value != null && value.toLowerCase(Locale.ROOT).contains(search); }
-  private FilmReviewDto saveReview(Film film, FilmView view, FilmReviewRequest request, User author) {
-   if (reviews.existsByViewIdAndAuthorId(view.id, author.id)) throw conflict("Ya dejaste tu reseña para esta vista");
-    FilmReview review = new FilmReview(); review.film = film; review.view = view; review.author = review.updatedBy = author; review.createdAt = Instant.now();
-    review.rating = request.rating(); review.comment = emptyToNull(request.comment()); review.favoriteCharacter = favoriteCharacter(film, request.favoriteCharacter()); if (request.metrics() != null) review.metrics.putAll(request.metrics()); review.updatedAt = Instant.now(); film.updatedBy = author; film.updatedAt = Instant.now(); films.save(film);
-   return review(reviews.save(review));
-  }
-  private FilmView findView(Long filmId, Long viewId) { findFilm(filmId); return views.findByIdAndFilmIdAndCoupleId(viewId, filmId, CoupleContext.current()).orElseThrow(() -> notFound("Vista")); }
    private static FilmViewDto view(FilmView value, List<FilmReviewDto> reviews) { return new FilmViewDto(value.id, value.watchedOn, value.createdBy.username, value.updatedBy == null ? value.createdBy.username : value.updatedBy.username, reviews, value.createdAt); }
    private static FilmReviewDto review(FilmReview value) { return review(value, value.author.username); }
    private static FilmReviewDto review(FilmReview value, String author) { return new FilmReviewDto(value.id, author, value.rating, value.comment, value.view.watchedOn, value.favoriteCharacter, Map.copyOf(value.metrics)); }
- private static void apply(WatchPlatform value, PlatformRequest request) { value.name = request.name().trim(); value.icon = request.icon().trim(); value.active = request.active(); }
   private static ResponseStatusException notFound(String type) { return new ResponseStatusException(HttpStatus.NOT_FOUND, type + " no encontrada"); }
   private static ResponseStatusException conflict(String detail) { return new ResponseStatusException(HttpStatus.CONFLICT, detail); }
-  private String favoriteCharacter(Film film, String character) {
-   String value = blankToNull(character);
-   if (value == null) return null;
-   if (film.tmdbId == null || tmdb.details(film.tmdbId).cast().stream().noneMatch(member -> value.equals(member.character()))) throw badRequest("Elegí un personaje del reparto de TMDB");
-   return value;
-  }
-   private void refreshWatchSummary(Film film) { List<FilmView> values = views.findByFilmIdOrderByWatchedOnDescIdDesc(film.id); film.watchedCount = values.size(); film.lastWatchedOn = values.isEmpty() ? null : values.getFirst().watchedOn; film.updatedAt = Instant.now(); films.save(film); }
-  private static void validateViewMoment(FilmViewRequest request) { if (request.watchedOn().isAfter(RosarioClock.today())) throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Una vista no puede quedar en el futuro"); }
   private static ResponseStatusException badRequest(String detail) { return new ResponseStatusException(HttpStatus.BAD_REQUEST, detail); }
 }

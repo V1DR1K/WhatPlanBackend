@@ -1,11 +1,8 @@
 package com.wherefood.web;
 
-import com.wherefood.domain.GlobalSettings;
-import com.wherefood.repo.Repositories.Settings;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.*;
 import org.springframework.security.access.prepost.PreAuthorize;
-import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.*;
 
 record SettingsRequest(@NotNull @Min(1) @Max(50) Integer catalogPageSize) {}
@@ -14,24 +11,12 @@ record SettingsDto(int catalogPageSize) {}
 @RestController
 @RequestMapping("/api/settings")
 public class SettingsApi {
- private static final int SINGLETON_ID = 1;
- private final Settings settings;
+ private final GlobalSettingsService service;
 
- public SettingsApi(Settings settings) { this.settings = settings; }
+ public SettingsApi(GlobalSettingsService service) { this.service = service; }
 
- @GetMapping @PreAuthorize("isAuthenticated()") @Transactional SettingsDto get() { return settings(settings()); }
- @PutMapping @PreAuthorize("hasRole('ADMIN')") @Transactional SettingsDto update(@RequestBody @Valid SettingsRequest request) {
-  GlobalSettings value = settings();
-  value.catalogPageSize = request.catalogPageSize();
-  return settings(settings.save(value));
- }
+ @GetMapping @PreAuthorize("isAuthenticated()") SettingsDto get() { return settings(service.get()); }
+ @PutMapping @PreAuthorize("hasRole('ADMIN')") SettingsDto update(@RequestBody @Valid SettingsRequest request) { return settings(service.update(request)); }
 
- private GlobalSettings settings() {
-  return settings.findById(SINGLETON_ID).orElseGet(() -> {
-   settings.insertDefaultIfMissing();
-   return settings.findById(SINGLETON_ID).orElseThrow(() -> new IllegalStateException("No se pudo crear la configuración global"));
-  });
- }
-
- private static SettingsDto settings(GlobalSettings value) { return new SettingsDto(value.catalogPageSize); }
+ private static SettingsDto settings(com.wherefood.domain.GlobalSettings value) { return new SettingsDto(value.catalogPageSize); }
 }

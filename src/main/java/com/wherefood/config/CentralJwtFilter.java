@@ -1,7 +1,7 @@
 package com.wherefood.config;
 
 import com.wherefood.domain.User;
-import com.wherefood.repo.Repositories.CoupleMembers;
+import com.wherefood.couple.CoupleAuthorizationService;
 import com.wherefood.repo.Repositories.Users;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
@@ -19,17 +19,17 @@ import org.springframework.web.filter.OncePerRequestFilter;
 public class CentralJwtFilter extends OncePerRequestFilter {
     private final CentralJwt jwt;
     private final Users users;
-    private final CoupleMembers coupleMembers;
+    private final CoupleAuthorizationService coupleAuthorization;
 
     @org.springframework.beans.factory.annotation.Autowired
-    public CentralJwtFilter(CentralJwt jwt, Users users, CoupleMembers coupleMembers) {
+    public CentralJwtFilter(CentralJwt jwt, Users users, CoupleAuthorizationService coupleAuthorization) {
         this.jwt = jwt;
         this.users = users;
-        this.coupleMembers = coupleMembers;
+        this.coupleAuthorization = coupleAuthorization;
     }
 
     public CentralJwtFilter(CentralJwt jwt, Users users) {
-        this(jwt, users, null);
+        this(jwt, users, new CoupleAuthorizationService(null));
     }
 
     @Override
@@ -50,9 +50,7 @@ public class CentralJwtFilter extends OncePerRequestFilter {
                 User user = users.findByAuthUserId(jwt.subject(token)).orElseThrow();
                 SecurityContextHolder.getContext().setAuthentication(new UsernamePasswordAuthenticationToken(
                         user, null, List.of(new SimpleGrantedAuthority("ROLE_" + user.role.name()))));
-                if (coupleMembers != null) {
-                    coupleMembers.findActiveCoupleIdByUserId(user.id).ifPresent(CoupleContext::set);
-                }
+                coupleAuthorization.resolvePrivateCouple(user).ifPresent(CoupleContext::set);
             } catch (RuntimeException ignored) {
                 SecurityContextHolder.clearContext();
                 CoupleContext.clear();

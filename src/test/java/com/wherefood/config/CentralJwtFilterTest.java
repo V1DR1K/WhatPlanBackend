@@ -3,10 +3,14 @@ package com.wherefood.config;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import com.wherefood.couple.CoupleAuthorizationService;
 import com.wherefood.domain.Role;
 import com.wherefood.domain.User;
+import com.wherefood.repo.Repositories.CoupleMembers;
 import com.wherefood.repo.Repositories.Users;
 import jakarta.servlet.FilterChain;
 import java.util.Optional;
@@ -70,5 +74,26 @@ class CentralJwtFilterTest {
         filter.doFilterInternal(request, new MockHttpServletResponse(), mock(FilterChain.class));
 
         assertEquals(user, SecurityContextHolder.getContext().getAuthentication().getPrincipal());
+    }
+
+    @Test
+    void adminAuthenticationDoesNotResolveOrReceivePrivateCoupleContext() throws Exception {
+        UUID authId = UUID.randomUUID();
+        User admin = new User();
+        admin.id = 21L;
+        admin.authUserId = authId;
+        admin.role = Role.ADMIN;
+        CoupleMembers members = mock(CoupleMembers.class);
+        CentralJwtFilter adminFilter = new CentralJwtFilter(jwt, users, new CoupleAuthorizationService(members));
+        when(jwt.subject("admin-token")).thenReturn(authId);
+        when(users.findByAuthUserId(authId)).thenReturn(Optional.of(admin));
+
+        MockHttpServletRequest request = new MockHttpServletRequest();
+        request.addHeader("Authorization", "Bearer admin-token");
+        adminFilter.doFilterInternal(request, new MockHttpServletResponse(), (req, res) -> {
+            assertNull(CoupleContext.current());
+        });
+
+        verify(members, never()).findActiveCoupleIdByUserId(admin.id);
     }
 }

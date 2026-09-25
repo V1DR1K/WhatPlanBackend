@@ -1,13 +1,13 @@
 package com.wherefood.web;
 
-import com.wherefood.domain.SpecialDate;
 import com.wherefood.domain.SpecialDateRecurrence;
-import com.wherefood.repo.Repositories.SpecialDates;
+import com.wherefood.domain.User;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.*;
 import java.time.*;
-import java.util.*;
+import java.util.List;
 import org.springframework.http.HttpStatus;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.server.ResponseStatusException;
 
@@ -17,20 +17,18 @@ record SpecialDateDto(Long id, LocalDate date, String label, SpecialDateRecurren
 @RestController
 @RequestMapping("/api/special-dates")
 public class SpecialDateApi {
- private final SpecialDates specialDates;
+ private final SpecialDateService service;
 
- public SpecialDateApi(SpecialDates specialDates) { this.specialDates = specialDates; }
+ public SpecialDateApi(SpecialDateService service) { this.service = service; }
 
- @GetMapping List<SpecialDateDto> list() { return specialDates.findAllByCoupleIdOrderByDateAscLabelAscIdAsc(CoupleContext.current()).stream().map(SpecialDateApi::specialDate).toList(); }
- @PostMapping @ResponseStatus(HttpStatus.CREATED) SpecialDateDto add(@RequestBody @Valid SpecialDateRequest request) {
-  SpecialDate value = new SpecialDate(); apply(value, request); value.createdAt = value.updatedAt = Instant.now(); return specialDate(specialDates.save(value));
+ @GetMapping List<SpecialDateDto> list(@AuthenticationPrincipal User actor) { return service.list(actor).stream().map(SpecialDateApi::specialDate).toList(); }
+ @PostMapping @ResponseStatus(HttpStatus.CREATED) SpecialDateDto add(@RequestBody @Valid SpecialDateRequest request, @AuthenticationPrincipal User actor) {
+  return specialDate(service.create(request, actor));
  }
- @PutMapping("/{id}") SpecialDateDto update(@PathVariable Long id, @RequestBody @Valid SpecialDateRequest request) {
-  SpecialDate value = specialDates.findByIdAndCoupleId(id, CoupleContext.current()).orElseThrow(() -> notFound()); apply(value, request); value.updatedAt = Instant.now(); return specialDate(specialDates.save(value));
+ @PutMapping("/{id}") SpecialDateDto update(@PathVariable Long id, @RequestBody @Valid SpecialDateRequest request, @AuthenticationPrincipal User actor) {
+  return specialDate(service.update(id, request, actor));
  }
- @DeleteMapping("/{id}") @ResponseStatus(HttpStatus.NO_CONTENT) void delete(@PathVariable Long id) { specialDates.delete(specialDates.findByIdAndCoupleId(id, CoupleContext.current()).orElseThrow(() -> notFound())); }
+ @DeleteMapping("/{id}") @ResponseStatus(HttpStatus.NO_CONTENT) void delete(@PathVariable Long id, @AuthenticationPrincipal User actor) { service.delete(id, actor); }
 
- private static void apply(SpecialDate value, SpecialDateRequest request) { value.date = request.date(); value.label = request.label().trim(); value.recurrence = request.recurrence(); }
- private static SpecialDateDto specialDate(SpecialDate value) { return new SpecialDateDto(value.id, value.date, value.label, value.recurrence, value.createdAt, value.updatedAt); }
- private static ResponseStatusException notFound() { return new ResponseStatusException(HttpStatus.NOT_FOUND, "Fecha especial no encontrada"); }
+ private static SpecialDateDto specialDate(com.wherefood.domain.SpecialDate value) { return new SpecialDateDto(value.id, value.date, value.label, value.recurrence, value.createdAt, value.updatedAt); }
 }

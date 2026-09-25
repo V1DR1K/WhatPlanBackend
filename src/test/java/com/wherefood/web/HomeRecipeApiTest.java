@@ -7,24 +7,33 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.wherefood.domain.*;
+import com.wherefood.config.CoupleContext;
+import com.wherefood.couple.CoupleAuthorizationService;
+import com.wherefood.repo.Repositories.CoupleMembers;
 import com.wherefood.repo.Repositories.*;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
+import java.util.UUID;
 import jakarta.persistence.OrderColumn;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 
 class HomeRecipeApiTest {
+ @AfterEach
+ void clearCoupleContext() { CoupleContext.clear(); }
+
  @Test
- void letsAnyAuthenticatedUserUpdateACooking() {
+ void letsEitherActiveMemberUpdateACooking() {
    Recipes recipes = mock(Recipes.class); Cookings cookings = mock(Cookings.class); CookingReviews reviews = mock(CookingReviews.class);
   User tomas = user(7L, "tomas"), avril = user(6L, "avril"); Recipe recipe = new Recipe(); recipe.id = 3L; recipe.name = "Panes rellenos"; recipe.createdBy = recipe.updatedBy = tomas;
   Cooking cooking = new Cooking(); cooking.id = 2L; cooking.recipe = recipe; cooking.home = Home.TOMAS; cooking.servings = 2; cooking.cookedOn = LocalDate.of(2026, 7, 18); cooking.mealType = MealType.CENA; cooking.createdBy = cooking.updatedBy = tomas;
-   when(cookings.findDetailedByIdAndCoupleId(2L, null)).thenReturn(Optional.of(cooking)); when(cookings.save(cooking)).thenReturn(cooking); when(reviews.findByCookingIdOrderByAuthorUsername(2L)).thenReturn(List.of());
+   UUID coupleId = UUID.randomUUID();
+   when(cookings.findDetailedByIdAndCoupleId(2L, coupleId)).thenReturn(Optional.of(cooking)); when(cookings.save(cooking)).thenReturn(cooking); when(reviews.findByCookingIdAndCoupleIdOrderByAuthorUsername(2L, coupleId)).thenReturn(List.of());
 
-   CookingDto result = new HomeRecipeApi(recipes, mock(RecipePhotos.class), cookings, reviews, null).updateCooking(2L, new CookingRequest(Home.AVRIL, 4, LocalDate.of(2026, 7, 21), MealType.ALMUERZO), avril);
+   CookingDto result = authorizedApi(recipes, mock(RecipePhotos.class), cookings, reviews, null, avril, coupleId).updateCooking(2L, new CookingRequest(Home.AVRIL, 4, LocalDate.of(2026, 7, 21), MealType.ALMUERZO), avril);
 
    assertEquals(Home.AVRIL, result.home()); assertEquals("avril", result.updatedBy()); verify(cookings).save(cooking); verify(recipes).save(recipe);
  }
@@ -33,7 +42,7 @@ class HomeRecipeApiTest {
   void createsAReusableRecipeDefinition() {
   Recipes recipes = mock(Recipes.class); User tomas = user(7L, "tomas"); when(recipes.save(any(Recipe.class))).thenAnswer(invocation -> { Recipe value = invocation.getArgument(0); value.id = 5L; return value; });
 
-   RecipeDto result = new HomeRecipeApi(recipes, mock(RecipePhotos.class), null, null, null).addRecipe(new RecipeRequest("Tarta", "https://example.test/tarta", List.of(new RecipeIngredientRequest("Harina", BigDecimal.valueOf(250), "g")), List.of(new RecipeStepRequest("Hornear."))), tomas);
+   RecipeDto result = authorizedApi(recipes, mock(RecipePhotos.class), null, null, null, tomas, UUID.randomUUID()).addRecipe(new RecipeRequest("Tarta", "https://example.test/tarta", List.of(new RecipeIngredientRequest("Harina", BigDecimal.valueOf(250), "g")), List.of(new RecipeStepRequest("Hornear."))), tomas);
 
   assertEquals(5L, result.id()); assertEquals("Tarta", result.name()); assertEquals(1, result.ingredients().size()); assertEquals("tomas", result.createdBy());
  }
@@ -42,7 +51,7 @@ class HomeRecipeApiTest {
   void createsARecipeWithoutIngredientsOrSteps() {
    Recipes recipes = mock(Recipes.class); User tomas = user(7L, "tomas"); when(recipes.save(any(Recipe.class))).thenAnswer(invocation -> { Recipe value = invocation.getArgument(0); value.id = 5L; return value; });
 
-   RecipeDto result = new HomeRecipeApi(recipes, mock(RecipePhotos.class), null, null, null).addRecipe(new RecipeRequest("Tarta", null, List.of(), List.of()), tomas);
+   RecipeDto result = authorizedApi(recipes, mock(RecipePhotos.class), null, null, null, tomas, UUID.randomUUID()).addRecipe(new RecipeRequest("Tarta", null, List.of(), List.of()), tomas);
 
    assertEquals(List.of(), result.ingredients()); assertEquals(List.of(), result.steps());
   }
@@ -64,9 +73,10 @@ class HomeRecipeApiTest {
   @Test
   void updatesCookingReviewComplexity() {
    CookingReviews reviews = mock(CookingReviews.class); User tomas = user(7L, "tomas"); CookingReview review = new CookingReview(); review.id = 8L; review.author = review.updatedBy = tomas;
-   when(reviews.findDetailedByIdAndCoupleId(8L, null)).thenReturn(Optional.of(review)); when(reviews.save(review)).thenReturn(review);
+   CoupleMembers members = mock(CoupleMembers.class); UUID coupleId = UUID.randomUUID(); CoupleContext.set(coupleId); when(members.findActiveCoupleIdByUserId(tomas.id)).thenReturn(Optional.of(coupleId));
+   when(reviews.findDetailedByIdAndCoupleId(8L, coupleId)).thenReturn(Optional.of(review)); when(reviews.save(review)).thenReturn(review);
 
-    CookingReviewDto result = new HomeRecipeApi(null, null, null, reviews, null).updateReview(8L, new CookingReviewRequest((short) 4, (short) 2, (short) 5, "Quedó bien\n\nLa repetiría\n"), tomas);
+    CookingReviewDto result = new HomeRecipeApi(null, null, null, reviews, null, new CookingReviewService(reviews, null, new CoupleAuthorizationService(members))).updateReview(8L, new CookingReviewRequest((short) 4, (short) 2, (short) 5, "Quedó bien\n\nLa repetiría\n"), tomas);
 
     assertEquals(4, result.rating()); assertEquals(2, result.complexity()); assertEquals(5, result.taste()); assertEquals("Quedó bien\n\nLa repetiría\n", result.comment());
   }
@@ -75,7 +85,7 @@ class HomeRecipeApiTest {
   void projectsTheRecipeProfileSeparatelyFromCookings() {
    Recipes recipes = mock(Recipes.class); RecipePhotos profilePhotos = mock(RecipePhotos.class); User tomas = user(7L, "tomas");
    Recipe recipe = new Recipe(); recipe.id = 5L; recipe.name = "Tarta"; recipe.createdBy = recipe.updatedBy = tomas; recipe.updatedAt = Instant.parse("2026-07-23T00:00:00Z");
-   when(recipes.findAllByCoupleId(null)).thenReturn(List.of(recipe)); when(profilePhotos.metadataByRecipeIdIn(any())).thenReturn(List.of(photo(12L, 5L, 1200, 800)));
+   when(recipes.findAllByCoupleId(null)).thenReturn(List.of(recipe)); when(profilePhotos.metadataByRecipeIdInAndCoupleId(any(), isNull())).thenReturn(List.of(photo(12L, 5L, 1200, 800)));
 
    RecipeDto result = new HomeRecipeApi(recipes, profilePhotos, null, null, null).listRecipes(null, null, null, null, null, 5).content().getFirst();
 
@@ -93,9 +103,9 @@ class HomeRecipeApiTest {
    Recipe other = recipe(2L, "Pizza", tomas, "2026-07-22T00:00:00Z");
    Recipe pending = recipe(3L, "Pan", tomas, "2026-07-21T00:00:00Z");
    when(recipes.findAllByCoupleId(null)).thenReturn(List.of(best, other, pending));
-   when(cookings.cookingCountsByRecipeIdIn(any())).thenReturn(List.of(count(1L, 2L), count(2L, 1L)));
-   when(cookings.homesByRecipeIdIn(any())).thenReturn(List.of(home(1L, Home.TOMAS), home(1L, Home.AVRIL), home(2L, Home.TOMAS)));
-   when(reviews.ratingsByRecipeIdIn(any())).thenReturn(List.of(rating(1L, 5.0), rating(2L, 3.0)));
+   when(cookings.cookingCountsByRecipeIdInAndCoupleId(any(), isNull())).thenReturn(List.of(count(1L, 2L), count(2L, 1L)));
+   when(cookings.homesByRecipeIdInAndCoupleId(any(), isNull())).thenReturn(List.of(home(1L, Home.TOMAS), home(1L, Home.AVRIL), home(2L, Home.TOMAS)));
+   when(reviews.ratingsByRecipeIdInAndCoupleId(any(), isNull())).thenReturn(List.of(rating(1L, 5.0), rating(2L, 3.0)));
 
    HomeRecipeApi api = new HomeRecipeApi(recipes, photos, cookings, reviews, null);
    Slice<RecipeDto> first = api.listRecipes(null, Home.TOMAS, true, "rating-desc", null, 1);
@@ -112,7 +122,18 @@ class HomeRecipeApiTest {
    assertEquals(List.of(3L), uncooked.content().stream().map(RecipeDto::id).toList());
   }
 
-  private static User user(Long id, String username) { User user = new User(); user.id = id; user.username = username; return user; }
+  private static User user(Long id, String username) { User user = new User(); user.id = id; user.username = username; user.role = Role.USER; return user; }
+  private static HomeRecipeApi authorizedApi(Recipes recipes, RecipePhotos photos, Cookings cookings,
+          CookingReviews reviews, PhotoStorage storage, User user, UUID coupleId) {
+   CoupleContext.set(coupleId);
+   CoupleMembers members = mock(CoupleMembers.class);
+   when(members.findActiveCoupleIdByUserId(user.id)).thenReturn(Optional.of(coupleId));
+   CoupleAuthorizationService authorization = new CoupleAuthorizationService(members);
+   return new HomeRecipeApi(recipes, photos, cookings, reviews, storage,
+           new CookingReviewService(reviews, cookings, authorization),
+           new RecipeService(recipes, cookings, authorization),
+           new CookingService(recipes, cookings, authorization));
+  }
   private static Recipe recipe(Long id, String name, User author, String updatedAt) { Recipe recipe = new Recipe(); recipe.id = id; recipe.name = name; recipe.createdBy = recipe.updatedBy = author; recipe.createdAt = recipe.updatedAt = Instant.parse(updatedAt); return recipe; }
   private static RecipePhotoMetadata photo(Long id, Long recipeId, Integer width, Integer height) { return new RecipePhotoMetadata() { public Long getId() { return id; } public Long getRecipeId() { return recipeId; } public Integer getWidth() { return width; } public Integer getHeight() { return height; } public Instant getCreatedAt() { return Instant.parse("2026-07-23T00:00:00Z"); } }; }
   private static RecipeCookingCount count(Long recipeId, Long cookingCount) { return new RecipeCookingCount() { public Long getRecipeId() { return recipeId; } public Long getCookingCount() { return cookingCount; } }; }

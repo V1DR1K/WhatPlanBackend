@@ -14,6 +14,7 @@ import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.*;
 import org.springframework.web.server.ResponseStatusException;
 import com.wherefood.validation.SafeHttpUrl;
+import com.wherefood.couple.CoupleAuthorizationService;
 
 record CategoryRequest(@NotBlank @Size(max = 60) String name, @NotBlank @Size(max = 60) String slug, @NotBlank @Size(max = 40) String icon, boolean active) {}
 record CategoryDto(Long id, String name, String slug, String icon, boolean active) {}
@@ -41,24 +42,61 @@ record Slice<T>(List<T> content, Long nextCursor) {}
 @RequestMapping("/api")
 public class Api {
  private static final int MAX_VISIT_PHOTOS = 4;
- private final Users users; private final Categories categories; private final HighlightTags highlightTags; private final Places places; private final PlaceVisits visits; private final Items items; private final Photos photos; private final ItemReviews itemReviews; private final PlaceReviews reviews; private final PlacePhotos placePhotos; private final PlaceVisitPhotos visitPhotos; private final PlaceVisitReviews visitReviews; private final PhotoStorage storage;
+ private final Users users; private final Categories categories; private final HighlightTags highlightTags; private final Places places; private final PlaceVisits visits; private final Items items; private final Photos photos; private final ItemReviews itemReviews; private final PlaceReviews reviews; private final PlacePhotos placePhotos; private final PlaceVisitPhotos visitPhotos; private final PlaceVisitReviews visitReviews; private final PhotoStorage storage; private final PlaceVisitReviewService visitReviewService; private final PlaceVisitService visitService; private final ItemService itemService; private final ItemReviewService itemReviewService; private final PlaceReviewService placeReviewService; private final PlaceService placeService; private final PlaceMediaService mediaService; private final PlaceCatalogAdminService catalogAdminService;
 
-   @org.springframework.beans.factory.annotation.Autowired public Api(Users users, Categories categories, HighlightTags highlightTags, Places places, PlaceVisits visits, Items items, Photos photos, ItemReviews itemReviews, PlaceReviews reviews, PlacePhotos placePhotos, PlaceVisitPhotos visitPhotos, PlaceVisitReviews visitReviews, PhotoStorage storage) {
-    this.users = users; this.categories = categories; this.highlightTags = highlightTags; this.places = places; this.visits = visits; this.items = items; this.photos = photos; this.itemReviews = itemReviews; this.reviews = reviews; this.placePhotos = placePhotos; this.visitPhotos = visitPhotos; this.visitReviews = visitReviews; this.storage = storage;
+   public Api(Users users, Categories categories, HighlightTags highlightTags, Places places, PlaceVisits visits, Items items, Photos photos, ItemReviews itemReviews, PlaceReviews reviews, PlacePhotos placePhotos, PlaceVisitPhotos visitPhotos, PlaceVisitReviews visitReviews, PhotoStorage storage) {
+    this(users, categories, highlightTags, places, visits, items, photos, itemReviews, reviews, placePhotos, visitPhotos, visitReviews, storage,
+            new PlaceVisitReviewService(visitReviews, visits, new CoupleAuthorizationService(null)),
+            new PlaceVisitService(places, visits, new CoupleAuthorizationService(null)),
+            new ItemService(items, visits, new CoupleAuthorizationService(null)),
+            new ItemReviewService(items, itemReviews, new CoupleAuthorizationService(null)));
    }
-   public Api(Users users, Categories categories, HighlightTags highlightTags, Places places, PlaceVisits visits, Items items, Photos photos, ItemReviews itemReviews, PlaceReviews reviews, PlacePhotos placePhotos, PlaceVisitPhotos visitPhotos, PlaceVisitReviews visitReviews, Object ignoredJwt, PhotoStorage storage, Object ignoredEncoder) {
-    this(users, categories, highlightTags, places, visits, items, photos, itemReviews, reviews, placePhotos, visitPhotos, visitReviews, storage);
+   public Api(Users users, Categories categories, HighlightTags highlightTags, Places places, PlaceVisits visits, Items items, Photos photos, ItemReviews itemReviews, PlaceReviews reviews, PlacePhotos placePhotos, PlaceVisitPhotos visitPhotos, PlaceVisitReviews visitReviews, PhotoStorage storage, PlaceVisitReviewService visitReviewService) {
+    this(users, categories, highlightTags, places, visits, items, photos, itemReviews, reviews, placePhotos, visitPhotos, visitReviews, storage, visitReviewService,
+            new PlaceVisitService(places, visits, new CoupleAuthorizationService(null)),
+            new ItemService(items, visits, new CoupleAuthorizationService(null)),
+            new ItemReviewService(items, itemReviews, new CoupleAuthorizationService(null)));
+   }
+   public Api(Users users, Categories categories, HighlightTags highlightTags, Places places, PlaceVisits visits, Items items, Photos photos, ItemReviews itemReviews, PlaceReviews reviews, PlacePhotos placePhotos, PlaceVisitPhotos visitPhotos, PlaceVisitReviews visitReviews, PhotoStorage storage, PlaceVisitReviewService visitReviewService, PlaceVisitService visitService) {
+    this(users, categories, highlightTags, places, visits, items, photos, itemReviews, reviews, placePhotos, visitPhotos, visitReviews, storage, visitReviewService, visitService,
+            new ItemService(items, visits, new CoupleAuthorizationService(null)));
+   }
+   public Api(Users users, Categories categories, HighlightTags highlightTags, Places places, PlaceVisits visits, Items items, Photos photos, ItemReviews itemReviews, PlaceReviews reviews, PlacePhotos placePhotos, PlaceVisitPhotos visitPhotos, PlaceVisitReviews visitReviews, PhotoStorage storage, PlaceVisitReviewService visitReviewService, PlaceVisitService visitService, ItemService itemService) {
+    this(users, categories, highlightTags, places, visits, items, photos, itemReviews, reviews, placePhotos, visitPhotos, visitReviews, storage, visitReviewService, visitService, itemService,
+            new ItemReviewService(items, itemReviews, new CoupleAuthorizationService(null)));
+   }
+   public Api(Users users, Categories categories, HighlightTags highlightTags, Places places, PlaceVisits visits, Items items, Photos photos, ItemReviews itemReviews, PlaceReviews reviews, PlacePhotos placePhotos, PlaceVisitPhotos visitPhotos, PlaceVisitReviews visitReviews, PhotoStorage storage, PlaceVisitReviewService visitReviewService, PlaceVisitService visitService, ItemService itemService, ItemReviewService itemReviewService) {
+    this(users, categories, highlightTags, places, visits, items, photos, itemReviews, reviews, placePhotos, visitPhotos, visitReviews, storage, visitReviewService, visitService, itemService, itemReviewService,
+            new PlaceReviewService(places, reviews, new CoupleAuthorizationService(null)));
+   }
+   public Api(Users users, Categories categories, HighlightTags highlightTags, Places places, PlaceVisits visits, Items items, Photos photos, ItemReviews itemReviews, PlaceReviews reviews, PlacePhotos placePhotos, PlaceVisitPhotos visitPhotos, PlaceVisitReviews visitReviews, PhotoStorage storage, PlaceVisitReviewService visitReviewService, PlaceVisitService visitService, ItemService itemService, ItemReviewService itemReviewService, PlaceReviewService placeReviewService) {
+    this(users, categories, highlightTags, places, visits, items, photos, itemReviews, reviews, placePhotos, visitPhotos, visitReviews, storage, visitReviewService, visitService, itemService, itemReviewService, placeReviewService,
+            new PlaceService(places, categories, highlightTags, new CoupleAuthorizationService(null)));
+   }
+   public Api(Users users, Categories categories, HighlightTags highlightTags, Places places, PlaceVisits visits, Items items, Photos photos, ItemReviews itemReviews, PlaceReviews reviews, PlacePhotos placePhotos, PlaceVisitPhotos visitPhotos, PlaceVisitReviews visitReviews, PhotoStorage storage, PlaceVisitReviewService visitReviewService, PlaceVisitService visitService, ItemService itemService, ItemReviewService itemReviewService, PlaceReviewService placeReviewService, PlaceService placeService) {
+    this(users, categories, highlightTags, places, visits, items, photos, itemReviews, reviews, placePhotos, visitPhotos, visitReviews, storage, visitReviewService, visitService, itemService, itemReviewService, placeReviewService, placeService,
+            new PlaceMediaService(places, visits, items, placePhotos, visitPhotos, photos, storage, new CoupleAuthorizationService(null)));
+   }
+   public Api(Users users, Categories categories, HighlightTags highlightTags, Places places, PlaceVisits visits, Items items, Photos photos, ItemReviews itemReviews, PlaceReviews reviews, PlacePhotos placePhotos, PlaceVisitPhotos visitPhotos, PlaceVisitReviews visitReviews, PhotoStorage storage, PlaceVisitReviewService visitReviewService, PlaceVisitService visitService, ItemService itemService, ItemReviewService itemReviewService, PlaceReviewService placeReviewService, PlaceService placeService, PlaceMediaService mediaService) {
+    this(users, categories, highlightTags, places, visits, items, photos, itemReviews, reviews, placePhotos,
+            visitPhotos, visitReviews, storage, visitReviewService, visitService, itemService,
+            itemReviewService, placeReviewService, placeService, mediaService,
+            new PlaceCatalogAdminService(categories, highlightTags, places));
    }
 
+   @org.springframework.beans.factory.annotation.Autowired public Api(Users users, Categories categories, HighlightTags highlightTags, Places places, PlaceVisits visits, Items items, Photos photos, ItemReviews itemReviews, PlaceReviews reviews, PlacePhotos placePhotos, PlaceVisitPhotos visitPhotos, PlaceVisitReviews visitReviews, PhotoStorage storage, PlaceVisitReviewService visitReviewService, PlaceVisitService visitService, ItemService itemService, ItemReviewService itemReviewService, PlaceReviewService placeReviewService, PlaceService placeService, PlaceMediaService mediaService, PlaceCatalogAdminService catalogAdminService) {
+    this.users = users; this.categories = categories; this.highlightTags = highlightTags; this.places = places; this.visits = visits; this.items = items; this.photos = photos; this.itemReviews = itemReviews; this.reviews = reviews; this.placePhotos = placePhotos; this.visitPhotos = visitPhotos; this.visitReviews = visitReviews; this.storage = storage; this.visitReviewService = visitReviewService; this.visitService = visitService; this.itemService = itemService; this.itemReviewService = itemReviewService; this.placeReviewService = placeReviewService; this.placeService = placeService; this.mediaService = mediaService;
+    this.catalogAdminService = catalogAdminService;
+   }
  @GetMapping("/categories") List<CategoryDto> categories() { return categories.findByActiveTrueOrderByName().stream().map(Api::category).toList(); }
  @GetMapping("/categories/all") @PreAuthorize("hasRole('ADMIN')") List<CategoryDto> allCategories() { return categories.findAll().stream().map(Api::category).toList(); }
- @PostMapping("/categories") @PreAuthorize("hasRole('ADMIN')") CategoryDto addCategory(@RequestBody @jakarta.validation.Valid CategoryRequest request) { Category category = new Category(); apply(category, request); category.createdAt = Instant.now(); return category(categories.save(category)); }
- @PutMapping("/categories/{id}") @PreAuthorize("hasRole('ADMIN')") CategoryDto updateCategory(@PathVariable Long id, @RequestBody @jakarta.validation.Valid CategoryRequest request) { Category category = categories.findById(id).orElseThrow(() -> notFound("Categoría")); apply(category, request); return category(categories.save(category)); }
- @DeleteMapping("/categories/{id}") @PreAuthorize("hasRole('ADMIN')") @ResponseStatus(HttpStatus.NO_CONTENT) void deleteCategory(@PathVariable Long id) { Category category = categories.findById(id).orElseThrow(() -> notFound("Categoría")); if (places.existsByCategoryId(id)) throw conflict("No podés borrar un rubro que tiene lugares asociados"); categories.delete(category); }
+ @PostMapping("/categories") @PreAuthorize("hasRole('ADMIN')") CategoryDto addCategory(@RequestBody @jakarta.validation.Valid CategoryRequest request) { return category(catalogAdminService.createCategory(request)); }
+ @PutMapping("/categories/{id}") @PreAuthorize("hasRole('ADMIN')") CategoryDto updateCategory(@PathVariable Long id, @RequestBody @jakarta.validation.Valid CategoryRequest request) { return category(catalogAdminService.updateCategory(id, request)); }
+ @DeleteMapping("/categories/{id}") @PreAuthorize("hasRole('ADMIN')") @ResponseStatus(HttpStatus.NO_CONTENT) void deleteCategory(@PathVariable Long id) { catalogAdminService.deleteCategory(id); }
  @GetMapping("/highlight-tags") List<HighlightTagDto> tags() { return highlightTags.findAllByOrderByNameAsc().stream().map(Api::tag).toList(); }
- @PostMapping("/highlight-tags") @PreAuthorize("hasRole('ADMIN')") HighlightTagDto addTag(@RequestBody @jakarta.validation.Valid HighlightTagRequest request) { HighlightTag tag = new HighlightTag(); apply(tag, request); return tag(highlightTags.save(tag)); }
- @PutMapping("/highlight-tags/{id}") @PreAuthorize("hasRole('ADMIN')") HighlightTagDto updateTag(@PathVariable Long id, @RequestBody @jakarta.validation.Valid HighlightTagRequest request) { HighlightTag tag = highlightTags.findById(id).orElseThrow(() -> notFound("Etiqueta")); apply(tag, request); return tag(highlightTags.save(tag)); }
- @DeleteMapping("/highlight-tags/{id}") @PreAuthorize("hasRole('ADMIN')") @ResponseStatus(HttpStatus.NO_CONTENT) void deleteTag(@PathVariable Long id) { HighlightTag tag = highlightTags.findById(id).orElseThrow(() -> notFound("Etiqueta")); if (places.existsByHighlightTagsId(id)) throw conflict("No podés borrar una etiqueta asignada a lugares"); highlightTags.delete(tag); }
+ @PostMapping("/highlight-tags") @PreAuthorize("hasRole('ADMIN')") HighlightTagDto addTag(@RequestBody @jakarta.validation.Valid HighlightTagRequest request) { return tag(catalogAdminService.createTag(request)); }
+ @PutMapping("/highlight-tags/{id}") @PreAuthorize("hasRole('ADMIN')") HighlightTagDto updateTag(@PathVariable Long id, @RequestBody @jakarta.validation.Valid HighlightTagRequest request) { return tag(catalogAdminService.updateTag(id, request)); }
+ @DeleteMapping("/highlight-tags/{id}") @PreAuthorize("hasRole('ADMIN')") @ResponseStatus(HttpStatus.NO_CONTENT) void deleteTag(@PathVariable Long id) { catalogAdminService.deleteTag(id); }
 
  @GetMapping("/places") Slice<PlaceDto> list(@RequestParam(required = false) Long categoryId, @RequestParam(required = false) Long highlightTagId, @RequestParam(required = false) PlaceStatus status, @RequestParam(required = false) String search, @RequestParam(required = false) String sort, @RequestParam(required = false) Long cursor, @RequestParam(defaultValue = "12") int size) {
    int limit = Math.max(1, Math.min(size, 30));
@@ -80,33 +118,31 @@ public class Api {
  }
 
   @PostMapping("/places") PlaceDto addPlace(@RequestBody @jakarta.validation.Valid PlaceRequest request, @AuthenticationPrincipal User owner) {
-   Place place = new Place(); apply(place, request); place.status = PlaceStatus.PENDING; place.category = categories.findById(request.categoryId()).filter(category -> category.active).orElseThrow(() -> notFound("Categoría")); place.createdBy = place.updatedBy = owner; place.createdAt = place.updatedAt = Instant.now(); return place(places.save(place));
+   return place(placeService.create(request, owner));
   }
   @PutMapping("/places/{id}") PlaceDto editPlace(@PathVariable Long id, @RequestBody @jakarta.validation.Valid PlaceRequest request, @AuthenticationPrincipal User owner) {
-   Place place = active(places.findDetailedByIdAndCoupleId(id, CoupleContext.current()).orElseThrow(() -> notFound("Lugar"))); apply(place, request); place.category = categories.findById(request.categoryId()).orElseThrow(() -> notFound("Categoría")); place.updatedBy = owner; place.updatedAt = Instant.now(); return place(places.save(place));
+   return place(placeService.update(id, request, owner));
   }
-   @DeleteMapping("/places/{id}") @ResponseStatus(HttpStatus.NO_CONTENT) void deletePlace(@PathVariable Long id, @AuthenticationPrincipal User owner) { Place place = active(places.findDetailedByIdAndCoupleId(id, CoupleContext.current()).orElseThrow(() -> notFound("Lugar"))); place.deactivatedAt = place.updatedAt = Instant.now(); place.updatedBy = owner; places.save(place); }
+   @DeleteMapping("/places/{id}") @ResponseStatus(HttpStatus.NO_CONTENT) void deletePlace(@PathVariable Long id, @AuthenticationPrincipal User owner) { placeService.archive(id, owner); }
    @GetMapping("/places/archived") List<PlaceDto> archivedPlaces() { List<Place> archived = places.findAllByCoupleId(CoupleContext.current()).stream().filter(place -> place.deactivatedAt != null).toList(); Map<Long, PlaceSummary> summaries = placeSummaries(archived); return archived.stream().map(place -> place(place, summaries.get(place.id))).toList(); }
-   @PostMapping("/places/{id}/restore") PlaceDto restorePlace(@PathVariable Long id, @AuthenticationPrincipal User owner) { Place place = places.findDetailedByIdAndCoupleId(id, CoupleContext.current()).orElseThrow(() -> notFound("Lugar")); place.deactivatedAt = null; place.updatedBy = owner; place.updatedAt = Instant.now(); return place(places.save(place)); }
+   @PostMapping("/places/{id}/restore") PlaceDto restorePlace(@PathVariable Long id, @AuthenticationPrincipal User owner) { return place(placeService.restore(id, owner)); }
   @GetMapping("/places/{id}") PlaceDto getPlace(@PathVariable Long id) { Place place = active(places.findDetailedByIdAndCoupleId(id, CoupleContext.current()).orElseThrow(() -> notFound("Lugar"))); return place(place, placeSummaries(List.of(place)).get(id)); }
  @GetMapping(value = "/places/{id}/photo", produces = "image/webp") ResponseEntity<byte[]> placePhoto(@PathVariable Long id, @RequestParam(defaultValue = "false") boolean thumbnail) {
-  active(places.findByIdAndCoupleId(id, CoupleContext.current()).orElseThrow(() -> notFound("Lugar"))); PlacePhoto photo = placePhotos.findByPlaceId(id).orElseThrow(() -> notFound("Foto"));
+  active(places.findByIdAndCoupleId(id, CoupleContext.current()).orElseThrow(() -> notFound("Lugar"))); PlacePhoto photo = placePhotos.findByPlaceIdAndCoupleId(id, CoupleContext.current()).orElseThrow(() -> notFound("Foto"));
     return ResponseEntity.ok().cacheControl(CacheControl.maxAge(java.time.Duration.ofDays(30)).cachePrivate()).contentType(MediaType.valueOf("image/webp")).body(storage.bytes(thumbnail ? photo.thumbnailBase64 : photo.imageBase64));
  }
 
  @PutMapping("/places/{id}/review") PlaceReviewDto saveReview(@PathVariable Long id, @RequestBody @jakarta.validation.Valid PlaceReviewRequest request, @AuthenticationPrincipal User author) {
-  Place place = active(places.findByIdAndCoupleId(id, CoupleContext.current()).orElseThrow(() -> notFound("Lugar")));
-  PlaceReview review = reviews.findByPlaceIdAndAuthorId(id, author.id).orElseGet(() -> { PlaceReview value = new PlaceReview(); value.place = place; value.author = author; value.createdAt = Instant.now(); return value; });
-   apply(review, request); review.updatedAt = Instant.now(); return review(reviews.save(review));
+  return review(placeReviewService.saveOwn(id, request, author));
  }
 
- @PostMapping(value = "/places/{id}/photo", consumes = MediaType.MULTIPART_FORM_DATA_VALUE) @org.springframework.transaction.annotation.Transactional PlaceDto uploadPlacePhoto(@PathVariable Long id, @RequestPart("file") MultipartFile file, @AuthenticationPrincipal User user) throws IOException {
-   Place place = active(places.findDetailedByIdAndCoupleId(id, CoupleContext.current()).orElseThrow(() -> notFound("Lugar"))); placePhotos.findByPlaceId(id).ifPresent(placePhotos::delete); placePhotos.flush(); place.updatedBy = user; place.updatedAt = Instant.now(); places.save(place); placePhotos.save(storage.store(place, file)); return place(place);
+ @PostMapping(value = "/places/{id}/photo", consumes = MediaType.MULTIPART_FORM_DATA_VALUE) PlaceDto uploadPlacePhoto(@PathVariable Long id, @RequestPart("file") MultipartFile file, @AuthenticationPrincipal User user) throws IOException {
+   return place(mediaService.uploadPlacePhoto(id, file, user));
  }
 
   @GetMapping("/places/{id}/visits") List<PlaceVisitSummaryDto> listVisits(@PathVariable Long id) {
     active(places.findDetailedByIdAndCoupleId(id, CoupleContext.current()).orElseThrow(() -> notFound("Lugar")));
-     return visits.findByPlaceIdOrderByVisitedOnDescIdDesc(id).stream().map(Api::visitSummary).toList();
+     return visits.findByPlaceIdAndCoupleIdOrderByVisitedOnDescIdDesc(id, CoupleContext.current()).stream().map(Api::visitSummary).toList();
   }
    @GetMapping("/places/{id}/item-dates") List<LocalDate> itemDates(@PathVariable Long id) {
      active(places.findDetailedByIdAndCoupleId(id, CoupleContext.current()).orElseThrow(() -> notFound("Lugar")));
@@ -117,94 +153,69 @@ public class Api {
     int limit = Math.max(1, Math.min(size, 100));
        int offset = cursor == null ? 0 : Math.max(0, cursor.intValue());
        org.springframework.data.domain.Pageable page = org.springframework.data.domain.PageRequest.of(offset / limit, limit);
-        List<Item> catalog = visitDate == null ? items.findCatalogByPlaceId(placeId, page) : items.findCatalogByPlaceIdAndVisitDate(placeId, visitDate, page);
+        List<Item> catalog = visitDate == null ? items.findCatalogByPlaceIdAndCoupleId(placeId, CoupleContext.current(), page) : items.findCatalogByPlaceIdAndVisitDateAndCoupleId(placeId, visitDate, CoupleContext.current(), page);
         Long next = catalog.size() == limit ? (long) offset + limit : null;
-        Map<Long, ItemPhoto> catalogPhotos = catalog.isEmpty() || photos == null ? Map.of() : photos.findByItemIdIn(catalog.stream().map(item -> item.id).toList()).stream().filter(photo -> photo.item != null && photo.item.id != null).collect(java.util.stream.Collectors.toMap(photo -> photo.item.id, photo -> photo, (first, ignored) -> first));
-        Map<Long, List<ItemReview>> catalogReviews = catalog.isEmpty() ? Map.of() : itemReviews.findByItemIdInOrderByItemIdAscAuthorUsername(catalog.stream().map(item -> item.id).toList()).stream().collect(java.util.stream.Collectors.groupingBy(review -> review.item.id));
+        Map<Long, ItemPhoto> catalogPhotos = catalog.isEmpty() || photos == null ? Map.of() : photos.findByItemIdInAndCoupleId(catalog.stream().map(item -> item.id).toList(), CoupleContext.current()).stream().filter(photo -> photo.item != null && photo.item.id != null).collect(java.util.stream.Collectors.toMap(photo -> photo.item.id, photo -> photo, (first, ignored) -> first));
+        Map<Long, List<ItemReview>> catalogReviews = catalog.isEmpty() ? Map.of() : itemReviews.findByItemIdInAndCoupleIdOrderByItemIdAscAuthorUsername(catalog.stream().map(item -> item.id).toList(), CoupleContext.current()).stream().collect(java.util.stream.Collectors.groupingBy(review -> review.item.id));
         return new Slice<>(catalog.stream().map(item -> catalogItem(item, catalogPhotos.get(item.id), catalogReviews.getOrDefault(item.id, List.of()))).toList(), next);
    }
-   @PostMapping("/places/{id}/visits") @ResponseStatus(HttpStatus.CREATED) @org.springframework.transaction.annotation.Transactional PlaceVisitSummaryDto addVisit(@PathVariable Long id, @RequestBody @jakarta.validation.Valid VisitRequest request, @AuthenticationPrincipal User author) {
-   Place place = active(places.findByIdAndCoupleId(id, CoupleContext.current()).orElseThrow(() -> notFound("Lugar")));
-   validateVisitMoment(request);
-   if (visits.findByPlaceIdAndVisitedOn(id, request.visitedOn()).isPresent()) throw new ResponseStatusException(HttpStatus.CONFLICT, "Ya existe una visita para esa fecha");
-      PlaceVisit visit = new PlaceVisit(); visit.place = place; visit.visitedOn = request.visitedOn(); visit.createdBy = visit.updatedBy = author; visit.createdAt = visit.updatedAt = Instant.now(); place.status = PlaceStatus.REVIEWED; touch(place, author);
-   return visitSummary(visits.save(visit));
+   @PostMapping("/places/{id}/visits") @ResponseStatus(HttpStatus.CREATED) PlaceVisitSummaryDto addVisit(@PathVariable Long id, @RequestBody @jakarta.validation.Valid VisitRequest request, @AuthenticationPrincipal User author) {
+   return visitSummary(visitService.create(id, request, author));
   }
-   @PutMapping("/place-visits/{id}") @org.springframework.transaction.annotation.Transactional PlaceVisitSummaryDto editVisit(@PathVariable Long id, @RequestBody @jakarta.validation.Valid VisitRequest request, @AuthenticationPrincipal User author) {
-    PlaceVisit visit = active(visits.findDetailedByIdAndCoupleId(id, CoupleContext.current()).orElseThrow(() -> notFound("Visita")));
-   validateVisitMoment(request);
-   visits.findByPlaceIdAndVisitedOn(visit.place.id, request.visitedOn()).filter(other -> !other.id.equals(visit.id)).ifPresent(other -> { throw new ResponseStatusException(HttpStatus.CONFLICT, "Ya existe una visita para esa fecha"); });
-      visit.visitedOn = request.visitedOn(); visit.updatedBy = author; visit.updatedAt = Instant.now(); touch(visit.place, author); return visitSummary(visits.save(visit));
+   @PutMapping("/place-visits/{id}") PlaceVisitSummaryDto editVisit(@PathVariable Long id, @RequestBody @jakarta.validation.Valid VisitRequest request, @AuthenticationPrincipal User author) {
+    return visitSummary(visitService.update(id, request, author));
   }
-  @DeleteMapping("/place-visits/{id}") @ResponseStatus(HttpStatus.NO_CONTENT) @org.springframework.transaction.annotation.Transactional void deleteVisit(@PathVariable Long id, @AuthenticationPrincipal User author) { PlaceVisit visit = active(visits.findDetailedByIdAndCoupleId(id, CoupleContext.current()).orElseThrow(() -> notFound("Visita"))); Place place = visit.place; visits.delete(visit); if (!visits.existsByPlaceId(place.id)) place.status = PlaceStatus.PENDING; touch(place, author); }
+  @DeleteMapping("/place-visits/{id}") @ResponseStatus(HttpStatus.NO_CONTENT) void deleteVisit(@PathVariable Long id, @AuthenticationPrincipal User author) { visitService.delete(id, author); }
  @GetMapping("/place-visits/{id}") PlaceVisitDto getVisit(@PathVariable Long id) { return visit(active(visits.findDetailedByIdAndCoupleId(id, CoupleContext.current()).orElseThrow(() -> notFound("Visita")))); }
 
  @PostMapping("/place-visits/{id}/items") ItemDto addItem(@PathVariable Long id, @RequestBody @jakarta.validation.Valid CreateItemRequest request, @AuthenticationPrincipal User author) {
-  PlaceVisit visit = active(visits.findDetailedByIdAndCoupleId(id, CoupleContext.current()).orElseThrow(() -> notFound("Visita")));
-  Item item = new Item(); item.visit = visit; item.createdBy = author; apply(item, new ItemRequest(request.name())); return item(items.save(item));
+  return item(itemService.create(id, request, author));
  }
-   @PutMapping("/items/{id}") @org.springframework.transaction.annotation.Transactional ItemDto editItem(@PathVariable Long id, @RequestBody @jakarta.validation.Valid ItemRequest request, @AuthenticationPrincipal User author) { Item item = active(items.findByIdAndCoupleId(id, CoupleContext.current()).orElseThrow(() -> notFound("Ítem"))); apply(item, request); items.save(item); return item(item); }
-   @DeleteMapping("/items/{id}") @ResponseStatus(HttpStatus.NO_CONTENT) void deleteItem(@PathVariable Long id, @AuthenticationPrincipal User author) { Item item = active(items.findByIdAndCoupleId(id, CoupleContext.current()).orElseThrow(() -> notFound("Ítem"))); item.deletedAt = Instant.now(); items.save(item); }
+   @PutMapping("/items/{id}") ItemDto editItem(@PathVariable Long id, @RequestBody @jakarta.validation.Valid ItemRequest request, @AuthenticationPrincipal User author) { return item(itemService.update(id, request, author)); }
+   @DeleteMapping("/items/{id}") @ResponseStatus(HttpStatus.NO_CONTENT) void deleteItem(@PathVariable Long id, @AuthenticationPrincipal User author) { itemService.delete(id, author); }
  @PutMapping("/items/{id}/reviews/me") ItemReviewDto saveItemReview(@PathVariable Long id, @RequestBody @jakarta.validation.Valid ItemReviewRequest request, @AuthenticationPrincipal User author) {
-  Item item = active(items.findByIdAndCoupleId(id, CoupleContext.current()).filter(value -> value.deletedAt == null).orElseThrow(() -> notFound("Ítem")));
-  ItemReview review = itemReviews.findByItemIdAndAuthorId(id, author.id).orElseGet(() -> { ItemReview value = new ItemReview(); value.item = item; value.author = author; value.createdAt = Instant.now(); return value; });
-  apply(review, request); review.updatedAt = Instant.now(); return itemReview(itemReviews.save(review));
+  return itemReview(itemReviewService.saveOwn(id, request, author));
  }
-  @PostMapping(value = "/items/{id}/photo", consumes = MediaType.MULTIPART_FORM_DATA_VALUE) @org.springframework.transaction.annotation.Transactional ItemDto upload(@PathVariable Long id, @RequestPart("file") MultipartFile file, @AuthenticationPrincipal User author) throws IOException { Item item = active(items.findByIdAndCoupleId(id, CoupleContext.current()).orElseThrow(() -> notFound("Ítem"))); photos.findByItemId(id).ifPresent(photos::delete); photos.flush(); ItemPhoto photo = storage.store(item, file); photos.save(photo); return item(item, photo); }
+  @PostMapping(value = "/items/{id}/photo", consumes = MediaType.MULTIPART_FORM_DATA_VALUE) ItemDto upload(@PathVariable Long id, @RequestPart("file") MultipartFile file, @AuthenticationPrincipal User author) throws IOException { ItemPhoto photo = mediaService.uploadItemPhoto(id, file, author); return item(photo.item, photo); }
   @GetMapping(value = "/items/{id}/photo", produces = "image/webp") ResponseEntity<byte[]> itemPhoto(@PathVariable Long id, @RequestParam(defaultValue = "false") boolean thumbnail) {
-   active(items.findByIdAndCoupleId(id, CoupleContext.current()).orElseThrow(() -> notFound("Ítem"))); ItemPhoto photo = photos.findByItemId(id).orElseThrow(() -> notFound("Foto"));
+   active(items.findByIdAndCoupleId(id, CoupleContext.current()).orElseThrow(() -> notFound("Ítem"))); ItemPhoto photo = photos.findByItemIdAndCoupleId(id, CoupleContext.current()).orElseThrow(() -> notFound("Foto"));
    return ResponseEntity.ok().cacheControl(CacheControl.maxAge(java.time.Duration.ofDays(30)).cachePrivate()).contentType(MediaType.valueOf("image/webp")).body(storage.bytes(thumbnail ? photo.thumbnailBase64 : photo.imageBase64));
   }
 
-  @PostMapping(value = "/place-visits/{id}/photos", consumes = MediaType.MULTIPART_FORM_DATA_VALUE) @org.springframework.transaction.annotation.Transactional PlaceVisitDto uploadVisitPhoto(@PathVariable Long id, @RequestPart("file") MultipartFile file, @AuthenticationPrincipal User author) throws IOException {
-   PlaceVisit visit = active(visits.findDetailedByIdAndCoupleId(id, CoupleContext.current()).orElseThrow(() -> notFound("Visita")));
-   List<PlaceVisitPhoto> current = visitPhotos.findByVisitIdOrderByPositionAscIdAsc(id);
-   if (current.size() >= MAX_VISIT_PHOTOS) throw new ResponseStatusException(HttpStatus.CONFLICT, "Cada visita admite hasta " + MAX_VISIT_PHOTOS + " fotos");
-   PlaceVisitPhoto photo = visitPhotos.saveAndFlush(storage.store(visit, author, current.isEmpty() ? 0 : current.getLast().position + 1, file));
-   if (visit.coverPhotoId == null) { visit.coverPhotoId = photo.id; visit.updatedBy = author; visit.updatedAt = Instant.now(); visits.save(visit); }
-   List<PlaceVisitPhoto> responsePhotos = new ArrayList<>(current); responsePhotos.add(photo);
-   return visit(visit, responsePhotos);
+  @PostMapping(value = "/place-visits/{id}/photos", consumes = MediaType.MULTIPART_FORM_DATA_VALUE) PlaceVisitDto uploadVisitPhoto(@PathVariable Long id, @RequestPart("file") MultipartFile file, @AuthenticationPrincipal User author) throws IOException {
+   return visit(mediaService.uploadVisitPhoto(id, file, author));
   }
-  @PutMapping("/place-visits/{id}/cover/{photoId}") @org.springframework.transaction.annotation.Transactional PlaceVisitDto setVisitCover(@PathVariable Long id, @PathVariable Long photoId, @AuthenticationPrincipal User author) {
-   PlaceVisit visit = active(visits.findDetailedByIdAndCoupleId(id, CoupleContext.current()).orElseThrow(() -> notFound("Visita")));
-   PlaceVisitPhoto photo = visitPhotos.findDetailedByIdAndCoupleId(photoId, CoupleContext.current()).orElseThrow(() -> notFound("Foto"));
-   if (!photo.visit.id.equals(visit.id)) throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "La foto no pertenece a esta visita");
-   visit.coverPhotoId = photo.id; visit.updatedBy = author; visit.updatedAt = Instant.now(); return visit(visits.save(visit));
+  @PutMapping("/place-visits/{id}/cover/{photoId}") PlaceVisitDto setVisitCover(@PathVariable Long id, @PathVariable Long photoId, @AuthenticationPrincipal User author) {
+   return visit(mediaService.setVisitCover(id, photoId, author));
   }
-  @DeleteMapping("/place-visit-photos/{photoId}") @ResponseStatus(HttpStatus.NO_CONTENT) @org.springframework.transaction.annotation.Transactional void deleteVisitPhoto(@PathVariable Long photoId, @AuthenticationPrincipal User author) {
-   PlaceVisitPhoto photo = visitPhotos.findDetailedByIdAndCoupleId(photoId, CoupleContext.current()).orElseThrow(() -> notFound("Foto")); PlaceVisit visit = photo.visit;
-   boolean wasCover = photo.id.equals(visit.coverPhotoId); visitPhotos.delete(photo); visitPhotos.flush();
-   if (wasCover) { visit.coverPhotoId = visitPhotos.findByVisitIdOrderByPositionAscIdAsc(visit.id).stream().findFirst().map(value -> value.id).orElse(null); visit.updatedBy = author; visit.updatedAt = Instant.now(); visits.save(visit); }
+  @DeleteMapping("/place-visit-photos/{photoId}") @ResponseStatus(HttpStatus.NO_CONTENT) void deleteVisitPhoto(@PathVariable Long photoId, @AuthenticationPrincipal User author) {
+   mediaService.deleteVisitPhoto(photoId, author);
   }
   @GetMapping(value = "/place-visit-photos/{photoId}", produces = "image/webp") ResponseEntity<byte[]> visitPhoto(@PathVariable Long photoId, @RequestParam(defaultValue = "false") boolean thumbnail) {
    PlaceVisitPhoto photo = visitPhotos.findByIdAndCoupleId(photoId, CoupleContext.current()).orElseThrow(() -> notFound("Foto"));
     return ResponseEntity.ok().cacheControl(CacheControl.maxAge(java.time.Duration.ofDays(30)).cachePrivate()).contentType(MediaType.valueOf("image/webp")).body(storage.bytes(thumbnail ? photo.thumbnailBase64 : photo.imageBase64));
   }
-  @PostMapping("/place-visits/{id}/reviews") @ResponseStatus(HttpStatus.CREATED) @org.springframework.transaction.annotation.Transactional PlaceVisitReviewDto addVisitReview(@PathVariable Long id, @RequestBody @jakarta.validation.Valid PlaceVisitReviewRequest request, @AuthenticationPrincipal User author) {
-   PlaceVisit visit = active(visits.findDetailedByIdAndCoupleId(id, CoupleContext.current()).orElseThrow(() -> notFound("Visita")));
-   if (visitReviews.findByVisitIdAndAuthorId(id, author.id).isPresent()) throw new ResponseStatusException(HttpStatus.CONFLICT, "Ya existe una reseña de este autor para la visita");
-   PlaceVisitReview review = new PlaceVisitReview(); review.visit = visit; review.author = review.updatedBy = author; review.createdAt = review.updatedAt = Instant.now(); apply(review, request); return visitReview(visitReviews.save(review));
+  @PostMapping("/place-visits/{id}/reviews") @ResponseStatus(HttpStatus.CREATED) PlaceVisitReviewDto addVisitReview(@PathVariable Long id, @RequestBody @jakarta.validation.Valid PlaceVisitReviewRequest request, @AuthenticationPrincipal User author) {
+   return visitReview(visitReviewService.create(id, request, author));
   }
-  @PutMapping("/place-visits/{id}/reviews/me") @org.springframework.transaction.annotation.Transactional PlaceVisitReviewDto saveOwnVisitReview(@PathVariable Long id, @RequestBody @jakarta.validation.Valid PlaceVisitReviewRequest request, @AuthenticationPrincipal User author) {
-   PlaceVisit visit = active(visits.findDetailedByIdAndCoupleId(id, CoupleContext.current()).orElseThrow(() -> notFound("Visita")));
-   PlaceVisitReview review = visitReviews.findByVisitIdAndAuthorId(id, author.id).orElseGet(() -> { PlaceVisitReview value = new PlaceVisitReview(); value.visit = visit; value.author = author; value.createdAt = Instant.now(); return value; });
-   review.updatedBy = author; review.updatedAt = Instant.now(); apply(review, request); return visitReview(visitReviews.save(review));
+  @PutMapping("/place-visits/{id}/reviews/me") PlaceVisitReviewDto saveOwnVisitReview(@PathVariable Long id, @RequestBody @jakarta.validation.Valid PlaceVisitReviewRequest request, @AuthenticationPrincipal User author) {
+   return visitReview(visitReviewService.saveOwn(id, request, author));
   }
-  @PutMapping("/place-visit-reviews/{reviewId}") @org.springframework.transaction.annotation.Transactional PlaceVisitReviewDto updateVisitReview(@PathVariable Long reviewId, @RequestBody @jakarta.validation.Valid PlaceVisitReviewRequest request, @AuthenticationPrincipal User author) {
-   PlaceVisitReview review = visitReviews.findDetailedByIdAndCoupleId(reviewId, CoupleContext.current()).orElseThrow(() -> notFound("Reseña")); active(review.visit); if (!review.author.id.equals(author.id)) throw notFound("Reseña"); review.updatedBy = author; review.updatedAt = Instant.now(); apply(review, request); return visitReview(visitReviews.save(review));
+  @PutMapping("/place-visit-reviews/{reviewId}") PlaceVisitReviewDto updateVisitReview(@PathVariable Long reviewId, @RequestBody @jakarta.validation.Valid PlaceVisitReviewRequest request, @AuthenticationPrincipal User author) {
+   return visitReview(visitReviewService.update(reviewId, request, author));
   }
-  @DeleteMapping("/place-visit-reviews/{reviewId}") @ResponseStatus(HttpStatus.NO_CONTENT) void deleteVisitReview(@PathVariable Long reviewId, @AuthenticationPrincipal User author) { PlaceVisitReview review = visitReviews.findDetailedByIdAndCoupleId(reviewId, CoupleContext.current()).orElseThrow(() -> notFound("Reseña")); if (!review.author.id.equals(author.id)) throw notFound("Reseña"); visitReviews.delete(review); }
+  @DeleteMapping("/place-visit-reviews/{reviewId}") @ResponseStatus(HttpStatus.NO_CONTENT) void deleteVisitReview(@PathVariable Long reviewId, @AuthenticationPrincipal User author) { visitReviewService.delete(reviewId, author); }
 
   private Map<Long, PlaceSummary> placeSummaries(List<Place> values) {
    if (values.isEmpty()) return Map.of();
    List<Long> placeIds = values.stream().map(place -> place.id).toList();
-   List<PlaceVisit> allVisits = visits.findByPlaceIdInOrderByPlaceIdAscVisitedOnDescIdDesc(placeIds);
+   List<PlaceVisit> allVisits = visits.findByPlaceIdInAndCoupleIdOrderByPlaceIdAscVisitedOnDescIdDesc(placeIds, CoupleContext.current());
    Map<Long, List<PlaceVisit>> visitsByPlace = allVisits.stream().collect(java.util.stream.Collectors.groupingBy(visit -> visit.place.id, LinkedHashMap::new, java.util.stream.Collectors.toList()));
    List<Long> visitIds = allVisits.stream().map(visit -> visit.id).toList();
-   Map<Long, List<PlaceVisitReview>> reviewsByVisit = visitIds.isEmpty() ? Map.of() : visitReviews.findByVisitIdInOrderByVisitIdAscAuthorUsername(visitIds).stream().collect(java.util.stream.Collectors.groupingBy(review -> review.visit.id));
-   Map<Long, List<PlaceReviewDto>> reviewsByPlace = reviews.summariesByPlaceIdIn(placeIds).stream().collect(java.util.stream.Collectors.groupingBy(PlaceReviewSummary::getPlaceId, java.util.stream.Collectors.mapping(Api::review, java.util.stream.Collectors.toList())));
-   Map<Long, List<PlaceVisitPhoto>> photosByVisit = visitIds.isEmpty() ? Map.of() : visitPhotos.findByVisitIdInOrderByVisitIdAscPositionAscIdAsc(visitIds).stream().collect(java.util.stream.Collectors.groupingBy(photo -> photo.visit.id));
-   Map<Long, PlacePhoto> legacyPhotos = placePhotos.findByPlaceIdIn(placeIds).stream().collect(java.util.stream.Collectors.toMap(photo -> photo.place.id, photo -> photo));
+   Map<Long, List<PlaceVisitReview>> reviewsByVisit = visitIds.isEmpty() ? Map.of() : visitReviews.findByVisitIdInAndCoupleIdOrderByVisitIdAscAuthorUsername(visitIds, CoupleContext.current()).stream().collect(java.util.stream.Collectors.groupingBy(review -> review.visit.id));
+   Map<Long, List<PlaceReviewDto>> reviewsByPlace = reviews.summariesByPlaceIdInAndCoupleId(placeIds, CoupleContext.current()).stream().collect(java.util.stream.Collectors.groupingBy(PlaceReviewSummary::getPlaceId, java.util.stream.Collectors.mapping(Api::review, java.util.stream.Collectors.toList())));
+   Map<Long, List<PlaceVisitPhoto>> photosByVisit = visitIds.isEmpty() ? Map.of() : visitPhotos.findByVisitIdInAndCoupleIdOrderByVisitIdAscPositionAscIdAsc(visitIds, CoupleContext.current()).stream().collect(java.util.stream.Collectors.groupingBy(photo -> photo.visit.id));
+   Map<Long, PlacePhoto> legacyPhotos = placePhotos.findByPlaceIdInAndCoupleId(placeIds, CoupleContext.current()).stream().collect(java.util.stream.Collectors.toMap(photo -> photo.place.id, photo -> photo));
    Map<Long, PlaceSummary> result = new HashMap<>();
    for (Place place : values) {
     List<PlaceVisit> placeVisits = visitsByPlace.getOrDefault(place.id, List.of());
@@ -232,24 +243,22 @@ public class Api {
   private static String photoUrl(Long placeId, boolean thumbnail, Long photoId) { return "/places/" + placeId + "/photo?" + (thumbnail ? "thumbnail=true&" : "") + "v=" + photoId; }
   private static String visitPhotoUrl(Long photoId, boolean thumbnail) { return "/place-visit-photos/" + photoId + (thumbnail ? "?thumbnail=true" : ""); }
  private static double round(double value) { return Math.round(value * 10) / 10d; }
-  private void apply(Place place, PlaceRequest request) { place.name = request.name(); place.address = request.address(); place.sourceUrl = request.sourceUrl(); place.mapsUrl = request.mapsUrl(); place.acceptsReservations = request.acceptsReservations(); place.highlightTags.clear(); if (request.tagIds() != null && !request.tagIds().isEmpty()) { Set<Long> ids = new LinkedHashSet<>(request.tagIds()); List<HighlightTag> selected = highlightTags.findAllById(ids); if (selected.size() != ids.size()) throw notFound("Etiqueta"); place.highlightTags.addAll(selected); } }
-  private static void apply(PlaceReview review, PlaceReviewRequest request) { if (java.util.stream.Stream.of(request.location(), request.heating(), request.bathrooms(), request.exterior(), request.seating(), request.service(), request.ambiance()).allMatch(Objects::isNull)) throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Calificá al menos un aspecto del lugar"); review.comment = request.comment() == null || request.comment().isBlank() ? null : request.comment(); review.location = request.location(); review.heating = request.heating(); review.bathrooms = request.bathrooms(); review.exterior = request.exterior(); review.seating = request.seating(); review.service = request.service(); review.ambiance = request.ambiance(); }
-  private PlaceVisitDto visit(PlaceVisit visit) { return visit(visit, visitPhotos.findByVisitIdOrderByPositionAscIdAsc(visit.id)); }
+  private PlaceVisitDto visit(PlaceVisit visit) { return visit(visit, visitPhotos.findByVisitIdAndCoupleIdOrderByPositionAscIdAsc(visit.id, CoupleContext.current())); }
   private PlaceVisitDto visit(PlaceVisit visit, List<PlaceVisitPhoto> currentPhotos) {
-   List<Item> visitItems = items.findByVisitIdAndDeletedAtIsNullOrderByIdDesc(visit.id);
+   List<Item> visitItems = items.findByVisitIdAndCoupleIdAndDeletedAtIsNullOrderByIdDesc(visit.id, CoupleContext.current());
    List<Long> itemIds = visitItems.stream().map(item -> item.id).toList();
-   Map<Long, String> itemReviewAuthors = itemIds.isEmpty() ? Map.of() : itemReviews.authorsByItemIdIn(itemIds).stream().collect(java.util.stream.Collectors.toMap(ReviewAuthor::getReviewId, ReviewAuthor::getAuthor));
-   Map<Long, ItemPhoto> photoMap = photos.findByItemIdIn(visitItems.stream().map(item -> item.id).toList()).stream().filter(photo -> photo.item != null && photo.item.id != null).collect(java.util.stream.Collectors.toMap(photo -> photo.item.id, photo -> photo, (first, ignored) -> first));
+   Map<Long, String> itemReviewAuthors = itemIds.isEmpty() ? Map.of() : itemReviews.authorsByItemIdInAndCoupleId(itemIds, CoupleContext.current()).stream().collect(java.util.stream.Collectors.toMap(ReviewAuthor::getReviewId, ReviewAuthor::getAuthor));
+   Map<Long, ItemPhoto> photoMap = photos.findByItemIdInAndCoupleId(visitItems.stream().map(item -> item.id).toList(), CoupleContext.current()).stream().filter(photo -> photo.item != null && photo.item.id != null).collect(java.util.stream.Collectors.toMap(photo -> photo.item.id, photo -> photo, (first, ignored) -> first));
    List<PlaceVisitPhotoDto> resultPhotos = currentPhotos.stream().map(Api::visitPhoto).toList();
    PlaceVisitPhotoDto cover = resultPhotos.stream().filter(photo -> photo.id().equals(visit.coverPhotoId)).findFirst().orElse(resultPhotos.isEmpty() ? null : resultPhotos.getFirst());
-   List<PlaceVisitReview> reviewValues = visitReviews.findByVisitIdOrderByAuthorUsername(visit.id);
-   Map<Long, String> reviewAuthors = visitReviews.authorsByVisitIdIn(List.of(visit.id)).stream().collect(java.util.stream.Collectors.toMap(ReviewAuthor::getReviewId, ReviewAuthor::getAuthor));
+   List<PlaceVisitReview> reviewValues = visitReviews.findByVisitIdAndCoupleIdOrderByAuthorUsername(visit.id, CoupleContext.current());
+   Map<Long, String> reviewAuthors = visitReviews.authorsByVisitIdInAndCoupleId(List.of(visit.id), CoupleContext.current()).stream().collect(java.util.stream.Collectors.toMap(ReviewAuthor::getReviewId, ReviewAuthor::getAuthor));
    List<PlaceVisitReviewDto> currentReviews = reviewValues.stream().map(review -> visitReview(review, reviewAuthors.get(review.id))).toList();
     return new PlaceVisitDto(visit.id, visit.place.id, visit.visitedOn, visit.createdBy.username, visitItems.stream().map(item -> item(item, photoMap.get(item.id), itemReviewAuthors)).toList(), resultPhotos, cover, currentReviews, visit.updatedBy.username, visit.createdAt, visit.updatedAt);
   }
-  private ItemDto item(Item item) { return item(item, photos.findByItemId(item.id).orElse(null)); }
-  private ItemDto item(Item item, ItemPhoto photo) { return item(item, photo, itemReviews.authorsByItemIdIn(List.of(item.id)).stream().collect(java.util.stream.Collectors.toMap(ReviewAuthor::getReviewId, ReviewAuthor::getAuthor))); }
-    private ItemCatalogDto catalogItem(Item item) { return catalogItem(item, photos.findByItemId(item.id).orElse(null), item.reviews); }
+  private ItemDto item(Item item) { return item(item, photos.findByItemIdAndCoupleId(item.id, CoupleContext.current()).orElse(null)); }
+  private ItemDto item(Item item, ItemPhoto photo) { return item(item, photo, itemReviews.authorsByItemIdInAndCoupleId(List.of(item.id), CoupleContext.current()).stream().collect(java.util.stream.Collectors.toMap(ReviewAuthor::getReviewId, ReviewAuthor::getAuthor))); }
+    private ItemCatalogDto catalogItem(Item item) { return catalogItem(item, photos.findByItemIdAndCoupleId(item.id, CoupleContext.current()).orElse(null), item.reviews); }
     private ItemCatalogDto catalogItem(Item item, ItemPhoto photo, List<ItemReview> reviews) {
       ItemReview review = reviews.stream().findFirst().orElse(null);
       return new ItemCatalogDto(item.id, item.name, review == null ? null : review.comment, review == null ? (short) 0 : review.taste, review == null ? (short) 0 : review.price, item.createdBy.username, photo == null ? null : itemPhotoUrl(item.id, false, photo.id), photo == null ? null : itemPhotoUrl(item.id, true, photo.id), photo == null ? null : photo.width, photo == null ? null : photo.height, item.visit.visitedOn, item.createdAt, reviews.stream().sorted(Comparator.comparing(value -> value.author.username, String.CASE_INSENSITIVE_ORDER)).map(Api::itemReview).toList());
@@ -266,16 +275,11 @@ public class Api {
   private static PlaceReviewDto review(PlaceReviewSummary review) { return new PlaceReviewDto(review.getAuthor(), review.getComment(), review.getLocation(), review.getHeating(), review.getBathrooms(), review.getExterior(), review.getSeating(), review.getService(), review.getAmbiance()); }
  private static CategoryDto category(Category category) { return new CategoryDto(category.id, category.name, category.slug, category.icon, category.active); }
  private static HighlightTagDto tag(HighlightTag tag) { return new HighlightTagDto(tag.id, tag.name, tag.emoji); }
- private static void apply(Category category, CategoryRequest request) { category.name = request.name(); category.slug = request.slug(); category.icon = request.icon(); category.active = request.active(); }
- private static void apply(HighlightTag tag, HighlightTagRequest request) { tag.name = request.name().trim(); tag.emoji = request.emoji().trim(); }
- private static void apply(Item item, ItemRequest request) { item.name = request.name().trim(); item.updatedAt = Instant.now(); if (item.createdAt == null) item.createdAt = item.updatedAt; }
   private static void apply(ItemReview review, ItemReviewRequest request) { review.comment = request.comment() == null || request.comment().isBlank() ? null : request.comment(); review.taste = request.taste(); review.price = request.price(); }
   private static void apply(PlaceVisitReview review, PlaceVisitReviewRequest request) { review.overall = request.overall(); review.comment = request.comment() == null || request.comment().isBlank() ? null : request.comment(); review.taste = request.taste(); review.price = request.price(); }
-  private void touch(Place place, User author) { place.updatedBy = author; place.updatedAt = Instant.now(); places.save(place); }
   private static ResponseStatusException notFound(String type) { return new ResponseStatusException(HttpStatus.NOT_FOUND, type + " no encontrado"); }
  private static Place active(Place place) { if (place.deactivatedAt != null) throw notFound("Lugar"); return place; }
   private static PlaceVisit active(PlaceVisit visit) { active(visit.place); return visit; }
   private static Item active(Item item) { active(item.visit.place); return item; }
-   private static void validateVisitMoment(VisitRequest request) { if (request.visitedOn().isAfter(RosarioClock.today())) throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Una visita no puede quedar en el futuro"); }
   private static ResponseStatusException conflict(String detail) { return new ResponseStatusException(HttpStatus.CONFLICT, detail); }
 }

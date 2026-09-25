@@ -10,8 +10,12 @@ import com.wherefood.domain.Film;
 import com.wherefood.domain.FilmGenreOption;
 import com.wherefood.domain.FilmReview;
 import com.wherefood.domain.FilmView;
+import com.wherefood.domain.Role;
 import com.wherefood.domain.User;
 import com.wherefood.domain.WatchPlatform;
+import com.wherefood.couple.CoupleAuthorizationService;
+import com.wherefood.config.CoupleContext;
+import com.wherefood.repo.Repositories.CoupleMembers;
 import com.wherefood.repo.Repositories.Films;
 import com.wherefood.repo.Repositories.FilmRating;
 import com.wherefood.repo.Repositories.FilmReviews;
@@ -22,6 +26,8 @@ import java.time.LocalDate;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.UUID;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
@@ -31,30 +37,41 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 class FilmApiTest {
+  @AfterEach
+  void clearCoupleContext() { CoupleContext.clear(); }
+
   @Test
   void registersAViewWithoutCreatingAReview() {
     Films films = mock(Films.class);
     FilmReviews reviews = mock(FilmReviews.class);
     FilmViews views = mock(FilmViews.class);
+    CoupleMembers members = mock(CoupleMembers.class);
+    UUID coupleId = UUID.randomUUID();
     User tomas = new User();
     tomas.id = 7L;
+    tomas.role = Role.USER;
     tomas.username = "tomas";
+    LocalDate watchedOn = RosarioClock.today();
+    CoupleContext.set(coupleId);
+    when(members.findActiveCoupleIdByUserId(tomas.id)).thenReturn(Optional.of(coupleId));
     Film film = new Film();
     film.id = 42L;
-    when(films.findDetailedByIdAndCoupleId(42L, null)).thenReturn(Optional.of(film));
-    when(views.findByFilmIdAndWatchedOnAndCoupleId(42L, LocalDate.of(2026, 7, 19), null)).thenReturn(Optional.empty());
+    when(films.findDetailedByIdAndCoupleId(42L, coupleId)).thenReturn(Optional.of(film));
+    when(views.findByFilmIdAndWatchedOnAndCoupleId(42L, watchedOn, coupleId)).thenReturn(Optional.empty());
     FilmView[] stored = new FilmView[1];
     when(views.save(any(FilmView.class))).thenAnswer(invocation -> { FilmView value = invocation.getArgument(0); value.id = 88L; stored[0] = value; return value; });
-    when(views.findByFilmIdOrderByWatchedOnDescIdDesc(42L)).thenAnswer(invocation -> stored[0] == null ? List.of() : List.of(stored[0]));
+    when(views.findByFilmIdAndCoupleIdOrderByWatchedOnDescIdDesc(42L, null)).thenAnswer(invocation -> stored[0] == null ? List.of() : List.of(stored[0]));
 
-    FilmViewDto result = new FilmApi(films, reviews, views, null, null, null, null, null).addView(
+    FilmViewService viewService = new FilmViewService(films, views, new CoupleAuthorizationService(members));
+    FilmReviewService reviewService = new FilmReviewService(reviews, new CoupleAuthorizationService(members), null);
+    FilmViewDto result = new FilmApi(films, reviews, views, null, null, null, null, null, reviewService, viewService).addView(
       42L,
-      new FilmViewRequest(LocalDate.of(2026, 7, 19)),
+      new FilmViewRequest(watchedOn),
       tomas
     );
 
     assertEquals(88L, result.id());
-    assertEquals(LocalDate.of(2026, 7, 19), result.watchedOn());
+    assertEquals(watchedOn, result.watchedOn());
     assertEquals(1, film.watchedCount);
     verify(views).save(any(FilmView.class));
   }
@@ -64,9 +81,14 @@ class FilmApiTest {
     Films films = mock(Films.class);
     FilmReviews reviews = mock(FilmReviews.class);
     FilmViews views = mock(FilmViews.class);
+    CoupleMembers members = mock(CoupleMembers.class);
+    UUID coupleId = UUID.randomUUID();
     User avril = new User();
     avril.id = 6L;
     avril.username = "avril";
+    avril.role = Role.USER;
+    CoupleContext.set(coupleId);
+    when(members.findActiveCoupleIdByUserId(avril.id)).thenReturn(Optional.of(coupleId));
     Film film = new Film();
     film.id = 42L;
     film.watchedCount = 1;
@@ -74,12 +96,14 @@ class FilmApiTest {
     view.id = 88L;
     view.film = film;
     view.watchedOn = LocalDate.of(2026, 7, 19);
-    when(films.findDetailedByIdAndCoupleId(42L, null)).thenReturn(Optional.of(film));
-    when(views.findByIdAndFilmIdAndCoupleId(88L, 42L, null)).thenReturn(Optional.of(view));
+    when(films.findDetailedByIdAndCoupleId(42L, coupleId)).thenReturn(Optional.of(film));
+    when(views.findByIdAndFilmIdAndCoupleId(88L, 42L, coupleId)).thenReturn(Optional.of(view));
     when(reviews.existsByViewIdAndAuthorId(88L, 6L)).thenReturn(false);
     when(reviews.save(any(FilmReview.class))).thenAnswer(invocation -> invocation.getArgument(0));
 
-    FilmReviewDto result = new FilmApi(films, reviews, views, null, null, null, null, null).addReview(
+    FilmReviewService reviewService = new FilmReviewService(reviews, films, views,
+            new CoupleAuthorizationService(members), null, null);
+    FilmReviewDto result = new FilmApi(films, reviews, views, null, null, null, null, null, reviewService).addReview(
       42L,
       88L,
        new FilmReviewRequest((short) 5, "La volvería a ver\n\nLa recomiendo\n", null, null, Map.of("story", (short) 4)),
@@ -99,6 +123,11 @@ class FilmApiTest {
     User author = new User();
     author.id = 7L;
     author.username = "tomas";
+    author.role = Role.USER;
+    CoupleMembers members = mock(CoupleMembers.class);
+    UUID coupleId = UUID.randomUUID();
+    CoupleContext.set(coupleId);
+    when(members.findActiveCoupleIdByUserId(author.id)).thenReturn(Optional.of(coupleId));
     FilmReview review = new FilmReview();
     review.film = new Film();
     review.view = new FilmView();
@@ -106,17 +135,18 @@ class FilmApiTest {
     review.author = author;
     review.rating = 3;
     review.metrics.put("story", (short) 3);
-    when(reviews.findByIdAndFilmIdAndCoupleId(99L, 42L, null)).thenReturn(Optional.of(review));
+    when(reviews.findByIdAndFilmIdAndCoupleId(99L, 42L, coupleId)).thenReturn(Optional.of(review));
     when(reviews.save(review)).thenReturn(review);
 
-    FilmReviewDto result = new FilmApi(null, reviews, null, null, null, null, null, null).updateReview(
+    FilmReviewDto result = new FilmApi(null, reviews, null, null, null, null, null, null,
+            new FilmReviewService(reviews, new CoupleAuthorizationService(members), null)).updateReview(
       42L,
       99L,
       new FilmReviewRequest((short) 5, "Mejor de lo que recordaba", LocalDate.of(2026, 7, 18), null, Map.of("story", (short) 4)),
       author
     );
 
-    verify(reviews).findByIdAndFilmIdAndCoupleId(99L, 42L, null);
+    verify(reviews).findByIdAndFilmIdAndCoupleId(99L, 42L, coupleId);
     assertEquals(5, result.rating());
     assertEquals(LocalDate.of(2026, 7, 17), result.watchedOn());
     assertEquals(Map.of("story", (short) 4), result.metrics());
@@ -127,7 +157,7 @@ class FilmApiTest {
     Films films = mock(Films.class); FilmReviews reviews = mock(FilmReviews.class); FilmViews views = mock(FilmViews.class); FilmPhotos filmPhotos = mock(FilmPhotos.class);
    User tomas = new User(); tomas.username = "tomas";
    Film film = new Film(); film.id = 42L; film.title = "Sin foto"; film.createdBy = tomas; film.createdAt = film.updatedAt = Instant.parse("2026-07-23T00:00:00Z");
-    when(films.findAllByCoupleId(null)).thenReturn(List.of(film)); when(reviews.findByFilmIdOrderByViewWatchedOnDescIdDesc(42L)).thenReturn(List.of()); when(views.findByFilmIdOrderByWatchedOnDescIdDesc(42L)).thenReturn(List.of()); when(filmPhotos.findByFilmId(42L)).thenReturn(Optional.empty());
+    when(films.findAllByCoupleId(null)).thenReturn(List.of(film)); when(reviews.findByFilmIdAndCoupleIdOrderByViewWatchedOnDescIdDesc(42L, null)).thenReturn(List.of()); when(views.findByFilmIdAndCoupleIdOrderByWatchedOnDescIdDesc(42L, null)).thenReturn(List.of()); when(filmPhotos.findByFilmId(42L)).thenReturn(Optional.empty());
     MockMvc mvc = MockMvcBuilders.standaloneSetup(new FilmApi(films, reviews, views, null, filmPhotos, null, null, null)).build();
 
    mvc.perform(get("/api/films")).andExpect(status().isOk());
@@ -173,7 +203,7 @@ class FilmApiTest {
     Film higherRated = film(2L, tomas, LocalDate.of(2026, 7, 21), Instant.parse("2026-07-23T00:00:00Z"), Instant.parse("2026-07-21T00:00:00Z")); higherRated.title = "Drama reciente"; higherRated.platform = platform; higherRated.genres.add(genre("Drama"));
     Film excluded = film(3L, tomas, null, Instant.parse("2026-07-24T00:00:00Z"), Instant.parse("2026-07-24T00:00:00Z")); excluded.title = "Comedia";
     when(films.findAllByCoupleId(null)).thenReturn(List.of(lowerRated, higherRated, excluded));
-    when(reviews.ratingsByFilmIdIn(any())).thenReturn(List.of(rating(1L, 3.0), rating(2L, 5.0)));
+    when(reviews.ratingsByFilmIdInAndCoupleId(any(), isNull())).thenReturn(List.of(rating(1L, 3.0), rating(2L, 5.0)));
 
     FilmApi api = new FilmApi(films, reviews, views, null, photos, null, null, null);
     Slice<FilmDto> first = api.list("Drama", 8L, true, "drama", "rating-desc", null, 1);

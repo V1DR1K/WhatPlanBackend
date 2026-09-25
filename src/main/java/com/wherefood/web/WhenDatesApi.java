@@ -2,6 +2,7 @@ package com.wherefood.web;
 
 import com.wherefood.domain.*;
 import com.wherefood.config.CoupleContext;
+import com.wherefood.couple.CoupleAuthorizationService;
 import com.wherefood.repo.Repositories.*;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.*;
@@ -44,9 +45,18 @@ public class WhenDatesApi {
   private final WhyFunVisitPhotos funVisitPhotos;
   private final CoupleMembers coupleMembers;
   private final PhotoStorage storage;
+  private final WhenDateMutationService mutationService;
 
   public WhenDatesApi(SpecialDates specialDates, SpecialDateOccurrences occurrences, SpecialDateOccurrenceComments comments, SpecialDateOccurrencePhotos photos, PlaceVisits placeVisits, FilmViews filmViews, Cookings cookings, WhyFunVisits funVisits, PlacePhotos placePhotos, PlaceVisitPhotos visitPhotos, FilmPhotos filmPhotos, RecipePhotos recipePhotos, WhyFunVenuePhotos funPhotos, WhyFunVisitPhotos funVisitPhotos, PhotoStorage storage, CoupleMembers coupleMembers) {
-   this.specialDates = specialDates; this.occurrences = occurrences; this.comments = comments; this.photos = photos; this.placeVisits = placeVisits; this.filmViews = filmViews; this.cookings = cookings; this.funVisits = funVisits; this.placePhotos = placePhotos; this.visitPhotos = visitPhotos; this.filmPhotos = filmPhotos; this.recipePhotos = recipePhotos; this.funPhotos = funPhotos; this.funVisitPhotos = funVisitPhotos; this.storage = storage; this.coupleMembers = coupleMembers;
+   this(specialDates, occurrences, comments, photos, placeVisits, filmViews, cookings, funVisits,
+           placePhotos, visitPhotos, filmPhotos, recipePhotos, funPhotos, funVisitPhotos, storage,
+           coupleMembers, new WhenDateMutationService(specialDates, occurrences, comments, photos,
+                   storage, new CoupleAuthorizationService(coupleMembers)));
+  }
+
+  @org.springframework.beans.factory.annotation.Autowired
+  public WhenDatesApi(SpecialDates specialDates, SpecialDateOccurrences occurrences, SpecialDateOccurrenceComments comments, SpecialDateOccurrencePhotos photos, PlaceVisits placeVisits, FilmViews filmViews, Cookings cookings, WhyFunVisits funVisits, PlacePhotos placePhotos, PlaceVisitPhotos visitPhotos, FilmPhotos filmPhotos, RecipePhotos recipePhotos, WhyFunVenuePhotos funPhotos, WhyFunVisitPhotos funVisitPhotos, PhotoStorage storage, CoupleMembers coupleMembers, WhenDateMutationService mutationService) {
+   this.specialDates = specialDates; this.occurrences = occurrences; this.comments = comments; this.photos = photos; this.placeVisits = placeVisits; this.filmViews = filmViews; this.cookings = cookings; this.funVisits = funVisits; this.placePhotos = placePhotos; this.visitPhotos = visitPhotos; this.filmPhotos = filmPhotos; this.recipePhotos = recipePhotos; this.funPhotos = funPhotos; this.funVisitPhotos = funVisitPhotos; this.storage = storage; this.coupleMembers = coupleMembers; this.mutationService = mutationService;
  }
 
   @GetMapping @Transactional(readOnly = true) Slice<WhenDateOccurrenceSummaryDto> list(@RequestParam(required = false) Long specialDateId, @RequestParam(required = false) Long cursor, @RequestParam(defaultValue = "12") int size) {
@@ -61,30 +71,27 @@ public class WhenDatesApi {
   return occurrenceDto(specialDate, occurredOn, occurrences.findBySpecialDateIdAndOccurredOnAndCoupleId(specialDateId, occurredOn, CoupleContext.current()).orElse(null));
  }
 
- @PutMapping("/special-dates/{specialDateId}/occurrences/{occurredOn}/comments/me") @Transactional WhenDateOccurrenceDto saveComment(@PathVariable Long specialDateId, @PathVariable LocalDate occurredOn, @RequestBody @Valid WhenDateCommentRequest request, @AuthenticationPrincipal User author) {
-  SpecialDate specialDate = specialDate(specialDateId); SpecialDateOccurrence occurrence = ensureOccurrence(specialDate, occurredOn, author);
-  SpecialDateOccurrenceComment comment = comments.findByOccurrenceIdAndAuthorId(occurrence.id, author.id).orElseGet(() -> { SpecialDateOccurrenceComment value = new SpecialDateOccurrenceComment(); value.occurrence = occurrence; value.author = author; value.createdAt = Instant.now(); return value; });
-  comment.comment = request.comment().trim(); comment.updatedBy = author; comment.updatedAt = Instant.now(); comments.save(comment); touch(occurrence, author);
-  return occurrenceDto(specialDate, occurredOn, occurrence);
+ @PutMapping("/special-dates/{specialDateId}/occurrences/{occurredOn}/comments/me") WhenDateOccurrenceDto saveComment(@PathVariable Long specialDateId, @PathVariable LocalDate occurredOn, @RequestBody @Valid WhenDateCommentRequest request, @AuthenticationPrincipal User author) {
+  SpecialDateOccurrence occurrence = mutationService.saveComment(specialDateId, occurredOn, request, author);
+  return occurrenceDto(occurrence.specialDate, occurredOn, occurrence);
  }
 
- @DeleteMapping("/special-dates/{specialDateId}/occurrences/{occurredOn}/comments/me") @ResponseStatus(HttpStatus.NO_CONTENT) @Transactional void deleteComment(@PathVariable Long specialDateId, @PathVariable LocalDate occurredOn, @AuthenticationPrincipal User author) {
-  SpecialDateOccurrence occurrence = occurrences.findBySpecialDateIdAndOccurredOnAndCoupleId(specialDateId, occurredOn, CoupleContext.current()).orElseThrow(() -> notFound("Recuerdo")); comments.findByOccurrenceIdAndAuthorId(occurrence.id, author.id).ifPresent(comments::delete); touch(occurrence, author);
+ @DeleteMapping("/special-dates/{specialDateId}/occurrences/{occurredOn}/comments/me") @ResponseStatus(HttpStatus.NO_CONTENT) void deleteComment(@PathVariable Long specialDateId, @PathVariable LocalDate occurredOn, @AuthenticationPrincipal User author) {
+  mutationService.deleteComment(specialDateId, occurredOn, author);
  }
 
- @PostMapping(value = "/special-dates/{specialDateId}/occurrences/{occurredOn}/photos", consumes = MediaType.MULTIPART_FORM_DATA_VALUE) @Transactional WhenDateOccurrenceDto uploadPhoto(@PathVariable Long specialDateId, @PathVariable LocalDate occurredOn, @RequestPart("file") MultipartFile file, @AuthenticationPrincipal User author) throws IOException {
-  SpecialDate specialDate = specialDate(specialDateId); SpecialDateOccurrence occurrence = ensureOccurrence(specialDate, occurredOn, author);
-  List<SpecialDateOccurrencePhoto> current = photos.findByOccurrenceIdOrderByPositionAscIdAsc(occurrence.id); if (current.size() >= MAX_PHOTOS) throw conflict("Esta fecha admite hasta " + MAX_PHOTOS + " fotos");
-  int position = current.isEmpty() ? 0 : current.getLast().position + 1; SpecialDateOccurrencePhoto photo = photos.saveAndFlush(storage.store(occurrence, author, position, file)); if (occurrence.coverPhotoId == null) occurrence.coverPhotoId = photo.id; touch(occurrence, author);
-  return occurrenceDto(specialDate, occurredOn, occurrence);
+ @PostMapping(value = "/special-dates/{specialDateId}/occurrences/{occurredOn}/photos", consumes = MediaType.MULTIPART_FORM_DATA_VALUE) WhenDateOccurrenceDto uploadPhoto(@PathVariable Long specialDateId, @PathVariable LocalDate occurredOn, @RequestPart("file") MultipartFile file, @AuthenticationPrincipal User author) throws IOException {
+  SpecialDateOccurrence occurrence = mutationService.uploadPhoto(specialDateId, occurredOn, file, author);
+  return occurrenceDto(occurrence.specialDate, occurredOn, occurrence);
  }
 
- @PutMapping("/occurrences/{occurrenceId}/cover/{photoId}") @Transactional WhenDateOccurrenceDto setCover(@PathVariable Long occurrenceId, @PathVariable Long photoId, @AuthenticationPrincipal User author) {
-  SpecialDateOccurrence occurrence = findOccurrence(occurrenceId); SpecialDateOccurrencePhoto photo = photos.findDetailedByIdAndCoupleId(photoId, CoupleContext.current()).orElseThrow(() -> notFound("Foto")); if (!photo.occurrence.id.equals(occurrence.id)) throw badRequest("La foto no pertenece a esta fecha"); occurrence.coverPhotoId = photo.id; touch(occurrence, author); return occurrenceDto(occurrence.specialDate, occurrence.occurredOn, occurrence);
+ @PutMapping("/occurrences/{occurrenceId}/cover/{photoId}") WhenDateOccurrenceDto setCover(@PathVariable Long occurrenceId, @PathVariable Long photoId, @AuthenticationPrincipal User author) {
+  SpecialDateOccurrence occurrence = mutationService.setCover(occurrenceId, photoId, author);
+  return occurrenceDto(occurrence.specialDate, occurrence.occurredOn, occurrence);
  }
 
- @DeleteMapping("/photos/{photoId}") @ResponseStatus(HttpStatus.NO_CONTENT) @Transactional void deletePhoto(@PathVariable Long photoId, @AuthenticationPrincipal User author) {
-  SpecialDateOccurrencePhoto photo = photos.findDetailedByIdAndCoupleId(photoId, CoupleContext.current()).orElseThrow(() -> notFound("Foto")); SpecialDateOccurrence occurrence = photo.occurrence; boolean wasCover = photo.id.equals(occurrence.coverPhotoId); photos.delete(photo); photos.flush(); if (wasCover) occurrence.coverPhotoId = photos.findByOccurrenceIdOrderByPositionAscIdAsc(occurrence.id).stream().findFirst().map(value -> value.id).orElse(null); touch(occurrence, author);
+ @DeleteMapping("/photos/{photoId}") @ResponseStatus(HttpStatus.NO_CONTENT) void deletePhoto(@PathVariable Long photoId, @AuthenticationPrincipal User author) {
+  mutationService.deletePhoto(photoId, author);
  }
 
  @GetMapping(value = "/photos/{photoId}", produces = "image/webp") ResponseEntity<byte[]> photo(@PathVariable Long photoId, @RequestParam(defaultValue = "false") boolean thumbnail) {
@@ -125,8 +132,8 @@ public class WhenDatesApi {
 
   private WhenDateOccurrenceDto occurrenceDto(SpecialDate specialDate, LocalDate occurredOn, SpecialDateOccurrence occurrence) {
   if (occurrence == null) return new WhenDateOccurrenceDto(null, label(specialDate), occurredOn, entries(occurredOn, occurredOn, specialDate.id), List.of(), null, List.of(), null, null, null, null);
-  List<SpecialDateOccurrencePhotoDto> occurrencePhotos = photos.findByOccurrenceIdOrderByPositionAscIdAsc(occurrence.id).stream().map(WhenDatesApi::photo).toList(); SpecialDateOccurrencePhotoDto cover = occurrencePhotos.stream().filter(value -> value.id().equals(occurrence.coverPhotoId)).findFirst().orElse(null);
-  List<SpecialDateOccurrenceCommentDto> occurrenceComments = comments.findByOccurrenceIdOrderByAuthorUsername(occurrence.id).stream().map(WhenDatesApi::comment).toList();
+  List<SpecialDateOccurrencePhotoDto> occurrencePhotos = photos.findByOccurrenceIdAndCoupleIdOrderByPositionAscIdAsc(occurrence.id, CoupleContext.current()).stream().map(WhenDatesApi::photo).toList(); SpecialDateOccurrencePhotoDto cover = occurrencePhotos.stream().filter(value -> value.id().equals(occurrence.coverPhotoId)).findFirst().orElse(null);
+  List<SpecialDateOccurrenceCommentDto> occurrenceComments = comments.findByOccurrenceIdAndCoupleIdOrderByAuthorUsername(occurrence.id, CoupleContext.current()).stream().map(WhenDatesApi::comment).toList();
   return new WhenDateOccurrenceDto(occurrence.id, label(specialDate), occurredOn, entries(occurredOn, occurredOn, specialDate.id), occurrencePhotos, cover, occurrenceComments, occurrence.createdBy.username, occurrence.updatedBy.username, occurrence.createdAt, occurrence.updatedAt);
   }
 
@@ -138,10 +145,6 @@ public class WhenDatesApi {
   private static WhenDateEntryDto entry(WhenDateEntryDto value, Map<String, String> coverUrls) { Map<Long, String> entryCovers = new HashMap<>(); for (WhenDateLabelDto label : value.specialDates()) { String coverUrl = coverUrls.get(coverKey(label.id(), value.date())); if (coverUrl != null) entryCovers.put(label.id(), coverUrl); } return new WhenDateEntryDto(value.id(), value.section(), value.entityId(), value.experienceId(), value.date(), value.title(), value.detail(), value.imageUrl(), value.href(), value.specialDates(), value.sourcePhotos(), entryCovers); }
   private static String coverKey(Long specialDateId, LocalDate occurredOn) { return specialDateId + ":" + occurredOn; }
 
- private SpecialDateOccurrence ensureOccurrence(SpecialDate specialDate, LocalDate occurredOn, User author) {
-  validateOccurrence(specialDate, occurredOn); return occurrences.findBySpecialDateIdAndOccurredOnAndCoupleId(specialDate.id, occurredOn, CoupleContext.current()).orElseGet(() -> { SpecialDateOccurrence value = new SpecialDateOccurrence(); value.specialDate = specialDate; value.occurredOn = occurredOn; value.createdBy = value.updatedBy = author; value.createdAt = value.updatedAt = Instant.now(); return occurrences.save(value); });
- }
- private SpecialDateOccurrence findOccurrence(Long id) { return occurrences.findByIdAndCoupleId(id, CoupleContext.current()).orElseThrow(() -> notFound("Recuerdo")); }
   private SpecialDate specialDate(Long id) { return specialDates.findByIdAndCoupleId(id, CoupleContext.current()).orElseThrow(() -> notFound("Fecha especial")); }
   private String homeLabel(Home home) {
    UUID coupleId = CoupleContext.current();
@@ -149,17 +152,16 @@ public class WhenDatesApi {
    int index = home == Home.TOMAS ? 0 : 1;
    return coupleMembers.findByCoupleIdAndStatusOrderBySlot(coupleId, CoupleMemberStatus.ACTIVE).stream().skip(index).findFirst().map(value -> value.displayName).orElse("Integrante");
   }
- private void touch(SpecialDateOccurrence occurrence, User author) { occurrence.updatedBy = author; occurrence.updatedAt = Instant.now(); occurrences.save(occurrence); }
  private void validateOccurrence(SpecialDate specialDate, LocalDate occurredOn) { if (occurredOn.isAfter(RosarioClock.today())) throw badRequest("La fecha todavía no ocurrió"); if (!matches(specialDate, occurredOn)) throw badRequest("La fecha no coincide con esta fecha especial"); }
   private static boolean matches(SpecialDate specialDate, LocalDate date) { if (specialDate.date == null) return false; return switch (recurrence(specialDate)) { case ONCE -> specialDate.date.equals(date); case ANNUAL -> specialDate.date.getMonthValue() == date.getMonthValue() && specialDate.date.getDayOfMonth() == date.getDayOfMonth(); case MONTHLY -> specialDate.date.getDayOfMonth() == date.getDayOfMonth(); }; }
-   private String placeImage(PlaceVisit visit) { if (visit.coverPhotoId != null) return "/place-visit-photos/" + visit.coverPhotoId + "?thumbnail=true"; return placePhotos.findByPlaceId(visit.place.id).isPresent() ? "/places/" + visit.place.id + "/photo?thumbnail=true" : null; }
-   private String filmImage(Film film) { return filmPhotos.findByFilmId(film.id).isPresent() ? "/films/" + film.id + "/photo?thumbnail=true" : film.posterPath; }
-   private String recipeImage(Recipe recipe) { return recipePhotos.findByRecipeId(recipe.id).isPresent() ? "/how-cook/recipes/" + recipe.id + "/photo?thumbnail=true" : null; }
-   private String funImage(WhyFunVisit visit) { if (visit.coverPhotoId != null) return "/why-fun/activity-visit-photos/" + visit.coverPhotoId + "?thumbnail=true"; return funPhotos.findByVenueIdOrderByIdAsc(visit.venue.id).isEmpty() ? null : "/why-fun/activities/" + visit.venue.id + "/photo?thumbnail=true"; }
-  private List<WhenDateSourcePhotoDto> placeSourcePhotos(PlaceVisit visit) { List<WhenDateSourcePhotoDto> result = visitPhotos.findByVisitIdOrderByPositionAscIdAsc(visit.id).stream().map(photo -> source("FOOD:VISIT:" + photo.id, "/place-visit-photos/" + photo.id, "/place-visit-photos/" + photo.id + "?thumbnail=true", photo.width, photo.height)).toList(); return result.isEmpty() ? placePhotos.findByPlaceId(visit.place.id).map(photo -> List.of(source("FOOD:PLACE:" + photo.id, "/places/" + visit.place.id + "/photo?v=" + photo.id, "/places/" + visit.place.id + "/photo?thumbnail=true&v=" + photo.id, photo.width, photo.height))).orElse(List.of()) : result; }
-  private List<WhenDateSourcePhotoDto> filmSourcePhotos(Film film) { return filmPhotos.findByFilmId(film.id).map(photo -> List.of(source("FILM:" + photo.id, "/films/" + film.id + "/photo", "/films/" + film.id + "/photo?thumbnail=true", photo.width, photo.height))).orElse(film.posterPath == null ? List.of() : List.of(source("FILM:POSTER:" + film.id, film.posterPath, film.posterPath, 0, 0))); }
-  private List<WhenDateSourcePhotoDto> recipeSourcePhotos(Recipe recipe) { return recipePhotos.findByRecipeId(recipe.id).map(photo -> List.of(source("COOK:" + photo.id, "/how-cook/recipes/" + recipe.id + "/photo", "/how-cook/recipes/" + recipe.id + "/photo?thumbnail=true", photo.width, photo.height))).orElse(List.of()); }
-  private List<WhenDateSourcePhotoDto> funSourcePhotos(WhyFunVisit visit) { List<WhenDateSourcePhotoDto> result = funVisitPhotos.findByVisitIdOrderByPositionAscIdAsc(visit.id).stream().map(photo -> source("FUN:VISIT:" + photo.id, "/why-fun/activity-visit-photos/" + photo.id, "/why-fun/activity-visit-photos/" + photo.id + "?thumbnail=true", photo.width, photo.height)).toList(); return result.isEmpty() ? funPhotos.findByVenueIdOrderByIdAsc(visit.venue.id).stream().map(photo -> source("FUN:VENUE:" + photo.id, "/why-fun/photos/" + photo.id, "/why-fun/photos/" + photo.id + "?thumbnail=true", photo.width, photo.height)).toList() : result; }
+   private String placeImage(PlaceVisit visit) { if (visit.coverPhotoId != null) return "/place-visit-photos/" + visit.coverPhotoId + "?thumbnail=true"; return placePhotos.findByPlaceIdAndCoupleId(visit.place.id, CoupleContext.current()).isPresent() ? "/places/" + visit.place.id + "/photo?thumbnail=true" : null; }
+   private String filmImage(Film film) { return filmPhotos.findByFilmIdAndCoupleId(film.id, CoupleContext.current()).isPresent() ? "/films/" + film.id + "/photo?thumbnail=true" : film.posterPath; }
+   private String recipeImage(Recipe recipe) { return recipePhotos.findByRecipeIdAndCoupleId(recipe.id, CoupleContext.current()).isPresent() ? "/how-cook/recipes/" + recipe.id + "/photo?thumbnail=true" : null; }
+   private String funImage(WhyFunVisit visit) { if (visit.coverPhotoId != null) return "/why-fun/activity-visit-photos/" + visit.coverPhotoId + "?thumbnail=true"; return funPhotos.findByVenueIdAndCoupleIdOrderByIdAsc(visit.venue.id, CoupleContext.current()).isEmpty() ? null : "/why-fun/activities/" + visit.venue.id + "/photo?thumbnail=true"; }
+  private List<WhenDateSourcePhotoDto> placeSourcePhotos(PlaceVisit visit) { List<WhenDateSourcePhotoDto> result = visitPhotos.findByVisitIdAndCoupleIdOrderByPositionAscIdAsc(visit.id, CoupleContext.current()).stream().map(photo -> source("FOOD:VISIT:" + photo.id, "/place-visit-photos/" + photo.id, "/place-visit-photos/" + photo.id + "?thumbnail=true", photo.width, photo.height)).toList(); return result.isEmpty() ? placePhotos.findByPlaceIdAndCoupleId(visit.place.id, CoupleContext.current()).map(photo -> List.of(source("FOOD:PLACE:" + photo.id, "/places/" + visit.place.id + "/photo?v=" + photo.id, "/places/" + visit.place.id + "/photo?thumbnail=true&v=" + photo.id, photo.width, photo.height))).orElse(List.of()) : result; }
+  private List<WhenDateSourcePhotoDto> filmSourcePhotos(Film film) { return filmPhotos.findByFilmIdAndCoupleId(film.id, CoupleContext.current()).map(photo -> List.of(source("FILM:" + photo.id, "/films/" + film.id + "/photo", "/films/" + film.id + "/photo?thumbnail=true", photo.width, photo.height))).orElse(film.posterPath == null ? List.of() : List.of(source("FILM:POSTER:" + film.id, film.posterPath, film.posterPath, 0, 0))); }
+  private List<WhenDateSourcePhotoDto> recipeSourcePhotos(Recipe recipe) { return recipePhotos.findByRecipeIdAndCoupleId(recipe.id, CoupleContext.current()).map(photo -> List.of(source("COOK:" + photo.id, "/how-cook/recipes/" + recipe.id + "/photo", "/how-cook/recipes/" + recipe.id + "/photo?thumbnail=true", photo.width, photo.height))).orElse(List.of()); }
+  private List<WhenDateSourcePhotoDto> funSourcePhotos(WhyFunVisit visit) { List<WhenDateSourcePhotoDto> result = funVisitPhotos.findByVisitIdAndCoupleIdOrderByPositionAscIdAsc(visit.id, CoupleContext.current()).stream().map(photo -> source("FUN:VISIT:" + photo.id, "/why-fun/activity-visit-photos/" + photo.id, "/why-fun/activity-visit-photos/" + photo.id + "?thumbnail=true", photo.width, photo.height)).toList(); return result.isEmpty() ? funPhotos.findByVenueIdAndCoupleIdOrderByIdAsc(visit.venue.id, CoupleContext.current()).stream().map(photo -> source("FUN:VENUE:" + photo.id, "/why-fun/photos/" + photo.id, "/why-fun/photos/" + photo.id + "?thumbnail=true", photo.width, photo.height)).toList() : result; }
   private static WhenDateSourcePhotoDto source(String id, String url, String thumbnailUrl, int width, int height) { return new WhenDateSourcePhotoDto(id, url, thumbnailUrl, width, height); }
   private static WhenDateLabelDto label(SpecialDate value) { return new WhenDateLabelDto(value.id, value.label, recurrence(value)); }
   private static SpecialDateRecurrence recurrence(SpecialDate value) { return value.recurrence == null ? SpecialDateRecurrence.ONCE : value.recurrence; }

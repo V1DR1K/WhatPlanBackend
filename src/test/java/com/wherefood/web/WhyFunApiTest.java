@@ -11,6 +11,8 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.wherefood.domain.*;
+import com.wherefood.config.CoupleContext;
+import com.wherefood.couple.CoupleAuthorizationService;
 import com.wherefood.repo.Repositories.*;
 import java.lang.reflect.Method;
 import java.time.Instant;
@@ -18,9 +20,14 @@ import java.time.LocalDate;
 import java.time.LocalTime;
 import java.util.List;
 import java.util.Optional;
+import java.util.UUID;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.AfterEach;
 
 class WhyFunApiTest {
+ @AfterEach
+ void clearCoupleContext() { CoupleContext.clear(); }
+
  @Test
   void separatesUpcomingAndPastPlans() throws Exception {
    Method matcher = WhyFunApi.class.getDeclaredMethod("matchesTimeline", WhyFunVenue.class, String.class, LocalDate.class);
@@ -55,8 +62,8 @@ class WhyFunApiTest {
    WhyFunVenue other = activity(2L, "Museo historico", category, subcategory, tomas, "2026-07-22T00:00:00Z");
     WhyFunVenue pending = activity(3L, "Archivo de arte", category, subcategory, tomas, "2026-07-21T00:00:00Z");
    when(activities.findAllByCoupleId(null)).thenReturn(List.of(best, other, pending));
-   when(reviews.ratingsByActivityIdIn(any())).thenReturn(List.of(rating(1L, 5.0), rating(2L, 3.0)));
-   when(visits.countsByActivityIdIn(any())).thenReturn(List.of(count(1L, 2L), count(2L, 1L)));
+   when(reviews.ratingsByActivityIdInAndCoupleId(any(), isNull())).thenReturn(List.of(rating(1L, 5.0), rating(2L, 3.0)));
+   when(visits.countsByActivityIdInAndCoupleId(any(), isNull())).thenReturn(List.of(count(1L, 2L), count(2L, 1L)));
 
    WhyFunActivityApi api = new WhyFunActivityApi(null, activities, photos, visits, null, reviews, null);
    Slice<ActivityDto> first = api.listActivities(1L, 2L, "museo", true, "rating-desc", null, 1);
@@ -76,15 +83,22 @@ class WhyFunApiTest {
   @Test
   void flushesRemovedSchedulesBeforeAddingReplacements() {
     WhyFunVenues activities = mock(WhyFunVenues.class); WhyFunCategories categories = mock(WhyFunCategories.class);
-    User tomas = new User(); tomas.username = "tomas";
+    User tomas = new User(); tomas.id = 7L; tomas.username = "tomas"; tomas.role = Role.USER;
+    CoupleMembers members = mock(CoupleMembers.class); UUID coupleId = UUID.randomUUID(); CoupleContext.set(coupleId);
+    when(members.findActiveCoupleIdByUserId(tomas.id)).thenReturn(Optional.of(coupleId));
+    CoupleAuthorizationService authorization = new CoupleAuthorizationService(members);
     WhyFunCategory category = category(1L, "Arte"); WhyFunCategory subcategory = category(2L, "Museos"); subcategory.parent = category;
     WhyFunVenue activity = activity(4L, "Museo", category, subcategory, tomas, "2026-07-23T00:00:00Z");
     WhyFunVenueSchedule existing = new WhyFunVenueSchedule(); existing.venue = activity; existing.dayOfWeek = java.time.DayOfWeek.MONDAY; existing.opensAt = LocalTime.of(7, 0); existing.closesAt = LocalTime.of(12, 0); activity.schedules.add(existing);
-    when(activities.findDetailedByIdAndCoupleId(4L, null)).thenReturn(Optional.of(activity)); when(activities.save(activity)).thenReturn(activity);
+    when(activities.findDetailedByIdAndCoupleId(4L, coupleId)).thenReturn(Optional.of(activity)); when(activities.save(activity)).thenReturn(activity);
     when(categories.findDetailedById(1L)).thenReturn(Optional.of(category)); when(categories.findDetailedById(2L)).thenReturn(Optional.of(subcategory));
     doAnswer(invocation -> { assertTrue(activity.schedules.isEmpty()); return null; }).when(activities).flush();
 
-    new WhyFunActivityApi(categories, activities, null, null, null, null, null).updateActivity(4L, new ActivityRequest("Museo", "Centro", 1L, 2L, List.of(new ActivityScheduleRequest(java.time.DayOfWeek.MONDAY, LocalTime.of(7, 0), LocalTime.of(12, 0)))), tomas);
+    WhyFunActivityService activityService = new WhyFunActivityService(categories, activities, authorization);
+    WhyFunActivityApi api = new WhyFunActivityApi(categories, activities, null, null, null, null, null,
+            new WhyFunVisitReviewService(null, null, authorization), activityService,
+            new WhyFunVisitService(activities, null, authorization));
+    api.updateActivity(4L, new ActivityRequest("Museo", "Centro", 1L, 2L, List.of(new ActivityScheduleRequest(java.time.DayOfWeek.MONDAY, LocalTime.of(7, 0), LocalTime.of(12, 0)))), tomas);
 
     verify(activities).flush();
     assertEquals(1, activity.schedules.size());
@@ -92,14 +106,15 @@ class WhyFunApiTest {
 
   @Test
   void preservesLineBreaksInAnActivityReview() {
-    WhyFunVenues activities = mock(WhyFunVenues.class); WhyFunVisits visits = mock(WhyFunVisits.class); WhyFunVisitReviews reviews = mock(WhyFunVisitReviews.class);
-    User tomas = new User(); tomas.id = 7L; tomas.username = "tomas";
+    WhyFunVenues activities = mock(WhyFunVenues.class); WhyFunVisits visits = mock(WhyFunVisits.class); WhyFunVisitReviews reviews = mock(WhyFunVisitReviews.class); CoupleMembers members = mock(CoupleMembers.class); UUID coupleId = UUID.randomUUID(); CoupleContext.set(coupleId);
+    User tomas = new User(); tomas.id = 7L; tomas.username = "tomas"; tomas.role = Role.USER; when(members.findActiveCoupleIdByUserId(tomas.id)).thenReturn(Optional.of(coupleId));
     WhyFunVenue activity = new WhyFunVenue(); activity.id = 4L;
     WhyFunVisit visit = new WhyFunVisit(); visit.id = 10L; visit.venue = activity; visit.createdBy = visit.updatedBy = tomas;
-    when(visits.findDetailedByIdAndCoupleId(10L, null)).thenReturn(Optional.of(visit)); when(reviews.findByVisitIdAndAuthorId(10L, 7L)).thenReturn(Optional.empty());
+    when(visits.findDetailedByIdAndCoupleId(10L, coupleId)).thenReturn(Optional.of(visit)); when(reviews.findByVisitIdAndAuthorId(10L, 7L)).thenReturn(Optional.empty());
     when(reviews.save(any(WhyFunVisitReview.class))).thenAnswer(invocation -> invocation.getArgument(0));
 
-    ActivityReviewDto result = new WhyFunActivityApi(null, activities, null, visits, null, reviews, null).addReview(10L, new ActivityReviewRequest((short) 5, "Muy buena\n\nPara repetir\n"), tomas);
+    WhyFunVisitReviewService reviewService = new WhyFunVisitReviewService(reviews, visits, new CoupleAuthorizationService(members));
+    ActivityReviewDto result = new WhyFunActivityApi(null, activities, null, visits, null, reviews, null, reviewService).addReview(10L, new ActivityReviewRequest((short) 5, "Muy buena\n\nPara repetir\n"), tomas);
 
     assertEquals("Muy buena\n\nPara repetir\n", result.comment());
   }
