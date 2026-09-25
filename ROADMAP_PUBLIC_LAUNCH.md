@@ -14,6 +14,12 @@ Fecha de auditoría: 2026-09-24. Este documento es un plan de implementación pa
 
 ### Hallazgos que impiden abrir el registro público
 
+### Verificación externa adicional (solo lectura, 2026-09-25)
+
+- La rama local `CoupleExpantion` estaba 37 commits por delante de `origin/CoupleExpantion` antes de este registro; al añadir este commit quedará 38 por delante. El frontend permanece 12 commits por delante. No se hizo push.
+- GitHub REST API, consultada con acceso autenticado de solo lectura: `main` y `CoupleExpantion` responden `Branch not protected`; el entorno `production` devuelve `Not Found`; `actions/permissions` informa `allowed_actions=all` y `sha_pinning_required=false`. Por tanto, fijar SHAs en YAML no equivale a exigir que todo workflow futuro use SHAs, y el `environment: production` referenciado en el deploy no tiene todavía reglas de aprobación.
+- No se modificaron protecciones, entornos ni permisos remotos: son controles operativos del repositorio y su cambio puede afectar merges y despliegues. Requieren configurar y verificar revisores, ramas de despliegue, permisos mínimos y checks obligatorios; hasta entonces C28/C30 siguen abiertos y el despliegue automático de `main` no tiene una barrera remota efectiva comprobada.
+
 | Prioridad | Evidencia comprobada | Riesgo / decisión |
 | --- | --- | --- |
 | P0 · base auditada | En `d32e37b`, `compose.yml` usaba `${POSTGRES_USER}` como `DATABASE_USER`; la imagen oficial de PostgreSQL crea `POSTGRES_USER` como superusuario. `V45__add_couple_isolation.sql` usa RLS, incluso `FORCE`. PostgreSQL documenta que superusuarios y roles `BYPASSRLS` siempre eluden RLS. | **El aislamiento efectivo no estaba garantizado**. El código local cambió para usar rol runtime separado; la verificación del VPS (fila siguiente) confirma que falta migrar el despliegue. |
