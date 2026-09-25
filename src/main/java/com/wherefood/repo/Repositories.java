@@ -13,7 +13,8 @@ public final class Repositories {
  private Repositories() {}
 
  public interface Users extends JpaRepository<User, Long> {
-   Optional<User> findByUsernameIgnoreCase(String username);
+   @Query("select u from User u where lower(u.username) = lower(:username)")
+   Optional<User> findByUsernameIgnoreCase(@Param("username") String username);
    Optional<User> findByAuthUserId(java.util.UUID authUserId);
  }
 
