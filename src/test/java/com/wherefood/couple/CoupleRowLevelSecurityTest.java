@@ -117,6 +117,14 @@ class CoupleRowLevelSecurityTest {
                 assertEquals(1, delete.executeUpdate());
             }
             assertMediaUsage(admin, ORIGINAL_COUPLE, 0L, 0, 536870912L, 2000);
+            try (PreparedStatement restore = admin.prepareStatement("""
+                    insert into special_date_occurrence_photos
+                        (id, occurrence_id, image_base64, thumbnail_base64, width, height, position, created_by, couple_id)
+                    values (1301, 1101, 'a', 'a', 1, 1, 0, 1, ?)
+                    """)) {
+                restore.setObject(1, ORIGINAL_COUPLE);
+                restore.executeUpdate();
+            }
         }
     }
 
@@ -126,7 +134,7 @@ class CoupleRowLevelSecurityTest {
         try (Connection admin = adminConnection(); Statement statement = admin.createStatement()) {
             statement.executeUpdate("insert into couples(id, status, created_by, media_quota_bytes, media_quota_photos) values ('"
                     + coupleId + "', 'PENDING', 3, 2, 10)");
-            statement.executeUpdate("insert into special_dates(id, special_date, label, couple_id) values (9007, date '2026-09-25', 'Quota test', '"
+            statement.executeUpdate("insert into special_dates(id, special_date, label, recurrence, couple_id) values (9007, date '2026-09-25', 'Quota test', 'ONCE', '"
                     + coupleId + "')");
             statement.executeUpdate("insert into special_date_occurrences(id, special_date_id, occurred_on, created_by, updated_by, couple_id) values (9107, 9007, date '2026-09-25', 3, 3, '"
                     + coupleId + "')");
@@ -135,8 +143,8 @@ class CoupleRowLevelSecurityTest {
         CountDownLatch start = new CountDownLatch(1);
         ExecutorService executor = Executors.newFixedThreadPool(2);
         try {
-            Future<Boolean> first = executor.submit(() -> tryInsertQuotaPhoto(coupleId, 9107L, 3L, start));
-            Future<Boolean> second = executor.submit(() -> tryInsertQuotaPhoto(coupleId, 9107L, 3L, start));
+            Future<Boolean> first = executor.submit(() -> tryInsertQuotaPhoto(coupleId, 9107L, 3L, 1, start));
+            Future<Boolean> second = executor.submit(() -> tryInsertQuotaPhoto(coupleId, 9107L, 3L, 2, start));
             start.countDown();
             assertEquals(1, (first.get() ? 1 : 0) + (second.get() ? 1 : 0));
         } finally {
@@ -152,11 +160,11 @@ class CoupleRowLevelSecurityTest {
     void runtimeRoleCannotReadOrChangeAnotherCouplesRowsAndUnsetContextSeesNothing() throws Exception {
         try (Connection runtime = runtimeConnection()) {
             assertEquals(0, countPlaces(runtime, null), "queries without tenant context must fail closed");
-            assertEquals(1, countPlaces(runtime, ORIGINAL_COUPLE));
-            assertEquals(1, countPlaces(runtime, OTHER_COUPLE));
+            assertEquals(1, countCoupleFixturePlaces(runtime, ORIGINAL_COUPLE));
+            assertEquals(1, countCoupleFixturePlaces(runtime, OTHER_COUPLE));
 
             setCouple(runtime, ORIGINAL_COUPLE);
-            assertEquals(1, countPlaces(runtime, null));
+            assertEquals(1, countCoupleFixturePlaces(runtime, null));
             assertEquals(0, updatePlace(runtime, "Other couple place"), "cross-couple update must affect no rows");
             assertEquals(0, deletePlace(runtime, "Other couple place"), "cross-couple delete must affect no rows");
             assertThrows(SQLException.class, () -> insertPlace(runtime, OTHER_COUPLE),
@@ -187,7 +195,7 @@ class CoupleRowLevelSecurityTest {
             assertTrue(result.next());
             assertFalse(result.getBoolean(1));
             assertFalse(result.getBoolean(2));
-            assertEquals(1, countPlaces(runtime, ORIGINAL_COUPLE));
+            assertEquals(1, countCoupleFixturePlaces(runtime, ORIGINAL_COUPLE));
         }
     }
 
@@ -263,16 +271,22 @@ class CoupleRowLevelSecurityTest {
     @Test
     void concurrentAcceptancesForOneRemainingSlotCannotCreateAThirdMember() throws Exception {
         UUID coupleId = UUID.fromString("00000000-0000-0000-0000-000000000003");
+        long ownerId = createTestUser("accept-owner");
+        long firstCandidateId = createTestUser("accept-first");
+        long secondCandidateId = createTestUser("accept-second");
         try (Connection admin = adminConnection(); Statement statement = admin.createStatement()) {
-            statement.executeUpdate("insert into couples(id, status, created_by) values ('" + coupleId + "', 'PENDING', 3)");
-            statement.executeUpdate("insert into couple_members(couple_id, user_id, display_name, slot, status) values ('" + coupleId + "', 3, 'Charlie', 1, 'ACTIVE')");
+            statement.executeUpdate("insert into couples(id, status, created_by) values ('" + coupleId + "', 'PENDING', " + ownerId + ")");
+        }
+        try (Connection admin = adminConnection(); PreparedStatement member = admin.prepareStatement(
+                "insert into couple_members(couple_id, user_id, display_name, slot, status) values (?, ?, 'Owner', 1, 'ACTIVE')")) {
+            member.setObject(1, coupleId); member.setLong(2, ownerId); member.executeUpdate();
         }
 
         CountDownLatch start = new CountDownLatch(1);
         ExecutorService executor = Executors.newFixedThreadPool(2);
         try {
-            Future<Boolean> dana = executor.submit(() -> tryJoin(coupleId, 4L, start));
-            Future<Boolean> erin = executor.submit(() -> tryJoin(coupleId, 5L, start));
+            Future<Boolean> dana = executor.submit(() -> tryJoin(coupleId, firstCandidateId, start));
+            Future<Boolean> erin = executor.submit(() -> tryJoin(coupleId, secondCandidateId, start));
             start.countDown();
             assertEquals(1, (dana.get() ? 1 : 0) + (erin.get() ? 1 : 0));
         } finally {
@@ -290,18 +304,20 @@ class CoupleRowLevelSecurityTest {
     void concurrentPairCreationForOneUserCreatesOnlyOneActiveMembership() throws Exception {
         UUID firstCouple = UUID.randomUUID();
         UUID secondCouple = UUID.randomUUID();
+        long userId = createTestUser("paircreator");
         CountDownLatch start = new CountDownLatch(1);
         ExecutorService executor = Executors.newFixedThreadPool(2);
         try {
-            Future<Boolean> first = executor.submit(() -> tryCreatePair(8L, firstCouple, start));
-            Future<Boolean> second = executor.submit(() -> tryCreatePair(8L, secondCouple, start));
+            Future<Boolean> first = executor.submit(() -> tryCreatePair(userId, firstCouple, start));
+            Future<Boolean> second = executor.submit(() -> tryCreatePair(userId, secondCouple, start));
             start.countDown();
             assertEquals(1, (first.get() ? 1 : 0) + (second.get() ? 1 : 0));
         } finally {
             executor.shutdownNow();
         }
         try (Connection admin = adminConnection(); PreparedStatement statement = admin.prepareStatement(
-                "select count(*) from couple_members where user_id = 8 and status = 'ACTIVE'")) {
+                "select count(*) from couple_members where user_id = ? and status = 'ACTIVE'")) {
+            statement.setLong(1, userId);
             try (ResultSet result = statement.executeQuery()) { result.next(); assertEquals(1, result.getInt(1)); }
         }
     }
@@ -328,28 +344,33 @@ class CoupleRowLevelSecurityTest {
     void concurrentInvitationAcceptanceAndRevocationHaveExactlyOneWinner() throws Exception {
         UUID coupleId = UUID.fromString("00000000-0000-0000-0000-000000000006");
         long invitationId;
+        long ownerId = createTestUser("inviteowner");
+        long joinerId = createTestUser("invitejoiner");
         try (Connection admin = adminConnection(); PreparedStatement insert = admin.prepareStatement(
-                "insert into couples(id, status, created_by) values (?, 'PENDING', 3)")) {
+                "insert into couples(id, status, created_by) values (?, 'PENDING', ?)")) {
             insert.setObject(1, coupleId);
+            insert.setLong(2, ownerId);
             insert.executeUpdate();
         }
         try (Connection admin = adminConnection(); PreparedStatement insert = admin.prepareStatement(
-                "insert into couple_members(couple_id, user_id, display_name, slot, status) values (?, 3, 'Charlie', 1, 'ACTIVE')")) {
+                "insert into couple_members(couple_id, user_id, display_name, slot, status) values (?, ?, 'Owner', 1, 'ACTIVE')")) {
             insert.setObject(1, coupleId);
+            insert.setLong(2, ownerId);
             insert.executeUpdate();
         }
         try (Connection admin = adminConnection(); PreparedStatement insert = admin.prepareStatement(
-                "insert into couple_invitations(couple_id, created_by, token_hash, expires_at) values (?, 3, ?, now() + interval '7 days') returning id")) {
+                "insert into couple_invitations(couple_id, created_by, token_hash, expires_at) values (?, ?, ?, now() + interval '7 days') returning id")) {
             insert.setObject(1, coupleId);
-            insert.setString(2, "c".repeat(64));
+            insert.setLong(2, ownerId);
+            insert.setString(3, "c".repeat(64));
             try (ResultSet result = insert.executeQuery()) { result.next(); invitationId = result.getLong(1); }
         }
 
         CountDownLatch start = new CountDownLatch(1);
         ExecutorService executor = Executors.newFixedThreadPool(2);
         try {
-            Future<Boolean> accepted = executor.submit(() -> tryFinalizeInvitation(coupleId, invitationId, true, start));
-            Future<Boolean> revoked = executor.submit(() -> tryFinalizeInvitation(coupleId, invitationId, false, start));
+            Future<Boolean> accepted = executor.submit(() -> tryFinalizeInvitation(coupleId, invitationId, joinerId, true, start));
+            Future<Boolean> revoked = executor.submit(() -> tryFinalizeInvitation(coupleId, invitationId, joinerId, false, start));
             start.countDown();
             assertEquals(1, (accepted.get() ? 1 : 0) + (revoked.get() ? 1 : 0));
         } finally {
@@ -371,16 +392,31 @@ class CoupleRowLevelSecurityTest {
     @Test
     void leftMembershipKeepsHistoryButReleasesTheSlotAndUserForANewPair() throws Exception {
         UUID coupleId = UUID.fromString("00000000-0000-0000-0000-000000000005");
+        long formerMemberId = createTestUser("former-member");
+        long newMemberId = createTestUser("new-member");
         try (Connection admin = adminConnection(); Statement statement = admin.createStatement()) {
-            statement.executeUpdate("insert into couples(id, status, created_by) values ('" + coupleId + "', 'ACTIVE', 6)");
-            statement.executeUpdate("insert into couple_members(couple_id, user_id, display_name, slot, status) values ('" + coupleId + "', 6, 'Frank', 1, 'ACTIVE')");
-            statement.executeUpdate("update couple_members set status = 'LEFT', left_at = now() where couple_id = '" + coupleId + "' and user_id = 6");
-            statement.executeUpdate("insert into couple_members(couple_id, user_id, display_name, slot, status) values ('" + coupleId + "', 7, 'Grace', 1, 'ACTIVE')");
-            statement.executeUpdate("insert into couple_members(couple_id, user_id, display_name, slot, status) values ('" + OTHER_COUPLE + "', 6, 'Frank', 1, 'ACTIVE')");
+            statement.executeUpdate("insert into couples(id, status, created_by) values ('" + coupleId + "', 'ACTIVE', " + formerMemberId + ")");
+        }
+        try (Connection admin = adminConnection(); PreparedStatement member = admin.prepareStatement(
+                "insert into couple_members(couple_id, user_id, display_name, slot, status) values (?, ?, 'Former', 1, 'ACTIVE')")) {
+            member.setObject(1, coupleId); member.setLong(2, formerMemberId); member.executeUpdate();
+        }
+        try (Connection admin = adminConnection(); PreparedStatement leave = admin.prepareStatement(
+                "update couple_members set status = 'LEFT', left_at = now() where couple_id = ? and user_id = ?")) {
+            leave.setObject(1, coupleId); leave.setLong(2, formerMemberId); leave.executeUpdate();
+        }
+        try (Connection admin = adminConnection(); PreparedStatement member = admin.prepareStatement(
+                "insert into couple_members(couple_id, user_id, display_name, slot, status) values (?, ?, 'New', 1, 'ACTIVE')")) {
+            member.setObject(1, coupleId); member.setLong(2, newMemberId); member.executeUpdate();
+        }
+        try (Connection admin = adminConnection(); PreparedStatement member = admin.prepareStatement(
+                "insert into couple_members(couple_id, user_id, display_name, slot, status) values (?, ?, 'Former', 1, 'ACTIVE')")) {
+            member.setObject(1, OTHER_COUPLE); member.setLong(2, formerMemberId); member.executeUpdate();
         }
         try (Connection admin = adminConnection(); PreparedStatement statement = admin.prepareStatement(
-                "select count(*) from couple_members where couple_id = ? and user_id = 6 and status = 'LEFT'")) {
+                "select count(*) from couple_members where couple_id = ? and user_id = ? and status = 'LEFT'")) {
             statement.setObject(1, coupleId);
+            statement.setLong(2, formerMemberId);
             try (ResultSet result = statement.executeQuery()) { result.next(); assertEquals(1, result.getInt(1)); }
         }
     }
@@ -438,7 +474,7 @@ class CoupleRowLevelSecurityTest {
         }
     }
 
-    private static boolean tryFinalizeInvitation(UUID coupleId, long invitationId, boolean accept, CountDownLatch start) throws Exception {
+    private static boolean tryFinalizeInvitation(UUID coupleId, long invitationId, long joinerId, boolean accept, CountDownLatch start) throws Exception {
         start.await();
         try (Connection connection = adminConnection()) {
             connection.setAutoCommit(false);
@@ -454,11 +490,11 @@ class CoupleRowLevelSecurityTest {
                 }
                 if (!"PENDING".equals(status)) { connection.commit(); return false; }
                 if (accept) {
-                    try (PreparedStatement update = connection.prepareStatement("update couple_invitations set status = 'ACCEPTED', accepted_by = 4, accepted_at = now() where id = ?")) {
-                        update.setLong(1, invitationId); update.executeUpdate();
+                    try (PreparedStatement update = connection.prepareStatement("update couple_invitations set status = 'ACCEPTED', accepted_by = ?, accepted_at = now() where id = ?")) {
+                        update.setLong(1, joinerId); update.setLong(2, invitationId); update.executeUpdate();
                     }
-                    try (PreparedStatement member = connection.prepareStatement("insert into couple_members(couple_id, user_id, display_name, slot, status) values (?, 4, 'Dana', 2, 'ACTIVE')")) {
-                        member.setObject(1, coupleId); member.executeUpdate();
+                    try (PreparedStatement member = connection.prepareStatement("insert into couple_members(couple_id, user_id, display_name, slot, status) values (?, ?, 'Joiner', 2, 'ACTIVE')")) {
+                        member.setObject(1, coupleId); member.setLong(2, joinerId); member.executeUpdate();
                     }
                     try (PreparedStatement couple = connection.prepareStatement("update couples set status = 'ACTIVE' where id = ?")) {
                         couple.setObject(1, coupleId); couple.executeUpdate();
@@ -484,14 +520,15 @@ class CoupleRowLevelSecurityTest {
         }
     }
 
-    private static boolean tryInsertQuotaPhoto(UUID coupleId, long occurrenceId, long userId,
+    private static boolean tryInsertQuotaPhoto(UUID coupleId, long occurrenceId, long userId, int position,
             CountDownLatch start) throws Exception {
         start.await();
         try (Connection connection = adminConnection(); PreparedStatement insert = connection.prepareStatement(
-                "insert into special_date_occurrence_photos(occurrence_id, image_base64, thumbnail_base64, width, height, position, created_by, couple_id) values (?, 'a', 'a', 1, 1, 0, ?, ?)")) {
+                "insert into special_date_occurrence_photos(occurrence_id, image_base64, thumbnail_base64, width, height, position, created_by, couple_id) values (?, 'a', 'a', 1, 1, ?, ?, ?)")) {
             insert.setLong(1, occurrenceId);
-            insert.setLong(2, userId);
-            insert.setObject(3, coupleId);
+            insert.setInt(2, position);
+            insert.setLong(3, userId);
+            insert.setObject(4, coupleId);
             insert.executeUpdate();
             return true;
         } catch (SQLException quotaExceeded) {
@@ -543,6 +580,22 @@ class CoupleRowLevelSecurityTest {
             } catch (SQLException exception) {
                 connection.rollback(); throw exception;
             }
+        }
+    }
+
+    private static long createTestUser(String prefix) throws Exception {
+        try (Connection connection = adminConnection(); PreparedStatement insert = connection.prepareStatement(
+                "insert into users(username, role) values (?, 'USER') returning id")) {
+            insert.setString(1, prefix + "-" + UUID.randomUUID());
+            try (ResultSet result = insert.executeQuery()) { result.next(); return result.getLong(1); }
+        }
+    }
+
+    private static int countCoupleFixturePlaces(Connection connection, UUID coupleId) throws Exception {
+        if (coupleId != null) setCouple(connection, coupleId);
+        try (PreparedStatement statement = connection.prepareStatement(
+                "select count(*) from places where name in ('Legacy place', 'Other couple place')")) {
+            try (ResultSet result = statement.executeQuery()) { result.next(); return result.getInt(1); }
         }
     }
 
