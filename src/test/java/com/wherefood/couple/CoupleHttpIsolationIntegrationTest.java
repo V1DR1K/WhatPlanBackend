@@ -125,6 +125,13 @@ class CoupleHttpIsolationIntegrationTest {
         assertThat(activitiesForB.getStatusCode().value()).isEqualTo(200);
         assertThat(activitiesForB.getBody()).contains("Museo pareja B").doesNotContain("Museo pareja A");
 
+        ResponseEntity<String> filmsForA = get("/api/films?search=private&size=30", USER_A1_AUTH_ID, null);
+        ResponseEntity<String> filmsForB = get("/api/films?search=private&size=30", USER_B_AUTH_ID, null);
+        assertThat(filmsForA.getStatusCode().value()).isEqualTo(200);
+        assertThat(filmsForA.getBody()).contains("Private film A").doesNotContain("Private film B");
+        assertThat(filmsForB.getStatusCode().value()).isEqualTo(200);
+        assertThat(filmsForB.getBody()).contains("Private film B").doesNotContain("Private film A");
+
         ResponseEntity<String> spoofedCoupleHeader = get("/api/places", USER_A1_AUTH_ID, COUPLE_B_ID.toString());
         assertThat(spoofedCoupleHeader.getStatusCode().value()).isEqualTo(200);
         assertThat(spoofedCoupleHeader.getBody()).contains("Private place A").doesNotContain("Private place B");
@@ -253,6 +260,8 @@ class CoupleHttpIsolationIntegrationTest {
             long cookingB = insertCooking(connection, recipeB, userB, COUPLE_B_ID, "AVRIL");
             insertCookingReview(connection, cookingA, userA1, COUPLE_A_ID, 5);
             insertCookingReview(connection, cookingB, userB, COUPLE_B_ID, 1);
+            insertFilm(connection, "Private film A", userA1, COUPLE_A_ID);
+            insertFilm(connection, "Private film B", userB, COUPLE_B_ID);
             long activityCategoryId = insertActivityCategory(connection, "HTTP Activity Test", "http-activity-test", null);
             long activitySubcategoryId = insertActivityCategory(connection, "HTTP Activity Subtest", "http-activity-subtest", activityCategoryId);
             long activityA = insertActivity(connection, "Museo pareja A", activityCategoryId, activitySubcategoryId, userA1, COUPLE_A_ID);
@@ -262,6 +271,20 @@ class CoupleHttpIsolationIntegrationTest {
             insertActivityReview(connection, activityVisitA, userA1, COUPLE_A_ID, 5);
             insertActivityReview(connection, activityVisitB, userB, COUPLE_B_ID, 1);
             return new Fixture(placeA, placeB, categoryId, activityCategoryId, activitySubcategoryId);
+        }
+    }
+
+    private static void insertFilm(Connection connection, String title, long authorId, UUID coupleId)
+            throws Exception {
+        try (PreparedStatement statement = connection.prepareStatement("""
+                insert into films(title, created_by, updated_by, couple_id)
+                values (?, ?, ?, ?)
+                """)) {
+            statement.setString(1, title);
+            statement.setLong(2, authorId);
+            statement.setLong(3, authorId);
+            statement.setObject(4, coupleId);
+            statement.executeUpdate();
         }
     }
 

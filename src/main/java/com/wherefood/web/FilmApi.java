@@ -106,22 +106,39 @@ public class FilmApi {
 
   @GetMapping("/films") Slice<FilmDto> list(@RequestParam(required = false) String genre, @RequestParam(required = false) Long platformId, @RequestParam(required = false) Boolean watched, @RequestParam(required = false) String search, @RequestParam(required = false) String sort, @RequestParam(required = false) Long cursor, @RequestParam(defaultValue = "5") int size) {
    int limit = Math.max(1, Math.min(size, 30));
+   long offset = cursor == null ? 0 : Math.max(0, cursor);
+   if (offset > 1_000_000) throw badRequest("Cursor inválido");
    String normalizedSearch = search == null || search.isBlank() ? null : search.trim().toLowerCase(Locale.ROOT);
+   String normalizedSort = sort == null ? "date-desc" : sort.trim().toLowerCase(Locale.ROOT);
+   if (!Set.of("date", "date-desc", "date-asc", "rating", "rating-desc", "rating-asc").contains(normalizedSort)) {
+    throw badRequest("Orden inválido");
+   }
+   if (genre == null || genre.isBlank()) {
+    List<Long> ids = films.findPageIdsByCoupleId(CoupleContext.current(), platformId, watched,
+            normalizedSearch, normalizedSort, limit + 1, offset);
+    Long next = ids.size() > limit ? offset + limit : null;
+    List<Long> pageIds = ids.stream().limit(limit).toList();
+    if (pageIds.isEmpty()) return new Slice<>(List.of(), next);
+    Map<Long, Film> byId = films.findAllByIdInAndCoupleId(pageIds, CoupleContext.current()).stream()
+            .collect(java.util.stream.Collectors.toMap(film -> film.id, film -> film));
+    List<Film> page = pageIds.stream().map(byId::get).filter(Objects::nonNull).toList();
+    Map<Long, FilmPhotoMetadata> photosByFilm = filmPhotos(page);
+    return new Slice<>(page.stream().map(film -> film(film, false, photosByFilm.get(film.id))).toList(), next);
+   }
    List<Film> candidates = films.findAllByCoupleId(CoupleContext.current()).stream()
      .filter(film -> platformId == null || (film.platform != null && film.platform.id.equals(platformId)))
      .filter(film -> watched == null || watched == (film.watchedCount > 0))
-     .filter(film -> genre == null || genre.isBlank() || matchesGenre(film, genre))
+     .filter(film -> matchesGenre(film, genre))
      .filter(film -> normalizedSearch == null || contains(film.title, normalizedSearch) || contains(film.originalTitle, normalizedSearch)).toList();
    Map<Long, Double> ratings = filmRatings(candidates.stream().map(film -> film.id).toList());
     Comparator<Film> dateDescending = Comparator.comparing((Film film) -> film.updatedAt, Comparator.nullsLast(Comparator.reverseOrder())).thenComparing(film -> film.createdAt, Comparator.nullsLast(Comparator.reverseOrder())).thenComparing(film -> film.id, Comparator.reverseOrder());
-   Comparator<Film> ordering = switch (sort == null ? "date-desc" : sort.trim().toLowerCase(Locale.ROOT)) {
+   Comparator<Film> ordering = switch (normalizedSort) {
     case "date", "date-desc" -> dateDescending;
      case "date-asc" -> Comparator.comparing((Film film) -> film.updatedAt, Comparator.nullsLast(Comparator.naturalOrder())).thenComparing(film -> film.createdAt, Comparator.nullsLast(Comparator.naturalOrder())).thenComparing(film -> film.id, Comparator.reverseOrder());
     case "rating", "rating-desc" -> Comparator.comparing((Film film) -> ratings.get(film.id), Comparator.nullsLast(Comparator.reverseOrder())).thenComparing(dateDescending);
     case "rating-asc" -> Comparator.comparing((Film film) -> ratings.get(film.id), Comparator.nullsLast(Comparator.naturalOrder())).thenComparing(dateDescending);
     default -> throw badRequest("Orden inválido");
    };
-   long offset = cursor == null ? 0 : Math.max(0, cursor);
    List<Film> result = candidates.stream().sorted(ordering).skip(offset).limit(limit + 1L).toList();
    Long next = result.size() > limit ? offset + limit : null;
    List<Film> page = result.stream().limit(limit).toList();

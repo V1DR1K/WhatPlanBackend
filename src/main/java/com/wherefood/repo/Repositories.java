@@ -301,6 +301,43 @@ public final class Repositories {
 
   public interface Films extends CoupleScopedRepository<Film> {
   @EntityGraph(attributePaths = {"platform", "createdBy", "genres"}) List<Film> findAllByCoupleId(java.util.UUID coupleId);
+  @Query(value = """
+          with film_ratings as (
+              select review.film_id, avg(review.rating) as rating
+              from film_reviews review
+              where review.couple_id = :coupleId
+              group by review.film_id
+          )
+          select film.id
+          from films film
+          left join film_ratings rating on rating.film_id = film.id
+          where film.couple_id = :coupleId
+            and (cast(:platformId as bigint) is null or film.platform_id = cast(:platformId as bigint))
+            and (cast(:watched as boolean) is null
+                 or (film.watched_count > 0) = cast(:watched as boolean))
+            and (cast(:search as text) is null
+                 or position(cast(:search as text) in lower(film.title)) > 0
+                 or position(cast(:search as text) in lower(film.original_title)) > 0)
+          order by
+            case when cast(:sort as text) in ('date', 'date-desc') then film.updated_at end desc,
+            case when cast(:sort as text) in ('date', 'date-desc') then film.created_at end desc,
+            case when cast(:sort as text) = 'date-asc' then film.updated_at end asc,
+            case when cast(:sort as text) = 'date-asc' then film.created_at end asc,
+            case when cast(:sort as text) in ('rating', 'rating-desc') then rating.rating end desc nulls last,
+            case when cast(:sort as text) = 'rating-asc' then rating.rating end asc nulls last,
+            case when cast(:sort as text) in ('rating', 'rating-desc', 'rating-asc') then film.updated_at end desc,
+            case when cast(:sort as text) in ('rating', 'rating-desc', 'rating-asc') then film.created_at end desc,
+            film.id desc
+          limit :limit offset :offset
+          """, nativeQuery = true)
+  List<Long> findPageIdsByCoupleId(@Param("coupleId") java.util.UUID coupleId,
+          @Param("platformId") Long platformId, @Param("watched") Boolean watched,
+          @Param("search") String search, @Param("sort") String sort,
+          @Param("limit") int limit, @Param("offset") long offset);
+  @EntityGraph(attributePaths = {"platform", "createdBy", "genres"})
+  @Query("select film from Film film where film.id in :ids and film.coupleId = :coupleId")
+  List<Film> findAllByIdInAndCoupleId(@Param("ids") Collection<Long> ids,
+          @Param("coupleId") java.util.UUID coupleId);
   @EntityGraph(attributePaths = {"platform", "createdBy", "genres"}) @Query("select f from Film f where f.id=:id and f.coupleId=:coupleId") Optional<Film> findDetailedByIdAndCoupleId(@Param("id") Long id, @Param("coupleId") java.util.UUID coupleId);
   Optional<Film> findByTmdbIdAndCoupleId(Long tmdbId, java.util.UUID coupleId);
   boolean existsByPlatformId(Long platformId);
