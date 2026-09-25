@@ -1,0 +1,14 @@
+CREATE ROLE whatplan_migrator LOGIN PASSWORD 'test-only-migration-password-0123456789'
+  NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT NOBYPASSRLS;
+CREATE ROLE whatplan_runtime LOGIN PASSWORD 'test-only-runtime-password-0123456789'
+  NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT NOBYPASSRLS;
+
+GRANT CONNECT ON DATABASE whatplan_test TO whatplan_migrator, whatplan_runtime;
+ALTER SCHEMA public OWNER TO whatplan_migrator;
+GRANT USAGE, CREATE ON SCHEMA public TO whatplan_migrator;
+GRANT USAGE ON SCHEMA public TO whatplan_runtime;
+
+ALTER DEFAULT PRIVILEGES FOR ROLE whatplan_migrator IN SCHEMA public
+  GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO whatplan_runtime;
+ALTER DEFAULT PRIVILEGES FOR ROLE whatplan_migrator IN SCHEMA public
+  GRANT USAGE, SELECT ON SEQUENCES TO whatplan_runtime;
