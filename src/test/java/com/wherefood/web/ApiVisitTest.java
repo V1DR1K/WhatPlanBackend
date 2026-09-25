@@ -48,6 +48,26 @@ class ApiVisitTest {
   void clearCoupleContext() { CoupleContext.clear(); }
 
   @Test
+  void pagesVisitSummariesWithinTheirPlaceAndActiveCouple() {
+    UUID coupleId = UUID.randomUUID(); CoupleContext.set(coupleId);
+    Places places = mock(Places.class); PlaceVisits visits = mock(PlaceVisits.class);
+    User author = user(7L, "tomas"); Place place = place(4L, author, Instant.parse("2026-07-23T00:00:00Z"));
+    when(places.findDetailedByIdAndCoupleId(4L, coupleId)).thenReturn(Optional.of(place));
+    when(visits.findPageIdsByPlaceIdAndCoupleId(4L, coupleId, 3, 0)).thenReturn(List.of(12L, 11L, 10L));
+    PlaceVisit newest = visit(12L, place, author, LocalDate.of(2026, 7, 23));
+    PlaceVisit next = visit(11L, place, author, LocalDate.of(2026, 7, 22));
+    when(visits.findAllByIdInAndPlaceIdAndCoupleId(List.of(12L, 11L), 4L, coupleId)).thenReturn(List.of(next, newest));
+
+    Slice<PlaceVisitSummaryDto> result = new Api(null, null, null, places, visits, null, null, null,
+            null, null, null, null, null).listVisits(4L, null, 2);
+
+    assertEquals(List.of(12L, 11L), result.content().stream().map(PlaceVisitSummaryDto::id).toList());
+    assertEquals(2L, result.nextCursor());
+    verify(visits).findPageIdsByPlaceIdAndCoupleId(4L, coupleId, 3, 0);
+    verify(visits).findAllByIdInAndPlaceIdAndCoupleId(List.of(12L, 11L), 4L, coupleId);
+  }
+
+  @Test
   void returnsThePlaceToPendingAfterDeletingItsLastVisit() {
     Places places = mock(Places.class);
     PlaceVisits visits = mock(PlaceVisits.class);

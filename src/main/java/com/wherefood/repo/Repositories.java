@@ -199,7 +199,11 @@ public final class Repositories {
      public interface PlaceVisits extends CoupleScopedRepository<PlaceVisit> {
         @EntityGraph(attributePaths = {"place", "createdBy", "updatedBy"}) List<PlaceVisit> findAllByCoupleId(java.util.UUID coupleId);
    @EntityGraph(attributePaths = {"place", "createdBy", "updatedBy"}) List<PlaceVisit> findByPlaceIdOrderByVisitedOnDescIdDesc(Long placeId);
-        @EntityGraph(attributePaths = {"place", "createdBy", "updatedBy"}) List<PlaceVisit> findByPlaceIdAndCoupleIdOrderByVisitedOnDescIdDesc(Long placeId, java.util.UUID coupleId);
+        @Query(value = "select v.id from place_visits v where v.place_id = :placeId and v.couple_id = :coupleId order by v.visited_on desc, v.id desc limit :limit offset :offset", nativeQuery = true)
+        List<Long> findPageIdsByPlaceIdAndCoupleId(@Param("placeId") Long placeId, @Param("coupleId") java.util.UUID coupleId, @Param("limit") int limit, @Param("offset") long offset);
+        @EntityGraph(attributePaths = {"place", "createdBy", "updatedBy"})
+        @Query("select v from PlaceVisit v where v.id in :ids and v.place.id = :placeId and v.coupleId = :coupleId")
+        List<PlaceVisit> findAllByIdInAndPlaceIdAndCoupleId(@Param("ids") Collection<Long> ids, @Param("placeId") Long placeId, @Param("coupleId") java.util.UUID coupleId);
         @EntityGraph(attributePaths = {"place", "createdBy", "updatedBy"}) List<PlaceVisit> findByPlaceIdInAndCoupleIdOrderByPlaceIdAscVisitedOnDescIdDesc(Collection<Long> placeIds, java.util.UUID coupleId);
         @EntityGraph(attributePaths = {"place", "createdBy", "updatedBy"}) List<PlaceVisit> findByPlaceIdInOrderByPlaceIdAscVisitedOnDescIdDesc(Collection<Long> placeIds);
         @EntityGraph(attributePaths = {"place", "createdBy", "updatedBy"}) List<PlaceVisit> findByCoupleIdAndVisitedOnLessThanEqualOrderByVisitedOnDescIdDesc(java.util.UUID coupleId, LocalDate visitedOn);

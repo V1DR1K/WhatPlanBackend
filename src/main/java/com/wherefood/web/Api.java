@@ -157,9 +157,18 @@ public class Api {
    return place(mediaService.uploadPlacePhoto(id, file, user));
  }
 
-  @GetMapping("/places/{id}/visits") List<PlaceVisitSummaryDto> listVisits(@PathVariable Long id) {
+  @GetMapping("/places/{id}/visits") Slice<PlaceVisitSummaryDto> listVisits(@PathVariable Long id,
+          @RequestParam(required = false) @jakarta.validation.constraints.PositiveOrZero @Max(1_000_000) Long cursor,
+          @RequestParam(defaultValue = "10") @Min(1) @Max(100) int size) {
     active(places.findDetailedByIdAndCoupleId(id, CoupleContext.current()).orElseThrow(() -> notFound("Lugar")));
-     return visits.findByPlaceIdAndCoupleIdOrderByVisitedOnDescIdDesc(id, CoupleContext.current()).stream().map(Api::visitSummary).toList();
+    int limit = Math.min(size, 30);
+    long offset = cursor == null ? 0 : cursor;
+    UUID coupleId = CoupleContext.current();
+    List<Long> ids = visits.findPageIdsByPlaceIdAndCoupleId(id, coupleId, limit + 1, offset);
+    Long next = ids.size() > limit ? offset + limit : null;
+    List<Long> pageIds = ids.stream().limit(limit).toList();
+    Map<Long, PlaceVisit> byId = pageIds.isEmpty() ? Map.of() : visits.findAllByIdInAndPlaceIdAndCoupleId(pageIds, id, coupleId).stream().collect(java.util.stream.Collectors.toMap(value -> value.id, value -> value));
+    return new Slice<>(pageIds.stream().map(byId::get).filter(Objects::nonNull).map(Api::visitSummary).toList(), next);
   }
    @GetMapping("/places/{id}/item-dates") List<LocalDate> itemDates(@PathVariable Long id) {
      active(places.findDetailedByIdAndCoupleId(id, CoupleContext.current()).orElseThrow(() -> notFound("Lugar")));
