@@ -3,6 +3,12 @@ spring:
     url: ${DATABASE_URL}
     username: ${DATABASE_USER}
     password: ${DATABASE_PASSWORD}
+  data:
+    redis:
+      host: ${REDIS_HOST:redis}
+      port: ${REDIS_PORT:6379}
+      password: ${REDIS_PASSWORD}
+      timeout: 2s
   flyway:
     user: ${DATABASE_MIGRATION_USER:${DATABASE_USER}}
     password: ${DATABASE_MIGRATION_PASSWORD:${DATABASE_PASSWORD}}
@@ -26,6 +32,9 @@ app.auth-previous-public-key-pems: ${AUTH_PREVIOUS_PUBLIC_KEY_PEMS:}
 app.auth-max-access-token-ttl-seconds: ${AUTH_MAX_ACCESS_TOKEN_TTL_SECONDS:900}
 app.auth-cookie-allowed-origins: ${AUTH_COOKIE_ALLOWED_ORIGINS}
 app.auth-refresh-cookie-ttl-seconds: ${AUTH_REFRESH_COOKIE_TTL_SECONDS:604800}
+app.auth-service-connect-timeout-seconds: ${AUTH_SERVICE_CONNECT_TIMEOUT_SECONDS:3}
+app.auth-service-read-timeout-seconds: ${AUTH_SERVICE_READ_TIMEOUT_SECONDS:5}
+app.rate-limit.trusted-proxy-addresses: ${TRUSTED_PROXY_ADDRESSES:}
 app.tmdb.read-access-token: ${TMDB_READ_ACCESS_TOKEN}
 app.tmdb.connect-timeout-seconds: ${TMDB_CONNECT_TIMEOUT_SECONDS:5}
 app.tmdb.request-timeout-seconds: ${TMDB_REQUEST_TIMEOUT_SECONDS:8}

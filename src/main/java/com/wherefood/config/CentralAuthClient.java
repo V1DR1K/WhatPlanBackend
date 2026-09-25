@@ -8,13 +8,24 @@ import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.client.RestClientResponseException;
+import org.springframework.web.client.RestClientException;
+import org.springframework.http.client.SimpleClientHttpRequestFactory;
+import java.time.Duration;
 
 @Component
 public class CentralAuthClient {
     private final RestClient client;
 
-    public CentralAuthClient(RestClient.Builder builder, @Value("${app.auth-service-url}") String serviceUrl) {
-        this.client = builder.baseUrl(serviceUrl).build();
+    public CentralAuthClient(RestClient.Builder builder, @Value("${app.auth-service-url}") String serviceUrl,
+            @Value("${app.auth-service-connect-timeout-seconds:3}") int connectTimeoutSeconds,
+            @Value("${app.auth-service-read-timeout-seconds:5}") int readTimeoutSeconds) {
+        if (connectTimeoutSeconds < 1 || connectTimeoutSeconds > 30 || readTimeoutSeconds < 1 || readTimeoutSeconds > 60) {
+            throw new IllegalArgumentException("Central authentication timeouts are outside allowed bounds");
+        }
+        SimpleClientHttpRequestFactory requestFactory = new SimpleClientHttpRequestFactory();
+        requestFactory.setConnectTimeout(Duration.ofSeconds(connectTimeoutSeconds));
+        requestFactory.setReadTimeout(Duration.ofSeconds(readTimeoutSeconds));
+        this.client = builder.baseUrl(serviceUrl).requestFactory(requestFactory).build();
     }
 
     public TokenResponse login(String username, String password) {
@@ -42,6 +53,8 @@ public class CentralAuthClient {
             return client.get().uri(path).header(HttpHeaders.AUTHORIZATION, authorization).retrieve().body(responseType);
         } catch (RestClientResponseException ex) {
             throw upstreamFailure(ex);
+        } catch (RestClientException ex) {
+            throw unavailable();
         }
     }
 
@@ -52,6 +65,8 @@ public class CentralAuthClient {
             return call.retrieve().body(responseType);
         } catch (RestClientResponseException ex) {
             throw upstreamFailure(ex);
+        } catch (RestClientException ex) {
+            throw unavailable();
         }
     }
 
@@ -59,6 +74,11 @@ public class CentralAuthClient {
         HttpStatus status = HttpStatus.resolve(ex.getStatusCode().value());
         return new org.springframework.web.server.ResponseStatusException(status == null ? HttpStatus.BAD_GATEWAY : status,
                 "Central authentication service request failed");
+    }
+
+    private static org.springframework.web.server.ResponseStatusException unavailable() {
+        return new org.springframework.web.server.ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE,
+                "Central authentication service is temporarily unavailable");
     }
 
     public record LoginRequest(String username, String password) {}

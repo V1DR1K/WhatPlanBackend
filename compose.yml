@@ -35,15 +35,34 @@ services:
       AUTH_MAX_ACCESS_TOKEN_TTL_SECONDS: ${AUTH_MAX_ACCESS_TOKEN_TTL_SECONDS:-900}
       AUTH_COOKIE_ALLOWED_ORIGINS: ${AUTH_COOKIE_ALLOWED_ORIGINS}
       AUTH_REFRESH_COOKIE_TTL_SECONDS: ${AUTH_REFRESH_COOKIE_TTL_SECONDS:-604800}
+      AUTH_SERVICE_CONNECT_TIMEOUT_SECONDS: ${AUTH_SERVICE_CONNECT_TIMEOUT_SECONDS:-3}
+      AUTH_SERVICE_READ_TIMEOUT_SECONDS: ${AUTH_SERVICE_READ_TIMEOUT_SECONDS:-5}
+      TRUSTED_PROXY_ADDRESSES: ${TRUSTED_PROXY_ADDRESSES:-}
       AUTH_DEFAULT_ROLE: ${AUTH_DEFAULT_ROLE:-USER}
       TMDB_READ_ACCESS_TOKEN: ${TMDB_READ_ACCESS_TOKEN:-}
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      REDIS_PASSWORD: ${REDIS_PASSWORD:?REDIS_PASSWORD is required}
     depends_on:
       postgres:
+        condition: service_healthy
+      redis:
         condition: service_healthy
     healthcheck:
       test: ["CMD-SHELL", "wget -qO- http://localhost:8080/api/actuator/health || exit 1"]
       interval: 15s
       timeout: 5s
+      retries: 10
+  redis:
+    image: redis:7.4-alpine
+    restart: unless-stopped
+    command: ["redis-server", "--save", "", "--appendonly", "no", "--requirepass", "${REDIS_PASSWORD:?REDIS_PASSWORD is required}", "--maxmemory", "128mb", "--maxmemory-policy", "noeviction"]
+    environment:
+      REDIS_PASSWORD: ${REDIS_PASSWORD:?REDIS_PASSWORD is required}
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli -a \"$$REDIS_PASSWORD\" ping | grep -q PONG"]
+      interval: 10s
+      timeout: 3s
       retries: 10
   postgres:
     image: postgres:16-alpine

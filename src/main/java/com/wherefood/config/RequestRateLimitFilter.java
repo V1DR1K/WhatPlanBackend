@@ -1,54 +1,151 @@
 package com.wherefood.config;
 
+import com.wherefood.domain.User;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import java.io.IOException;
+import java.net.InetAddress;
+import java.net.UnknownHostException;
 import java.time.Duration;
-import java.time.Instant;
-import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
+import java.util.Arrays;
+import java.util.Set;
+import java.util.stream.Collectors;
 import org.springframework.http.MediaType;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.filter.OncePerRequestFilter;
 
-/** Small per-instance guard for credential and invitation endpoints. Production should complement it at the edge. */
+/** Shared, fail-closed request limits. Forwarded addresses are only used behind explicitly trusted proxies. */
 public class RequestRateLimitFilter extends OncePerRequestFilter {
-    private static final Duration WINDOW = Duration.ofMinutes(5);
-    private static final int MAX_ATTEMPTS = 30;
-    private final Map<String, Bucket> buckets = new ConcurrentHashMap<>();
+    private final SharedRateLimiter limiter;
+    private final Set<String> trustedProxies;
+
+    public RequestRateLimitFilter(SharedRateLimiter limiter, String trustedProxyAddresses) {
+        this.limiter = limiter;
+        this.trustedProxies = Arrays.stream(trustedProxyAddresses == null ? new String[0] : trustedProxyAddresses.split(","))
+                .map(String::trim).filter(value -> !value.isEmpty()).map(RequestRateLimitFilter::canonicalIp)
+                .collect(Collectors.toUnmodifiableSet());
+    }
 
     @Override
     protected boolean shouldNotFilter(HttpServletRequest request) {
-        String path = request.getRequestURI();
-        return !path.equals("/api/auth/login")
-                && !path.equals("/api/auth/refresh")
-                && !path.equals("/api/couple/invitations")
-                && !path.equals("/api/couple/invitations/accept");
+        return policy(request) == null;
     }
 
     @Override
     protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain chain)
             throws ServletException, IOException {
-        String key = request.getRemoteAddr() + ":" + request.getRequestURI();
-        Bucket bucket = buckets.compute(key, (ignored, current) -> current == null || current.expired() ? new Bucket() : current.next());
-        if (bucket.count > MAX_ATTEMPTS) {
-            response.setStatus(HttpServletResponse.SC_TOO_MANY_REQUESTS);
-            response.setContentType(MediaType.APPLICATION_JSON_VALUE);
-            response.setHeader("Retry-After", String.valueOf(WINDOW.toSeconds()));
-            response.getWriter().write("{\"type\":\"about:blank\",\"title\":\"RATE_LIMITED\",\"status\":429,\"detail\":\"Demasiadas solicitudes. Intentá nuevamente más tarde.\"}");
+        Policy policy = policy(request);
+        if (policy == null) {
+            chain.doFilter(request, response);
             return;
         }
-        chain.doFilter(request, response);
+
+        String ip = clientIp(request);
+        String identity = authenticatedIdentity();
+        if (policy.name.equals("login") || identity == null) identity = ip;
+        String refreshCookie = null;
+        if (policy.name.equals("refresh")) {
+            refreshCookie = request.getCookies() == null ? null : Arrays.stream(request.getCookies())
+                    .filter(value -> "whatplan_refresh".equals(value.getName())).map(value -> value.getValue()).findFirst().orElse(null);
+        }
+
+        final boolean allowed;
+        try {
+            if (policy.name.equals("refresh")) {
+                boolean ipAllowed = limiter.allow("refresh-ip", ip, 60, Duration.ofMinutes(5));
+                boolean cookieAllowed = refreshCookie == null || refreshCookie.isBlank()
+                        || limiter.allow("refresh-cookie", refreshCookie, 10, Duration.ofMinutes(5));
+                allowed = ipAllowed && cookieAllowed;
+            } else {
+                allowed = limiter.allow(policy.name, identity, policy.limit, policy.window);
+            }
+        } catch (RuntimeException unavailable) {
+            writeError(response, HttpServletResponse.SC_SERVICE_UNAVAILABLE, "RATE_LIMIT_UNAVAILABLE", Duration.ofSeconds(5));
+            return;
+        }
+        if (allowed) chain.doFilter(request, response);
+        else writeError(response, HttpServletResponse.SC_TOO_MANY_REQUESTS, "RATE_LIMITED", policy.window);
     }
 
-    private static final class Bucket {
-        private final Instant startedAt;
-        private final int count;
-
-        private Bucket() { this(Instant.now(), 1); }
-        private Bucket(Instant startedAt, int count) { this.startedAt = startedAt; this.count = count; }
-        private boolean expired() { return startedAt.plus(WINDOW).isBefore(Instant.now()); }
-        private Bucket next() { return new Bucket(startedAt, count + 1); }
+    private String clientIp(HttpServletRequest request) {
+        String remote = canonicalIp(request.getRemoteAddr());
+        if (remote == null || !trustedProxies.contains(remote)) return remote == null ? "unknown" : remote;
+        String forwarded = request.getHeader("X-Forwarded-For");
+        if (forwarded == null || forwarded.isBlank() || forwarded.length() > 2048) return remote;
+        String[] hops = forwarded.split(",");
+        String candidate = remote;
+        for (int index = hops.length - 1; index >= 0; index--) {
+            String hop = canonicalIp(hops[index].trim());
+            if (hop == null) return remote;
+            if (trustedProxies.contains(candidate)) candidate = hop;
+            else break;
+        }
+        return candidate;
     }
+
+    private static String canonicalIp(String value) {
+        if (value == null || value.isBlank() || value.length() > 45) return null;
+        boolean ipv4 = value.matches("[0-9]{1,3}(\\.[0-9]{1,3}){3}");
+        boolean ipv6 = value.indexOf(':') >= 0 && value.matches("[0-9a-fA-F:.]+");
+        if (!ipv4 && !ipv6) return null;
+        if (ipv4) {
+            for (String octet : value.split("\\.")) {
+                try {
+                    if (Integer.parseInt(octet) > 255) return null;
+                } catch (NumberFormatException exception) {
+                    return null;
+                }
+            }
+        }
+        try {
+            return InetAddress.getByName(value).getHostAddress();
+        } catch (UnknownHostException exception) {
+            return null;
+        }
+    }
+
+    private static String authenticatedIdentity() {
+        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+        if (authentication != null && authentication.getPrincipal() instanceof User user && user.id != null) {
+            return "user:" + user.id;
+        }
+        return null;
+    }
+
+    private static Policy policy(HttpServletRequest request) {
+        String path = request.getRequestURI();
+        String method = request.getMethod();
+        if ("POST".equals(method) && "/api/auth/login".equals(path)) return new Policy("login", 10, Duration.ofMinutes(15));
+        if ("POST".equals(method) && "/api/auth/refresh".equals(path)) return new Policy("refresh", 60, Duration.ofMinutes(5));
+        if ("POST".equals(method) && "/api/couple/invitations".equals(path)) return new Policy("invite-create", 20, Duration.ofMinutes(5));
+        if ("POST".equals(method) && "/api/couple/invitations/accept".equals(path)) return new Policy("invite-accept", 15, Duration.ofMinutes(5));
+        if ("GET".equals(method) && path.startsWith("/api/tmdb/")) return new Policy("tmdb-read", 30, Duration.ofMinutes(1));
+        if ("POST".equals(method) && path.startsWith("/api/") && isMultipart(request)) return new Policy("upload", 20, Duration.ofHours(1));
+        if ("GET".equals(method) && path.startsWith("/api/") && (path.contains("/photo") || path.contains("/photos"))) {
+            return new Policy("media-read", 1200, Duration.ofMinutes(5));
+        }
+        return null;
+    }
+
+    private static boolean isMultipart(HttpServletRequest request) {
+        String contentType = request.getContentType();
+        return contentType != null && contentType.toLowerCase(java.util.Locale.ROOT).startsWith(MediaType.MULTIPART_FORM_DATA_VALUE);
+    }
+
+    private static void writeError(HttpServletResponse response, int status, String title, Duration retryAfter) throws IOException {
+        response.setStatus(status);
+        response.setContentType(MediaType.APPLICATION_PROBLEM_JSON_VALUE);
+        response.setHeader("Cache-Control", "no-store");
+        response.setHeader("Retry-After", Long.toString(Math.max(1, retryAfter.toSeconds())));
+        String detail = status == HttpServletResponse.SC_TOO_MANY_REQUESTS
+                ? "Demasiadas solicitudes. Intentá nuevamente más tarde."
+                : "El control de solicitudes no está disponible temporalmente.";
+        response.getWriter().write("{\"type\":\"about:blank\",\"title\":\"" + title + "\",\"status\":" + status
+                + ",\"detail\":\"" + detail + "\"}");
+    }
+
+    private record Policy(String name, int limit, Duration window) {}
 }

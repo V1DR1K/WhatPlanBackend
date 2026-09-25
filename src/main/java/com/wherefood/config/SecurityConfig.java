@@ -9,13 +9,23 @@ import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
 import org.springframework.http.MediaType;
 import jakarta.servlet.http.HttpServletResponse;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.boot.web.servlet.FilterRegistrationBean;
 
 @Configuration
 @EnableMethodSecurity
 public class SecurityConfig {
     @Bean
-    RequestRateLimitFilter rateLimitFilter() {
-        return new RequestRateLimitFilter();
+    RequestRateLimitFilter rateLimitFilter(SharedRateLimiter limiter,
+            @Value("${app.rate-limit.trusted-proxy-addresses:}") String trustedProxyAddresses) {
+        return new RequestRateLimitFilter(limiter, trustedProxyAddresses);
+    }
+
+    @Bean
+    FilterRegistrationBean<RequestRateLimitFilter> disableServletRateLimitRegistration(RequestRateLimitFilter filter) {
+        FilterRegistrationBean<RequestRateLimitFilter> registration = new FilterRegistrationBean<>(filter);
+        registration.setEnabled(false);
+        return registration;
     }
 
     @Bean
@@ -31,7 +41,7 @@ public class SecurityConfig {
                         .requestMatchers("/api/auth/login", "/api/auth/refresh", "/api/auth/logout", "/api/actuator/health", "/api/actuator/health/**").permitAll()
                         .anyRequest().authenticated())
                 .addFilterBefore(filter, UsernamePasswordAuthenticationFilter.class)
-                .addFilterBefore(rateLimit, CentralJwtFilter.class)
+                .addFilterAfter(rateLimit, CentralJwtFilter.class)
                 .build();
     }
 
