@@ -88,7 +88,7 @@ public class WhenDateMutationService {
                     "Esta fecha admite hasta " + MAX_PHOTOS + " fotos");
         }
         int position = current.isEmpty() ? 0 : current.getLast().position + 1;
-        SpecialDateOccurrencePhoto photo = photos.saveAndFlush(storage.store(occurrence, actor, position, file));
+        SpecialDateOccurrencePhoto photo = photos.save(storage.store(occurrence, actor, position, file));
         if (occurrence.coverPhotoId == null) occurrence.coverPhotoId = photo.id;
         touch(occurrence, actor);
         return occurrence;

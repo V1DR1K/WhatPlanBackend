@@ -87,7 +87,7 @@ public class PlaceMediaService {
             throw new ResponseStatusException(HttpStatus.CONFLICT,
                     "Cada visita admite hasta " + MAX_VISIT_PHOTOS + " fotos");
         }
-        PlaceVisitPhoto photo = visitPhotos.saveAndFlush(storage.store(visit, actor,
+        PlaceVisitPhoto photo = visitPhotos.save(storage.store(visit, actor,
                 current.isEmpty() ? 0 : current.getLast().position + 1, file));
         if (visit.coverPhotoId == null) {
             visit.coverPhotoId = photo.id;

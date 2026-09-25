@@ -3,7 +3,6 @@ package com.wherefood.web;
 import com.wherefood.config.ProblemDetailsSupport;
 import java.util.Map;
 import java.util.stream.Collectors;
-import org.hibernate.exception.ConstraintViolationException;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.dao.OptimisticLockingFailureException;
 import org.springframework.http.HttpStatus;
@@ -37,7 +36,7 @@ public class ApiExceptionHandler {
 
     private static boolean isCoupleMediaQuotaViolation(Throwable exception) {
         for (Throwable cause = exception; cause != null; cause = cause.getCause()) {
-            if (cause instanceof ConstraintViolationException violation
+            if (cause instanceof org.hibernate.exception.ConstraintViolationException violation
                     && "chk_couples_media_quota".equals(violation.getConstraintName())) {
                 return true;
             }

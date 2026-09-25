@@ -17,6 +17,7 @@ import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 import org.springframework.web.server.ResponseStatusException;
 import com.wherefood.couple.CoupleAuthorizationService;
+import com.wherefood.config.CoupleContext;
 
 record FunCategoryRequest(Long parentId, @NotBlank @Size(max = 80) String name, @NotBlank @Size(max = 20) String icon, boolean active) {}
 record FunCategoryDto(Long id, Long parentId, String name, String slug, String icon, boolean active) {}

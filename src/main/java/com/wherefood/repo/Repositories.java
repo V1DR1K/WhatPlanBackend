@@ -206,6 +206,7 @@ public final class Repositories {
    Optional<FilmPhoto> findByFilmIdAndCoupleId(Long filmId, java.util.UUID coupleId);
    Optional<FilmPhoto> findByIdAndFilmIdAndCoupleId(Long id, Long filmId, java.util.UUID coupleId);
    @Query("select p.id as id, p.film.id as filmId, p.width as width, p.height as height, p.createdAt as createdAt from FilmPhoto p where p.film.id in :filmIds") List<FilmPhotoMetadata> metadataByFilmIdIn(@Param("filmIds") Collection<Long> filmIds);
+   @Query("select p.id as id, p.film.id as filmId, p.width as width, p.height as height, p.createdAt as createdAt from FilmPhoto p where p.film.id in :filmIds and p.coupleId = :coupleId") List<FilmPhotoMetadata> metadataByFilmIdInAndCoupleId(@Param("filmIds") Collection<Long> filmIds, @Param("coupleId") java.util.UUID coupleId);
   }
 
   public interface PhotoMetadata {

@@ -15,6 +15,7 @@ import org.springframework.web.multipart.MultipartFile;
 import org.springframework.web.server.ResponseStatusException;
 import com.wherefood.validation.SafeHttpUrl;
 import com.wherefood.couple.CoupleAuthorizationService;
+import com.wherefood.config.CoupleContext;
 import org.springframework.validation.annotation.Validated;
 
 record PlatformRequest(@NotBlank @Size(max = 80) String name, @NotBlank @Size(max = 20) String icon, boolean active) {}
