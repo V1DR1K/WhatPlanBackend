@@ -58,10 +58,11 @@ class CoupleRowLevelSecurityTest {
             statement.executeUpdate("insert into places(name, category_id, created_by, updated_by) values ('Legacy place', 1, 1, 1)");
         }
 
-        Flyway.configure()
+        Flyway fullFlyway = Flyway.configure()
                 .dataSource(POSTGRES.getJdbcUrl(), POSTGRES.getUsername(), POSTGRES.getPassword())
-                .load()
-                .migrate();
+                .load();
+        fullFlyway.migrate();
+        fullFlyway.validate();
 
         try (Connection admin = adminConnection(); Statement statement = admin.createStatement()) {
             statement.executeUpdate("insert into couples(id, status, created_by) values ('" + OTHER_COUPLE + "', 'ACTIVE', 1)");
