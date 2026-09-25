@@ -9,6 +9,7 @@ import static org.mockito.Mockito.when;
 
 import jakarta.servlet.FilterChain;
 import java.time.Duration;
+import java.util.UUID;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.mock.web.MockHttpServletRequest;
@@ -21,6 +22,7 @@ class RequestRateLimitFilterTest {
     @AfterEach
     void clearSecurityContext() {
         SecurityContextHolder.clearContext();
+        CoupleContext.clear();
     }
 
     @Test
@@ -58,6 +60,33 @@ class RequestRateLimitFilterTest {
         org.junit.jupiter.api.Assertions.assertTrue(response.getContentAsString().contains("\"errorCode\":\"RATE_LIMITED\""));
     }
 
+    @Test
+    void appliesBothIndividualAndSharedCoupleUploadLimits() throws Exception {
+        UUID coupleId = UUID.fromString("00000000-0000-0000-0000-000000000008");
+        CoupleContext.set(coupleId);
+        when(limiter.allow(eq("upload-user"), eq("203.0.113.8"), eq(20), any(Duration.class))).thenReturn(true);
+        when(limiter.allow(eq("upload-couple"), eq(coupleId.toString()), eq(40), any(Duration.class))).thenReturn(true);
+
+        MockHttpServletResponse response = invokeUpload("203.0.113.8");
+
+        assertEquals(200, response.getStatus());
+        verify(limiter).allow(eq("upload-user"), eq("203.0.113.8"), eq(20), any(Duration.class));
+        verify(limiter).allow(eq("upload-couple"), eq(coupleId.toString()), eq(40), any(Duration.class));
+    }
+
+    @Test
+    void rejectsUploadWhenSharedCoupleLimitIsExceeded() throws Exception {
+        UUID coupleId = UUID.fromString("00000000-0000-0000-0000-000000000009");
+        CoupleContext.set(coupleId);
+        when(limiter.allow(eq("upload-user"), eq("203.0.113.8"), eq(20), any(Duration.class))).thenReturn(true);
+        when(limiter.allow(eq("upload-couple"), eq(coupleId.toString()), eq(40), any(Duration.class))).thenReturn(false);
+
+        MockHttpServletResponse response = invokeUpload("203.0.113.8");
+
+        assertEquals(429, response.getStatus());
+        org.junit.jupiter.api.Assertions.assertTrue(response.getContentAsString().contains("\"errorCode\":\"RATE_LIMITED\""));
+    }
+
     private MockHttpServletResponse invoke(String remote, String forwarded, String trusted) throws Exception {
         RequestRateLimitFilter filter = new RequestRateLimitFilter(limiter, trusted);
         MockHttpServletRequest request = new MockHttpServletRequest("POST", "/api/auth/login");
@@ -65,6 +94,17 @@ class RequestRateLimitFilterTest {
         if (forwarded != null) request.addHeader("X-Forwarded-For", forwarded);
         MockHttpServletResponse response = new MockHttpServletResponse();
         FilterChain chain = (req, res) -> {};
+        filter.doFilter(request, response, chain);
+        return response;
+    }
+
+    private MockHttpServletResponse invokeUpload(String remote) throws Exception {
+        RequestRateLimitFilter filter = new RequestRateLimitFilter(limiter, "");
+        MockHttpServletRequest request = new MockHttpServletRequest("POST", "/api/places/1/photo");
+        request.setRemoteAddr(remote);
+        request.setContentType("multipart/form-data; boundary=test");
+        MockHttpServletResponse response = new MockHttpServletResponse();
+        FilterChain chain = (req, res) -> res.setStatus(200);
         filter.doFilter(request, response, chain);
         return response;
     }

@@ -11,6 +11,7 @@ import java.net.UnknownHostException;
 import java.time.Duration;
 import java.util.Arrays;
 import java.util.Set;
+import java.util.UUID;
 import java.util.stream.Collectors;
 import org.springframework.http.MediaType;
 import org.springframework.http.HttpStatus;
@@ -60,6 +61,12 @@ public class RequestRateLimitFilter extends OncePerRequestFilter {
                 boolean cookieAllowed = refreshCookie == null || refreshCookie.isBlank()
                         || limiter.allow("refresh-cookie", refreshCookie, 10, Duration.ofMinutes(5));
                 allowed = ipAllowed && cookieAllowed;
+            } else if (policy.name.equals("upload")) {
+                boolean userAllowed = limiter.allow("upload-user", identity, policy.limit, policy.window);
+                UUID coupleId = CoupleContext.current();
+                boolean coupleAllowed = userAllowed && (coupleId == null
+                        || limiter.allow("upload-couple", coupleId.toString(), 40, policy.window));
+                allowed = userAllowed && coupleAllowed;
             } else {
                 allowed = limiter.allow(policy.name, identity, policy.limit, policy.window);
             }
