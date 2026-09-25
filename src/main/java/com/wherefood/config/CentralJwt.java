@@ -13,6 +13,7 @@ import java.util.Base64;
 import java.util.Date;
 import java.util.List;
 import java.util.UUID;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
@@ -26,6 +27,7 @@ public class CentralJwt {
     private final String audience;
     private final Duration maxAccessTokenTtl;
 
+    @Autowired
     public CentralJwt(@Value("${app.auth-public-key-pem}") String pem,
                       @Value("${app.auth-issuer}") String issuer,
                       @Value("${app.auth-audience}") String audience,
