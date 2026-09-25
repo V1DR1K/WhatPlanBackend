@@ -150,6 +150,12 @@ class CoupleHttpIsolationIntegrationTest {
         assertThat(filmsForA.getBody()).contains("Private film A").doesNotContain("Private film B");
         assertThat(filmsForB.getStatusCode().value()).isEqualTo(200);
         assertThat(filmsForB.getBody()).contains("Private film B").doesNotContain("Private film A");
+        ResponseEntity<String> genreFilmsForA = get("/api/films?genre=Drama&search=private&size=1", USER_A1_AUTH_ID, null);
+        ResponseEntity<String> genreFilmsForB = get("/api/films?genre=Drama&search=private&size=1", USER_B_AUTH_ID, null);
+        assertThat(genreFilmsForA.getStatusCode().value()).isEqualTo(200);
+        assertThat(genreFilmsForA.getBody()).contains("Private film A").doesNotContain("Private film B");
+        assertThat(genreFilmsForB.getStatusCode().value()).isEqualTo(200);
+        assertThat(genreFilmsForB.getBody()).contains("Private film B").doesNotContain("Private film A");
 
         ResponseEntity<String> spoofedCoupleHeader = get("/api/places", USER_A1_AUTH_ID, COUPLE_B_ID.toString());
         assertThat(spoofedCoupleHeader.getStatusCode().value()).isEqualTo(200);
@@ -285,8 +291,11 @@ class CoupleHttpIsolationIntegrationTest {
             long cookingB = insertCooking(connection, recipeB, userB, COUPLE_B_ID, "AVRIL");
             insertCookingReview(connection, cookingA, userA1, COUPLE_A_ID, 5);
             insertCookingReview(connection, cookingB, userB, COUPLE_B_ID, 1);
-            insertFilm(connection, "Private film A", userA1, COUPLE_A_ID);
-            insertFilm(connection, "Private film B", userB, COUPLE_B_ID);
+            long filmA = insertFilm(connection, "Private film A", userA1, COUPLE_A_ID);
+            long filmB = insertFilm(connection, "Private film B", userB, COUPLE_B_ID);
+            long dramaGenre = scalarLong(connection, "select id from film_genre_options where lower(name) = 'drama' limit 1");
+            insertFilmGenre(connection, filmA, dramaGenre, COUPLE_A_ID);
+            insertFilmGenre(connection, filmB, dramaGenre, COUPLE_B_ID);
             long activityCategoryId = insertActivityCategory(connection, "HTTP Activity Test", "http-activity-test", null);
             long activitySubcategoryId = insertActivityCategory(connection, "HTTP Activity Subtest", "http-activity-subtest", activityCategoryId);
             long activityA = insertActivity(connection, "Museo pareja A", activityCategoryId, activitySubcategoryId, userA1, COUPLE_A_ID);
@@ -299,16 +308,33 @@ class CoupleHttpIsolationIntegrationTest {
         }
     }
 
-    private static void insertFilm(Connection connection, String title, long authorId, UUID coupleId)
+    private static long insertFilm(Connection connection, String title, long authorId, UUID coupleId)
             throws Exception {
         try (PreparedStatement statement = connection.prepareStatement("""
                 insert into films(title, created_by, updated_by, couple_id)
-                values (?, ?, ?, ?)
+                values (?, ?, ?, ?) returning id
                 """)) {
             statement.setString(1, title);
             statement.setLong(2, authorId);
             statement.setLong(3, authorId);
             statement.setObject(4, coupleId);
+            try (ResultSet result = statement.executeQuery()) { result.next(); return result.getLong(1); }
+        }
+    }
+
+    private static long scalarLong(Connection connection, String sql) throws Exception {
+        try (PreparedStatement statement = connection.prepareStatement(sql);
+             ResultSet result = statement.executeQuery()) {
+            if (!result.next()) throw new IllegalStateException("Expected a seeded lookup row");
+            return result.getLong(1);
+        }
+    }
+
+    private static void insertFilmGenre(Connection connection, long filmId, long genreId, UUID coupleId)
+            throws Exception {
+        try (PreparedStatement statement = connection.prepareStatement(
+                "insert into film_genres(film_id, genre_id, couple_id) values (?, ?, ?)")) {
+            statement.setLong(1, filmId); statement.setLong(2, genreId); statement.setObject(3, coupleId);
             statement.executeUpdate();
         }
     }

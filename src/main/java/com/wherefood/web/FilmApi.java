@@ -113,35 +113,15 @@ public class FilmApi {
    if (!Set.of("date", "date-desc", "date-asc", "rating", "rating-desc", "rating-asc").contains(normalizedSort)) {
     throw badRequest("Orden inválido");
    }
-   if (genre == null || genre.isBlank()) {
-    List<Long> ids = films.findPageIdsByCoupleId(CoupleContext.current(), platformId, watched,
-            normalizedSearch, normalizedSort, limit + 1, offset);
-    Long next = ids.size() > limit ? offset + limit : null;
-    List<Long> pageIds = ids.stream().limit(limit).toList();
-    if (pageIds.isEmpty()) return new Slice<>(List.of(), next);
-    Map<Long, Film> byId = films.findAllByIdInAndCoupleId(pageIds, CoupleContext.current()).stream()
-            .collect(java.util.stream.Collectors.toMap(film -> film.id, film -> film));
-    List<Film> page = pageIds.stream().map(byId::get).filter(Objects::nonNull).toList();
-    Map<Long, FilmPhotoMetadata> photosByFilm = filmPhotos(page);
-    return new Slice<>(page.stream().map(film -> film(film, false, photosByFilm.get(film.id))).toList(), next);
-   }
-   List<Film> candidates = films.findAllByCoupleId(CoupleContext.current()).stream()
-     .filter(film -> platformId == null || (film.platform != null && film.platform.id.equals(platformId)))
-     .filter(film -> watched == null || watched == (film.watchedCount > 0))
-     .filter(film -> matchesGenre(film, genre))
-     .filter(film -> normalizedSearch == null || contains(film.title, normalizedSearch) || contains(film.originalTitle, normalizedSearch)).toList();
-   Map<Long, Double> ratings = filmRatings(candidates.stream().map(film -> film.id).toList());
-    Comparator<Film> dateDescending = Comparator.comparing((Film film) -> film.updatedAt, Comparator.nullsLast(Comparator.reverseOrder())).thenComparing(film -> film.createdAt, Comparator.nullsLast(Comparator.reverseOrder())).thenComparing(film -> film.id, Comparator.reverseOrder());
-   Comparator<Film> ordering = switch (normalizedSort) {
-    case "date", "date-desc" -> dateDescending;
-     case "date-asc" -> Comparator.comparing((Film film) -> film.updatedAt, Comparator.nullsLast(Comparator.naturalOrder())).thenComparing(film -> film.createdAt, Comparator.nullsLast(Comparator.naturalOrder())).thenComparing(film -> film.id, Comparator.reverseOrder());
-    case "rating", "rating-desc" -> Comparator.comparing((Film film) -> ratings.get(film.id), Comparator.nullsLast(Comparator.reverseOrder())).thenComparing(dateDescending);
-    case "rating-asc" -> Comparator.comparing((Film film) -> ratings.get(film.id), Comparator.nullsLast(Comparator.naturalOrder())).thenComparing(dateDescending);
-    default -> throw badRequest("Orden inválido");
-   };
-   List<Film> result = candidates.stream().sorted(ordering).skip(offset).limit(limit + 1L).toList();
-   Long next = result.size() > limit ? offset + limit : null;
-   List<Film> page = result.stream().limit(limit).toList();
+   String normalizedGenre = genre == null || genre.isBlank() ? null : genre.trim().toLowerCase(Locale.ROOT);
+   List<Long> ids = films.findPageIdsByCoupleId(CoupleContext.current(), normalizedGenre, platformId, watched,
+           normalizedSearch, normalizedSort, limit + 1, offset);
+   Long next = ids.size() > limit ? offset + limit : null;
+   List<Long> pageIds = ids.stream().limit(limit).toList();
+   if (pageIds.isEmpty()) return new Slice<>(List.of(), null);
+   Map<Long, Film> byId = films.findAllByIdInAndCoupleId(pageIds, CoupleContext.current()).stream()
+           .collect(java.util.stream.Collectors.toMap(film -> film.id, film -> film));
+   List<Film> page = pageIds.stream().map(byId::get).filter(Objects::nonNull).toList();
    Map<Long, FilmPhotoMetadata> photosByFilm = filmPhotos(page);
    return new Slice<>(page.stream().map(film -> film(film, false, photosByFilm.get(film.id))).toList(), next);
    }
@@ -200,10 +180,6 @@ public class FilmApi {
      Integer posterHeight = photo == null ? null : photo.getHeight();
       return new FilmDto(film.id, film.tmdbId, film.title, film.originalTitle, film.synopsis, film.releaseDate, posterUrl, thumbnailUrl, posterWidth, posterHeight, film.genres.stream().map(value -> value.name).sorted(String.CASE_INSENSITIVE_ORDER).toList(), film.platform == null ? null : platform(film.platform), film.watchedCount, film.lastWatchedOn, film.createdBy.username, filmReviews, filmViews, film.createdAt, film.updatedAt, catalog);
   }
-   private Map<Long, Double> filmRatings(Collection<Long> filmIds) {
-    if (filmIds.isEmpty() || reviews == null) return Map.of();
-    return reviews.ratingsByFilmIdInAndCoupleId(filmIds, CoupleContext.current()).stream().collect(java.util.stream.Collectors.toMap(FilmRating::getFilmId, FilmRating::getRating));
-   }
    private Map<Long, FilmPhotoMetadata> filmPhotos(Collection<Film> values) {
     if (values.isEmpty() || filmPhotos == null) return Map.of();
     return filmPhotos.metadataByFilmIdInAndCoupleId(values.stream().map(film -> film.id).toList(), CoupleContext.current()).stream().collect(java.util.stream.Collectors.toMap(FilmPhotoMetadata::getFilmId, photo -> photo));
@@ -213,16 +189,10 @@ public class FilmApi {
    try { return detailed ? tmdb.details(tmdbId) : tmdb.summary(tmdbId); }
    catch (ResponseStatusException ignored) { return null; }
   }
-   private boolean matchesGenre(Film film, String genre) {
-   if (film.genres.stream().anyMatch(value -> value.name.equalsIgnoreCase(genre))) return true;
-   TmdbMovieDto catalog = catalog(film.tmdbId, false);
-   return catalog != null && catalog.genres().stream().anyMatch(value -> value.equalsIgnoreCase(genre));
-  }
   private static String posterUrl(String posterPath) { return posterPath; }
     private static String photoUrl(Long filmId, boolean thumbnail, Long photoId) { return "/films/" + filmId + "/photo?" + (thumbnail ? "thumbnail=true&" : "") + "v=" + photoId; }
   private static PlatformDto platform(WatchPlatform value) { return new PlatformDto(value.id, value.name, value.icon, value.active); }
   private static FilmGenreOptionDto genre(FilmGenreOption value) { return new FilmGenreOptionDto(value.id, value.name, value.emoji); }
-   private static boolean contains(String value, String search) { return value != null && value.toLowerCase(Locale.ROOT).contains(search); }
    private static FilmViewDto view(FilmView value, List<FilmReviewDto> reviews) { return new FilmViewDto(value.id, value.watchedOn, value.createdBy.username, value.updatedBy == null ? value.createdBy.username : value.updatedBy.username, reviews, value.createdAt); }
    private static FilmReviewDto review(FilmReview value) { return review(value, value.author.username); }
    private static FilmReviewDto review(FilmReview value, String author) { return new FilmReviewDto(value.id, author, value.rating, value.comment, value.view.watchedOn, value.favoriteCharacter, Map.copyOf(value.metrics)); }

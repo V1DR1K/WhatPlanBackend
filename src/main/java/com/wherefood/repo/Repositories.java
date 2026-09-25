@@ -328,6 +328,11 @@ public final class Repositories {
           from films film
           left join film_ratings rating on rating.film_id = film.id
           where film.couple_id = :coupleId
+            and (cast(:genre as text) is null or exists (
+                select 1 from film_genres fg
+                join film_genre_options genre_option on genre_option.id = fg.genre_id
+                where fg.film_id = film.id and fg.couple_id = film.couple_id
+                  and lower(genre_option.name) = cast(:genre as text)))
             and (cast(:platformId as bigint) is null or film.platform_id = cast(:platformId as bigint))
             and (cast(:watched as boolean) is null
                  or (film.watched_count > 0) = cast(:watched as boolean))
@@ -347,6 +352,7 @@ public final class Repositories {
           limit :limit offset :offset
           """, nativeQuery = true)
   List<Long> findPageIdsByCoupleId(@Param("coupleId") java.util.UUID coupleId,
+          @Param("genre") String genre,
           @Param("platformId") Long platformId, @Param("watched") Boolean watched,
           @Param("search") String search, @Param("sort") String sort,
           @Param("limit") int limit, @Param("offset") long offset);
@@ -359,15 +365,12 @@ public final class Repositories {
   boolean existsByPlatformId(Long platformId);
   }
 
-  public interface FilmRating { Long getFilmId(); Double getRating(); }
 
      public interface FilmReviews extends CoupleScopedRepository<FilmReview> {
     @EntityGraph(attributePaths = {"author", "metrics", "view"}) @Query("select r from FilmReview r where r.film.id=:filmId order by r.view.watchedOn desc, r.id desc") List<FilmReview> findByFilmIdOrderByViewWatchedOnDescIdDesc(@Param("filmId") Long filmId);
     @EntityGraph(attributePaths = {"author", "metrics", "view"}) @Query("select r from FilmReview r where r.film.id=:filmId and r.coupleId=:coupleId order by r.view.watchedOn desc, r.id desc") List<FilmReview> findByFilmIdAndCoupleIdOrderByViewWatchedOnDescIdDesc(@Param("filmId") Long filmId, @Param("coupleId") java.util.UUID coupleId);
      @Query("select r.id as reviewId, author.username as author from FilmReview r join r.author author where r.film.id=:filmId") List<ReviewAuthor> authorsByFilmId(@Param("filmId") Long filmId);
      @Query("select r.id as reviewId, author.username as author from FilmReview r join r.author author where r.film.id=:filmId and r.coupleId=:coupleId") List<ReviewAuthor> authorsByFilmIdAndCoupleId(@Param("filmId") Long filmId, @Param("coupleId") java.util.UUID coupleId);
-     @Query("select r.film.id as filmId, avg(r.rating) as rating from FilmReview r where r.film.id in :filmIds group by r.film.id") List<FilmRating> ratingsByFilmIdIn(@Param("filmIds") Collection<Long> filmIds);
-     @Query("select r.film.id as filmId, avg(r.rating) as rating from FilmReview r where r.film.id in :filmIds and r.coupleId=:coupleId group by r.film.id") List<FilmRating> ratingsByFilmIdInAndCoupleId(@Param("filmIds") Collection<Long> filmIds, @Param("coupleId") java.util.UUID coupleId);
      @EntityGraph(attributePaths = {"author", "metrics", "view", "film"}) Optional<FilmReview> findByIdAndFilmIdAndCoupleId(Long id, Long filmId, java.util.UUID coupleId);
     boolean existsByViewIdAndAuthorId(Long viewId, Long authorId);
   }
