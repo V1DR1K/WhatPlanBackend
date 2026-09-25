@@ -160,6 +160,36 @@ class ApiVisitTest {
   }
 
   @Test
+  void pagesArchivedPlacesWithinCurrentCoupleAndKeepsStableNextCursor() {
+    UUID coupleId = UUID.randomUUID(); CoupleContext.set(coupleId);
+    Places places = mock(Places.class);
+    PlaceVisits visits = mock(PlaceVisits.class);
+    PlaceVisitReviews visitReviews = mock(PlaceVisitReviews.class);
+    PlaceReviews placeReviews = mock(PlaceReviews.class);
+    PlaceVisitPhotos visitPhotos = mock(PlaceVisitPhotos.class);
+    PlacePhotos placePhotos = mock(PlacePhotos.class);
+    User owner = user(41L, "member");
+    Place archived = place(70L, owner, Instant.parse("2026-07-23T00:00:00Z"));
+    archived.deactivatedAt = Instant.parse("2026-07-24T00:00:00Z");
+    when(places.findArchivedPageIdsByCoupleId(coupleId, 2, 3)).thenReturn(List.of(70L, 69L));
+    when(places.findArchivedByIdInAndCoupleId(List.of(70L), coupleId)).thenReturn(List.of(archived));
+    when(visits.findByPlaceIdInAndCoupleIdOrderByPlaceIdAscVisitedOnDescIdDesc(List.of(70L), coupleId)).thenReturn(List.of());
+    when(visitReviews.findByVisitIdInAndCoupleIdOrderByVisitIdAscAuthorUsername(any(), eq(coupleId))).thenReturn(List.of());
+    when(placeReviews.summariesByPlaceIdInAndCoupleId(List.of(70L), coupleId)).thenReturn(List.of());
+    when(visitPhotos.findByVisitIdInAndCoupleIdOrderByVisitIdAscPositionAscIdAsc(any(), eq(coupleId))).thenReturn(List.of());
+    when(placePhotos.findByPlaceIdInAndCoupleId(List.of(70L), coupleId)).thenReturn(List.of());
+
+    Slice<PlaceDto> result = new Api(null, null, null, places, visits, null, null, null,
+            placeReviews, placePhotos, visitPhotos, visitReviews, null)
+            .archivedPlaces(3L, 1);
+
+    assertEquals(List.of(70L), result.content().stream().map(PlaceDto::id).toList());
+    assertEquals(4L, result.nextCursor());
+    verify(places).findArchivedPageIdsByCoupleId(coupleId, 2, 3);
+    verify(places).findArchivedByIdInAndCoupleId(List.of(70L), coupleId);
+  }
+
+  @Test
   void derivesPlaceCardsFromVisitReviewsAndTheLatestVisitCover() {
     Places places = mock(Places.class);
     PlaceVisits visits = mock(PlaceVisits.class);

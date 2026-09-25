@@ -108,6 +108,13 @@ class CoupleHttpIsolationIntegrationTest {
         assertThat(placesForB.getStatusCode().value()).isEqualTo(200);
         assertThat(placesForB.getBody()).contains("Private place B").doesNotContain("Private place A");
 
+        ResponseEntity<String> archivedPlacesForA = get("/api/places/archived?size=1", USER_A1_AUTH_ID, null);
+        ResponseEntity<String> archivedPlacesForB = get("/api/places/archived?size=1", USER_B_AUTH_ID, null);
+        assertThat(archivedPlacesForA.getStatusCode().value()).isEqualTo(200);
+        assertThat(archivedPlacesForA.getBody()).doesNotContain("Archived private place B");
+        assertThat(archivedPlacesForB.getStatusCode().value()).isEqualTo(200);
+        assertThat(archivedPlacesForB.getBody()).contains("Archived private place B");
+
         ResponseEntity<String> recipesForA = get("/api/how-cook/recipes?search=torta&home=TOMAS&cooked=true&sort=rating-asc&size=30", USER_A1_AUTH_ID, null);
         ResponseEntity<String> recipesForB = get("/api/how-cook/recipes?search=torta&home=AVRIL&cooked=true&sort=rating-desc&size=30", USER_B_AUTH_ID, null);
         assertThat(recipesForA.getStatusCode().value()).isEqualTo(200);
@@ -264,6 +271,12 @@ class CoupleHttpIsolationIntegrationTest {
             insertMember(connection, COUPLE_B_ID, userB, "Member B", 1);
             long placeA = insertPlace(connection, "Private place A", categoryId, userA1, COUPLE_A_ID);
             long placeB = insertPlace(connection, "Private place B", categoryId, userB, COUPLE_B_ID);
+            long archivedPlaceB = insertPlace(connection, "Archived private place B", categoryId, userB, COUPLE_B_ID);
+            try (PreparedStatement archive = connection.prepareStatement(
+                    "update places set deactivated_at = now() where id = ?")) {
+                archive.setLong(1, archivedPlaceB);
+                archive.executeUpdate();
+            }
             insertPhoto(connection, placeB, COUPLE_B_ID);
             insertReview(connection, placeA, userA1, COUPLE_A_ID, "Review from member one");
             long recipeA = insertRecipe(connection, "Torta pareja A", userA1, COUPLE_A_ID);

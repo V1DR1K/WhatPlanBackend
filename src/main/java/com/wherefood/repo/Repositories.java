@@ -159,6 +159,18 @@ public final class Repositories {
           @Param("categoryId") Long categoryId, @Param("highlightTagId") Long highlightTagId,
           @Param("status") String status, @Param("search") String search, @Param("sort") String sort,
           @Param("limit") int limit, @Param("offset") long offset);
+  @Query(value = """
+          select place.id from places place
+          where place.couple_id = :coupleId and place.deactivated_at is not null
+          order by place.deactivated_at desc, place.id desc
+          limit :limit offset :offset
+          """, nativeQuery = true)
+  List<Long> findArchivedPageIdsByCoupleId(@Param("coupleId") java.util.UUID coupleId,
+          @Param("limit") int limit, @Param("offset") long offset);
+  @EntityGraph(attributePaths = {"category", "createdBy", "highlightTags"})
+  @Query("select place from Place place where place.id in :ids and place.coupleId = :coupleId and place.deactivatedAt is not null")
+  List<Place> findArchivedByIdInAndCoupleId(@Param("ids") Collection<Long> ids,
+          @Param("coupleId") java.util.UUID coupleId);
   @EntityGraph(attributePaths = {"category", "createdBy", "updatedBy", "highlightTags"})
   @Query("select place from Place place where place.id in :ids and place.coupleId = :coupleId and place.deactivatedAt is null")
   List<Place> findActiveByIdInAndCoupleId(@Param("ids") Collection<Long> ids,

@@ -126,7 +126,22 @@ public class Api {
    return place(placeService.update(id, request, owner));
   }
    @DeleteMapping("/places/{id}") @ResponseStatus(HttpStatus.NO_CONTENT) void deletePlace(@PathVariable Long id, @AuthenticationPrincipal User owner) { placeService.archive(id, owner); }
-   @GetMapping("/places/archived") List<PlaceDto> archivedPlaces() { List<Place> archived = places.findAllByCoupleId(CoupleContext.current()).stream().filter(place -> place.deactivatedAt != null).toList(); Map<Long, PlaceSummary> summaries = placeSummaries(archived); return archived.stream().map(place -> place(place, summaries.get(place.id))).toList(); }
+   @GetMapping("/places/archived") Slice<PlaceDto> archivedPlaces(
+           @RequestParam(required = false) @jakarta.validation.constraints.PositiveOrZero @Max(1_000_000) Long cursor,
+           @RequestParam(defaultValue = "12") @Min(1) @Max(100) int size) {
+    int limit = Math.max(1, Math.min(size, 30));
+    long offset = cursor == null ? 0 : cursor;
+    if (offset < 0 || offset > 1_000_000) throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Cursor inválido");
+    List<Long> ids = places.findArchivedPageIdsByCoupleId(CoupleContext.current(), limit + 1, offset);
+    Long next = ids.size() > limit ? offset + limit : null;
+    List<Long> pageIds = ids.stream().limit(limit).toList();
+    if (pageIds.isEmpty()) return new Slice<>(List.of(), next);
+    Map<Long, Place> byId = places.findArchivedByIdInAndCoupleId(pageIds, CoupleContext.current()).stream()
+            .collect(java.util.stream.Collectors.toMap(place -> place.id, place -> place));
+    List<Place> page = pageIds.stream().map(byId::get).filter(Objects::nonNull).toList();
+    Map<Long, PlaceSummary> summaries = placeSummaries(page);
+    return new Slice<>(page.stream().map(place -> place(place, summaries.get(place.id))).toList(), next);
+   }
    @PostMapping("/places/{id}/restore") PlaceDto restorePlace(@PathVariable Long id, @AuthenticationPrincipal User owner) { return place(placeService.restore(id, owner)); }
   @GetMapping("/places/{id}") PlaceDto getPlace(@PathVariable Long id) { Place place = active(places.findDetailedByIdAndCoupleId(id, CoupleContext.current()).orElseThrow(() -> notFound("Lugar"))); return place(place, placeSummaries(List.of(place)).get(id)); }
  @GetMapping(value = "/places/{id}/photo", produces = "image/webp") ResponseEntity<byte[]> placePhoto(@PathVariable Long id, @RequestParam(defaultValue = "false") boolean thumbnail) {
