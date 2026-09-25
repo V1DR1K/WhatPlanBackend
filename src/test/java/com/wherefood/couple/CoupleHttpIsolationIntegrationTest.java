@@ -19,8 +19,12 @@ import java.util.UUID;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.boot.test.web.client.TestRestTemplate;
 import org.springframework.boot.test.web.server.LocalServerPort;
+import org.springframework.boot.autoconfigure.flyway.FlywayMigrationStrategy;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Import;
 import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpMethod;
@@ -28,6 +32,7 @@ import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
+import org.flywaydb.core.Flyway;
 import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.containers.PostgreSQLContainer;
 import org.testcontainers.junit.jupiter.Container;
@@ -37,6 +42,7 @@ import org.testcontainers.utility.DockerImageName;
 /** Exercises the production HTTP security chain, JWT resolution, tenant context and PostgreSQL RLS together. */
 @Testcontainers
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
+@Import(CoupleHttpIsolationIntegrationTest.TestMigrationSetup.class)
 class CoupleHttpIsolationIntegrationTest {
     private static final String ISSUER = "whatplan-http-test-issuer";
     private static final String AUDIENCE = "whatplan-http-test";
@@ -50,6 +56,27 @@ class CoupleHttpIsolationIntegrationTest {
     private static final UUID COUPLE_A_ID = UUID.fromString("c8f36af3-4259-4648-aace-dd135a9f0101");
     private static final UUID COUPLE_B_ID = UUID.fromString("c8f36af3-4259-4648-aace-dd135a9f0102");
     private static final KeyPair JWT_KEYS = newRsaKeyPair();
+
+    @TestConfiguration(proxyBeanMethods = false)
+    static class TestMigrationSetup {
+        @Bean
+        FlywayMigrationStrategy seedLegacyUsersBeforeTenantMigration() {
+            return flyway -> {
+                Flyway.configure().dataSource(POSTGRES.getJdbcUrl(), "whatplan_migrator",
+                                "test-only-migration-password-0123456789")
+                        .target("44").load().migrate();
+                try (Connection connection = DriverManager.getConnection(POSTGRES.getJdbcUrl(),
+                        POSTGRES.getUsername(), POSTGRES.getPassword());
+                        PreparedStatement statement = connection.prepareStatement(
+                                "insert into users(username, role) values ('tomas', 'USER'), ('avril', 'USER')")) {
+                    statement.executeUpdate();
+                } catch (Exception exception) {
+                    throw new IllegalStateException("Unable to seed legacy users for tenant migration test", exception);
+                }
+                flyway.migrate();
+            };
+        }
+    }
 
     @Container
     private static final PostgreSQLContainer<?> POSTGRES = new PostgreSQLContainer<>("postgres:16-alpine")
