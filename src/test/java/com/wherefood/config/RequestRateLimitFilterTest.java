@@ -104,7 +104,7 @@ class RequestRateLimitFilterTest {
         request.setRemoteAddr(remote);
         request.setContentType("multipart/form-data; boundary=test");
         MockHttpServletResponse response = new MockHttpServletResponse();
-        FilterChain chain = (req, res) -> res.setStatus(200);
+        FilterChain chain = (req, res) -> ((jakarta.servlet.http.HttpServletResponse) res).setStatus(200);
         filter.doFilter(request, response, chain);
         return response;
     }

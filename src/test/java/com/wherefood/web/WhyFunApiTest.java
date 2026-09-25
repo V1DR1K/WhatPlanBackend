@@ -5,6 +5,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.verify;
@@ -45,7 +46,7 @@ class WhyFunApiTest {
    User tomas = new User(); tomas.username = "tomas";
    WhyFunCategory category = new WhyFunCategory(); category.id = 1L; category.name = "Arte"; category.slug = "arte"; category.icon = "a";
    WhyFunVenue activity = new WhyFunVenue(); activity.id = 4L; activity.name = "Museo"; activity.address = "Centro"; activity.category = activity.subcategory = category; activity.createdBy = activity.updatedBy = tomas; activity.coverPhotoId = 9L;
-   when(activities.findDetailedByIdAndCoupleId(4L, null)).thenReturn(Optional.of(activity)); when(photos.metadataByIdIn(any())).thenReturn(List.of(photo(9L, 1000, 700)));
+   when(activities.findDetailedByIdAndCoupleId(4L, null)).thenReturn(Optional.of(activity)); when(photos.metadataByIdInAndCoupleId(any(), isNull())).thenReturn(List.of(photo(9L, 1000, 700)));
 
    ActivityDto result = new WhyFunActivityApi(null, activities, photos, null, null, null, null).getActivity(4L);
 

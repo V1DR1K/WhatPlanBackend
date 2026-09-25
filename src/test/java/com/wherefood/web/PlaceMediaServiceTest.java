@@ -50,7 +50,7 @@ class PlaceMediaServiceTest {
     }
 
     @Test
-    void uploadItemPhoto_whenActorBelongsToAnotherCouple_returns404BeforeLoadingOrStoring() {
+    void uploadItemPhoto_whenActorBelongsToAnotherCouple_returns404BeforeLoadingOrStoring() throws Exception {
         User actor = user(7L);
         when(members.findActiveCoupleIdByUserId(actor.id)).thenReturn(Optional.of(UUID.randomUUID()));
 

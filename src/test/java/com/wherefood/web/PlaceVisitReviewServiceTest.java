@@ -54,10 +54,10 @@ class PlaceVisitReviewServiceTest {
         PlaceVisitReview saved = service.update(13L,
                 new PlaceVisitReviewRequest((short) 5, "  Excelente  ", (short) 4, (short) 3), owner);
 
-        assertEquals(5, saved.overall);
+        assertEquals(Short.valueOf((short) 5), saved.overall);
         assertEquals("  Excelente  ", saved.comment);
-        assertEquals(4, saved.taste);
-        assertEquals(3, saved.price);
+        assertEquals(Short.valueOf((short) 4), saved.taste);
+        assertEquals(Short.valueOf((short) 3), saved.price);
         assertEquals(owner, saved.updatedBy);
         verify(reviews).save(review);
     }
@@ -100,8 +100,8 @@ class PlaceVisitReviewServiceTest {
 
         assertEquals(owner, saved.author);
         assertEquals(owner, saved.updatedBy);
-        assertEquals(3, saved.overall);
-        assertEquals(2, saved.price);
+        assertEquals(Short.valueOf((short) 3), saved.overall);
+        assertEquals(Short.valueOf((short) 2), saved.price);
         verify(reviews).save(saved);
     }
 

@@ -25,13 +25,13 @@ class AuthApiTest {
     @Test
     void provisionsAUserReturnedByCentralLoginWithoutAnAllowlist() {
         UUID userId = UUID.randomUUID();
-        CentralAuthClient.TokenResponse response = new CentralAuthClient.TokenResponse(
+        CentralAuthClient.TokenResponse tokenResponse = new CentralAuthClient.TokenResponse(
                 "access", "refresh", "Bearer", 300,
                 new CentralAuthClient.CentralUser(userId, "new-user", "ACTIVE", null, null, false));
         User local = new User();
         local.username = "new-user";
         local.role = Role.USER;
-        when(central.login("new-user", "password")).thenReturn(response);
+        when(central.login("new-user", "password")).thenReturn(tokenResponse);
         when(jwt.subject("access")).thenReturn(userId);
         when(provisioner.provision(userId, "new-user")).thenReturn(local);
 
@@ -63,10 +63,10 @@ class AuthApiTest {
     @Test
     void refreshesAnAuthenticatedUserAndDoesNotReturnRefreshTokenInJson() {
         UUID userId = UUID.randomUUID();
-        CentralAuthClient.TokenResponse response = new CentralAuthClient.TokenResponse(
+        CentralAuthClient.TokenResponse tokenResponse = new CentralAuthClient.TokenResponse(
                 "access", "refresh", "Bearer", 300,
                 new CentralAuthClient.CentralUser(userId, "intruder", "ACTIVE", null, null, false));
-        org.mockito.Mockito.when(central.refresh("refresh-token")).thenReturn(response);
+        org.mockito.Mockito.when(central.refresh("refresh-token")).thenReturn(tokenResponse);
         org.mockito.Mockito.when(jwt.subject("access")).thenReturn(userId);
 
         User local = new User();
@@ -121,12 +121,12 @@ class AuthApiTest {
         org.mockito.Mockito.doThrow(new ResponseStatusException(HttpStatus.BAD_GATEWAY))
                 .when(central).logout("refresh-token");
 
-        org.junit.jupiter.Assertions.assertThrows(ResponseStatusException.class,
+        org.junit.jupiter.api.Assertions.assertThrows(ResponseStatusException.class,
                 () -> api.logout("refresh-token", sameOriginRequest(), response));
 
-        org.junit.jupiter.Assertions.assertTrue(response.getHeader("Set-Cookie").contains("Max-Age=0"));
-        org.junit.jupiter.Assertions.assertTrue(response.getHeader("Set-Cookie").contains("Secure"));
-        org.junit.jupiter.Assertions.assertEquals("no-store", response.getHeader("Cache-Control"));
+        org.junit.jupiter.api.Assertions.assertTrue(response.getHeader("Set-Cookie").contains("Max-Age=0"));
+        org.junit.jupiter.api.Assertions.assertTrue(response.getHeader("Set-Cookie").contains("Secure"));
+        org.junit.jupiter.api.Assertions.assertEquals("no-store", response.getHeader("Cache-Control"));
     }
 
     @Test
@@ -139,11 +139,11 @@ class AuthApiTest {
         when(provisioner.provision(userId, "new-user")).thenThrow(new IllegalStateException("database unavailable"));
         MockHttpServletResponse response = new MockHttpServletResponse();
 
-        org.junit.jupiter.Assertions.assertThrows(IllegalStateException.class,
+        org.junit.jupiter.api.Assertions.assertThrows(IllegalStateException.class,
                 () -> api.refresh("old-refresh", sameOriginRequest(), response));
 
-        org.junit.jupiter.Assertions.assertTrue(response.getHeader("Set-Cookie").contains("rotated-refresh"));
-        org.junit.jupiter.Assertions.assertTrue(response.getHeader("Set-Cookie").contains("Max-Age=604800"));
+        org.junit.jupiter.api.Assertions.assertTrue(response.getHeader("Set-Cookie").contains("rotated-refresh"));
+        org.junit.jupiter.api.Assertions.assertTrue(response.getHeader("Set-Cookie").contains("Max-Age=604800"));
     }
 
     @Test
@@ -154,11 +154,11 @@ class AuthApiTest {
                 new CentralAuthClient.CentralUser(userId, "new-user", "ACTIVE", null, null, false)));
         MockHttpServletResponse response = new MockHttpServletResponse();
 
-        ResponseStatusException error = org.junit.jupiter.Assertions.assertThrows(ResponseStatusException.class,
+        ResponseStatusException error = org.junit.jupiter.api.Assertions.assertThrows(ResponseStatusException.class,
                 () -> api.refresh("old-refresh", sameOriginRequest(), response));
 
-        org.junit.jupiter.Assertions.assertEquals(HttpStatus.BAD_GATEWAY, error.getStatusCode());
-        org.junit.jupiter.Assertions.assertTrue(response.getHeader("Set-Cookie").contains("Max-Age=0"));
+        org.junit.jupiter.api.Assertions.assertEquals(HttpStatus.BAD_GATEWAY, error.getStatusCode());
+        org.junit.jupiter.api.Assertions.assertTrue(response.getHeader("Set-Cookie").contains("Max-Age=0"));
         org.mockito.Mockito.verifyNoInteractions(jwt, provisioner);
     }
 

@@ -331,7 +331,7 @@ class TransactionalBoundaryContractTest {
                 () -> service.getSimpleName() + "." + name + " must own its write transaction");
     }
 
-    private static void assertControllerNotTransactional(String name, Class<?> controller, Class<?>... parameters)
+    private static void assertControllerNotTransactional(Class<?> controller, String name, Class<?>... parameters)
             throws NoSuchMethodException {
         assertFalse(controller.getDeclaredMethod(name, parameters).isAnnotationPresent(Transactional.class),
                 () -> controller.getSimpleName() + "." + name + " must delegate its transaction to a service");

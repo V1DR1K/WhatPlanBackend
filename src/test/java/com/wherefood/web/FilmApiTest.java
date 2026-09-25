@@ -2,6 +2,7 @@ package com.wherefood.web;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -60,7 +61,7 @@ class FilmApiTest {
     when(views.findByFilmIdAndWatchedOnAndCoupleId(42L, watchedOn, coupleId)).thenReturn(Optional.empty());
     FilmView[] stored = new FilmView[1];
     when(views.save(any(FilmView.class))).thenAnswer(invocation -> { FilmView value = invocation.getArgument(0); value.id = 88L; stored[0] = value; return value; });
-    when(views.findByFilmIdAndCoupleIdOrderByWatchedOnDescIdDesc(42L, null)).thenAnswer(invocation -> stored[0] == null ? List.of() : List.of(stored[0]));
+    when(views.findByFilmIdAndCoupleIdOrderByWatchedOnDescIdDesc(42L, coupleId)).thenAnswer(invocation -> stored[0] == null ? List.of() : List.of(stored[0]));
 
     FilmViewService viewService = new FilmViewService(films, views, new CoupleAuthorizationService(members));
     FilmReviewService reviewService = new FilmReviewService(reviews, new CoupleAuthorizationService(members), null);
