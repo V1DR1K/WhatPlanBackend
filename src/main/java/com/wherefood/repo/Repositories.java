@@ -360,10 +360,48 @@ public final class Repositories {
    public interface Recipes extends CoupleScopedRepository<Recipe> {
     @EntityGraph(attributePaths = {"createdBy", "updatedBy", "ingredients", "steps"}) Optional<Recipe> findByIdAndCoupleId(Long id, java.util.UUID coupleId);
     @EntityGraph(attributePaths = {"createdBy", "updatedBy", "ingredients", "steps"}) List<Recipe> findAllByCoupleId(java.util.UUID coupleId);
-    @Query(value = "select id from recipes where couple_id = :coupleId order by updated_at desc, created_at desc, id desc limit :limit offset :offset", nativeQuery = true)
-    List<Long> findPageIdsByCoupleIdOrderByUpdatedAtDesc(@Param("coupleId") java.util.UUID coupleId, @Param("limit") int limit, @Param("offset") long offset);
+    @Query(value = """
+            with recipe_ratings as (
+                select c.recipe_id, avg(review.rating) as rating
+                from cookings c
+                join cooking_reviews review
+                  on review.cooking_id = c.id and review.couple_id = c.couple_id
+                where c.couple_id = :coupleId
+                group by c.recipe_id
+            )
+            select r.id
+            from recipes r
+            left join recipe_ratings rr on rr.recipe_id = r.id
+            where r.couple_id = :coupleId
+              and (cast(:search as text) is null
+                   or position(cast(:search as text) in lower(r.name)) > 0)
+              and (cast(:home as text) is null
+                   or exists (select 1 from cookings ch
+                              where ch.couple_id = r.couple_id and ch.recipe_id = r.id
+                                and ch.home = cast(:home as text)))
+              and (cast(:cooked as boolean) is null
+                   or exists (select 1 from cookings cc
+                              where cc.couple_id = r.couple_id and cc.recipe_id = r.id)
+                      = cast(:cooked as boolean))
+            order by
+              case when cast(:sort as text) in ('date', 'date-desc') then r.updated_at end desc,
+              case when cast(:sort as text) in ('date', 'date-desc') then r.created_at end desc,
+              case when cast(:sort as text) = 'date-asc' then r.updated_at end asc,
+              case when cast(:sort as text) = 'date-asc' then r.created_at end asc,
+              case when cast(:sort as text) in ('rating', 'rating-desc') then rr.rating end desc nulls last,
+              case when cast(:sort as text) = 'rating-asc' then rr.rating end asc nulls last,
+              case when cast(:sort as text) in ('rating', 'rating-desc', 'rating-asc') then r.updated_at end desc,
+              case when cast(:sort as text) in ('rating', 'rating-desc', 'rating-asc') then r.created_at end desc,
+              r.id desc
+            limit :limit offset :offset
+            """, nativeQuery = true)
+    List<Long> findPageIdsByCoupleId(@Param("coupleId") java.util.UUID coupleId,
+            @Param("search") String search, @Param("home") String home, @Param("cooked") Boolean cooked,
+            @Param("sort") String sort, @Param("limit") int limit, @Param("offset") long offset);
     @EntityGraph(attributePaths = {"createdBy", "updatedBy", "ingredients", "steps"})
-    List<Recipe> findAllByIdInAndCoupleId(Collection<Long> ids, java.util.UUID coupleId);
+    @Query("select r from Recipe r where r.id in :ids and r.coupleId = :coupleId")
+    List<Recipe> findAllByIdInAndCoupleId(@Param("ids") Collection<Long> ids,
+            @Param("coupleId") java.util.UUID coupleId);
    }
 
     public interface RecipePhotos extends CoupleScopedRepository<RecipePhoto> {

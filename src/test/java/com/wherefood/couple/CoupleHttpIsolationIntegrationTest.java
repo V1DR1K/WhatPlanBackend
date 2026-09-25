@@ -107,6 +107,13 @@ class CoupleHttpIsolationIntegrationTest {
         assertThat(placesForB.getStatusCode().value()).isEqualTo(200);
         assertThat(placesForB.getBody()).contains("Private place B").doesNotContain("Private place A");
 
+        ResponseEntity<String> recipesForA = get("/api/how-cook/recipes?search=torta&home=TOMAS&cooked=true&sort=rating-asc&size=30", USER_A1_AUTH_ID, null);
+        ResponseEntity<String> recipesForB = get("/api/how-cook/recipes?search=torta&home=AVRIL&cooked=true&sort=rating-desc&size=30", USER_B_AUTH_ID, null);
+        assertThat(recipesForA.getStatusCode().value()).isEqualTo(200);
+        assertThat(recipesForA.getBody()).contains("Torta pareja A").doesNotContain("Torta pareja B");
+        assertThat(recipesForB.getStatusCode().value()).isEqualTo(200);
+        assertThat(recipesForB.getBody()).contains("Torta pareja B").doesNotContain("Torta pareja A");
+
         ResponseEntity<String> spoofedCoupleHeader = get("/api/places", USER_A1_AUTH_ID, COUPLE_B_ID.toString());
         assertThat(spoofedCoupleHeader.getStatusCode().value()).isEqualTo(200);
         assertThat(spoofedCoupleHeader.getBody()).contains("Private place A").doesNotContain("Private place B");
@@ -229,7 +236,62 @@ class CoupleHttpIsolationIntegrationTest {
             long placeB = insertPlace(connection, "Private place B", categoryId, userB, COUPLE_B_ID);
             insertPhoto(connection, placeB, COUPLE_B_ID);
             insertReview(connection, placeA, userA1, COUPLE_A_ID, "Review from member one");
+            long recipeA = insertRecipe(connection, "Torta pareja A", userA1, COUPLE_A_ID);
+            long recipeB = insertRecipe(connection, "Torta pareja B", userB, COUPLE_B_ID);
+            long cookingA = insertCooking(connection, recipeA, userA1, COUPLE_A_ID, "TOMAS");
+            long cookingB = insertCooking(connection, recipeB, userB, COUPLE_B_ID, "AVRIL");
+            insertCookingReview(connection, cookingA, userA1, COUPLE_A_ID, 5);
+            insertCookingReview(connection, cookingB, userB, COUPLE_B_ID, 1);
             return new Fixture(placeA, placeB, categoryId);
+        }
+    }
+
+    private static long insertRecipe(Connection connection, String name, long authorId, UUID coupleId) throws Exception {
+        try (PreparedStatement statement = connection.prepareStatement("""
+                insert into recipes(name, created_by, updated_by, couple_id)
+                values (?, ?, ?, ?) returning id
+                """)) {
+            statement.setString(1, name);
+            statement.setLong(2, authorId);
+            statement.setLong(3, authorId);
+            statement.setObject(4, coupleId);
+            try (ResultSet result = statement.executeQuery()) {
+                result.next();
+                return result.getLong(1);
+            }
+        }
+    }
+
+    private static long insertCooking(Connection connection, long recipeId, long authorId, UUID coupleId, String home)
+            throws Exception {
+        try (PreparedStatement statement = connection.prepareStatement("""
+                insert into cookings(recipe_id, home, servings, cooked_on, meal_type, created_by, updated_by, couple_id)
+                values (?, ?, 2, date '2026-09-01', 'CENA', ?, ?, ?) returning id
+                """)) {
+            statement.setLong(1, recipeId);
+            statement.setString(2, home);
+            statement.setLong(3, authorId);
+            statement.setLong(4, authorId);
+            statement.setObject(5, coupleId);
+            try (ResultSet result = statement.executeQuery()) {
+                result.next();
+                return result.getLong(1);
+            }
+        }
+    }
+
+    private static void insertCookingReview(Connection connection, long cookingId, long authorId, UUID coupleId,
+            int rating) throws Exception {
+        try (PreparedStatement statement = connection.prepareStatement("""
+                insert into cooking_reviews(cooking_id, author_id, updated_by, rating, complexity, taste, couple_id)
+                values (?, ?, ?, ?, 3, 4, ?)
+                """)) {
+            statement.setLong(1, cookingId);
+            statement.setLong(2, authorId);
+            statement.setLong(3, authorId);
+            statement.setInt(4, rating);
+            statement.setObject(5, coupleId);
+            statement.executeUpdate();
         }
     }
 
