@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.wherefood.repo.Repositories;
 import io.jsonwebtoken.Jwts;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
@@ -22,9 +23,13 @@ import java.time.LocalDate;
 import java.time.ZoneId;
 import java.util.Base64;
 import java.util.Date;
+import java.util.List;
 import java.util.UUID;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.data.jpa.repository.Query;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.context.annotation.Bean;
@@ -135,6 +140,7 @@ class CoupleHttpIsolationIntegrationTest {
     @Test
     void productionHttpChainKeepsReadsWritesReviewsAndPhotosInsideTheAuthenticatedCouple() throws Exception {
         Fixture fixture = seedFixture();
+        benchmarkCalendarSummaryQuery(fixture);
 
         ResponseEntity<String> unauthenticated = http.getForEntity(url("/api/places"), String.class);
         JsonNode unauthenticatedProblem = objectMapper.readTree(unauthenticated.getBody());
@@ -253,7 +259,8 @@ class CoupleHttpIsolationIntegrationTest {
         assertThat(calendarForA.getStatusCode().value()).isEqualTo(200);
         assertThat(calendarForA.getBody()).contains("Private anniversary A").doesNotContain("Private anniversary B");
         assertThat(calendarForB.getStatusCode().value()).isEqualTo(200);
-        assertThat(calendarForB.getBody()).contains("Private anniversary B").doesNotContain("Private anniversary A");
+        assertThat(calendarForB.getBody()).contains("Private anniversary B")
+                .doesNotContain("Private anniversary A", "Synthetic calendar event");
 
         ResponseEntity<String> spoofedCoupleHeader = get("/api/places", USER_A1_AUTH_ID, COUPLE_B_ID.toString());
         assertThat(spoofedCoupleHeader.getStatusCode().value()).isEqualTo(200);
@@ -460,6 +467,66 @@ class CoupleHttpIsolationIntegrationTest {
             insertActivityReview(connection, activityVisitA, userA1, COUPLE_A_ID, 5);
             insertActivityReview(connection, activityVisitB, userB, COUPLE_B_ID, 1);
             return new Fixture(placeA, placeB, categoryId, activityCategoryId, activitySubcategoryId);
+        }
+    }
+
+    private void benchmarkCalendarSummaryQuery(Fixture fixture) throws Exception {
+        int syntheticVisitCount = 5_000;
+        LocalDate today = LocalDate.now(ZoneId.of("America/Argentina/Buenos_Aires"));
+        try (Connection connection = adminConnection()) {
+            long authorId = scalarLong(connection, "select id from users where username = 'http-user-a1'");
+            try (PreparedStatement specialDates = connection.prepareStatement("""
+                    insert into special_dates(special_date, label, recurrence, couple_id)
+                    select ?::date - event.day_offset, 'Synthetic calendar event ' || event.day_offset,
+                           'ONCE', ?::uuid
+                    from generate_series(1, ?) as event(day_offset)
+                    """)) {
+                specialDates.setObject(1, today);
+                specialDates.setObject(2, COUPLE_A_ID);
+                specialDates.setInt(3, syntheticVisitCount);
+                specialDates.executeUpdate();
+            }
+            try (PreparedStatement visits = connection.prepareStatement("""
+                    insert into place_visits(place_id, visited_on, created_by, updated_by, couple_id)
+                    select ?, ?::date - event.day_offset, ?, ?, ?::uuid
+                    from generate_series(1, ?) as event(day_offset)
+                    """)) {
+                visits.setLong(1, fixture.placeA());
+                visits.setObject(2, today);
+                visits.setLong(3, authorId);
+                visits.setLong(4, authorId);
+                visits.setObject(5, COUPLE_A_ID);
+                visits.setInt(6, syntheticVisitCount);
+                visits.executeUpdate();
+            }
+            try (java.sql.Statement analyze = connection.createStatement()) {
+                analyze.execute("ANALYZE place_visits");
+                analyze.execute("ANALYZE special_dates");
+            }
+
+            Query repositoryQuery = Repositories.SpecialDates.class
+                    .getMethod("findSummaryPageByCoupleId", UUID.class, Long.class, LocalDate.class, int.class, long.class)
+                    .getAnnotation(Query.class);
+            String sql = repositoryQuery.value()
+                    .replace(":coupleId", "'" + COUPLE_A_ID + "'::uuid")
+                    .replace(":specialDateId", "NULL")
+                    .replace(":today", "'" + today + "'::date")
+                    .replace(":limit", "31")
+                    .replace(":offset", "0");
+            List<String> plan = new java.util.ArrayList<>();
+            try (java.sql.Statement explain = connection.createStatement();
+                    ResultSet result = explain.executeQuery("EXPLAIN (ANALYZE, BUFFERS, FORMAT TEXT) " + sql)) {
+                while (result.next()) plan.add(result.getString(1));
+            }
+            String planText = String.join("\n", plan);
+            assertThat(planText).contains("Execution Time:");
+            Matcher removedRows = Pattern.compile("Rows Removed by Join Filter: (\\d+)").matcher(planText);
+            long maximumJoinFilterRejections = 0;
+            while (removedRows.find()) {
+                maximumJoinFilterRejections = Math.max(maximumJoinFilterRejections, Long.parseLong(removedRows.group(1)));
+            }
+            assertThat(maximumJoinFilterRejections).isLessThan(syntheticVisitCount * 20L);
+            System.out.println("C21_CALENDAR_EXPLAIN syntheticCoupleAVisits=" + syntheticVisitCount + "\n" + planText);
         }
     }
 

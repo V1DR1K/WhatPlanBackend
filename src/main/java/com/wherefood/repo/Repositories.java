@@ -83,48 +83,50 @@ public final class Repositories {
     List<SpecialDate> findAllByCoupleIdOrderByDateAscLabelAscIdAsc(java.util.UUID coupleId);
 
     @Query(value = """
-      WITH event_rows AS (
-        SELECT s.id AS special_date_id, v.visited_on AS occurred_on, 'FOOD' AS section, v.id AS experience_id,
+      WITH experience_events AS (
+        SELECT v.couple_id, v.visited_on AS occurred_on, 'FOOD' AS section, v.id AS experience_id,
           CASE WHEN v.cover_photo_id IS NOT NULL THEN '/place-visit-photos/' || v.cover_photo_id || '?thumbnail=true'
                WHEN EXISTS (SELECT 1 FROM place_photos pp WHERE pp.place_id = p.id AND pp.couple_id = v.couple_id)
                THEN '/places/' || p.id || '/photo?thumbnail=true' END AS image_url
         FROM place_visits v JOIN places p ON p.id = v.place_id AND p.couple_id = v.couple_id
-        JOIN special_dates s ON s.couple_id = v.couple_id AND (
-          (COALESCE(s.recurrence, 'ONCE') = 'ONCE' AND s.special_date = v.visited_on) OR
-          (s.recurrence = 'ANNUAL' AND EXTRACT(MONTH FROM s.special_date) = EXTRACT(MONTH FROM v.visited_on) AND EXTRACT(DAY FROM s.special_date) = EXTRACT(DAY FROM v.visited_on)) OR
-          (s.recurrence = 'MONTHLY' AND EXTRACT(DAY FROM s.special_date) = EXTRACT(DAY FROM v.visited_on)))
-        WHERE v.couple_id = :coupleId AND v.visited_on <= :today AND (CAST(:specialDateId AS bigint) IS NULL OR s.id = :specialDateId)
+        WHERE v.couple_id = :coupleId AND v.visited_on <= :today
         UNION ALL
-        SELECT s.id, v.watched_on, 'FILM', v.id,
+        SELECT v.couple_id, v.watched_on, 'FILM', v.id,
           CASE WHEN EXISTS (SELECT 1 FROM film_photos fp WHERE fp.film_id = f.id AND fp.couple_id = v.couple_id)
                THEN '/films/' || f.id || '/photo?thumbnail=true' ELSE f.poster_path END
         FROM film_views v JOIN films f ON f.id = v.film_id AND f.couple_id = v.couple_id
-        JOIN special_dates s ON s.couple_id = v.couple_id AND (
-          (COALESCE(s.recurrence, 'ONCE') = 'ONCE' AND s.special_date = v.watched_on) OR
-          (s.recurrence = 'ANNUAL' AND EXTRACT(MONTH FROM s.special_date) = EXTRACT(MONTH FROM v.watched_on) AND EXTRACT(DAY FROM s.special_date) = EXTRACT(DAY FROM v.watched_on)) OR
-          (s.recurrence = 'MONTHLY' AND EXTRACT(DAY FROM s.special_date) = EXTRACT(DAY FROM v.watched_on)))
-        WHERE v.couple_id = :coupleId AND v.watched_on <= :today AND (CAST(:specialDateId AS bigint) IS NULL OR s.id = :specialDateId)
+        WHERE v.couple_id = :coupleId AND v.watched_on <= :today
         UNION ALL
-        SELECT s.id, c.cooked_on, 'COOK', c.id,
+        SELECT c.couple_id, c.cooked_on, 'COOK', c.id,
           CASE WHEN EXISTS (SELECT 1 FROM recipe_photos rp WHERE rp.recipe_id = r.id AND rp.couple_id = c.couple_id)
                THEN '/how-cook/recipes/' || r.id || '/photo?thumbnail=true' END
         FROM cookings c JOIN recipes r ON r.id = c.recipe_id AND r.couple_id = c.couple_id
-        JOIN special_dates s ON s.couple_id = c.couple_id AND (
-          (COALESCE(s.recurrence, 'ONCE') = 'ONCE' AND s.special_date = c.cooked_on) OR
-          (s.recurrence = 'ANNUAL' AND EXTRACT(MONTH FROM s.special_date) = EXTRACT(MONTH FROM c.cooked_on) AND EXTRACT(DAY FROM s.special_date) = EXTRACT(DAY FROM c.cooked_on)) OR
-          (s.recurrence = 'MONTHLY' AND EXTRACT(DAY FROM s.special_date) = EXTRACT(DAY FROM c.cooked_on)))
-        WHERE c.couple_id = :coupleId AND c.cooked_on <= :today AND (CAST(:specialDateId AS bigint) IS NULL OR s.id = :specialDateId)
+        WHERE c.couple_id = :coupleId AND c.cooked_on <= :today
         UNION ALL
-        SELECT s.id, v.scheduled_at, 'FUN', v.id,
+        SELECT v.couple_id, v.scheduled_at, 'FUN', v.id,
           CASE WHEN v.cover_photo_id IS NOT NULL THEN '/why-fun/activity-visit-photos/' || v.cover_photo_id || '?thumbnail=true'
                WHEN EXISTS (SELECT 1 FROM why_fun_venue_photos vp WHERE vp.venue_id = y.id AND vp.couple_id = v.couple_id)
                THEN '/why-fun/activities/' || y.id || '/photo?thumbnail=true' END
         FROM why_fun_visits v JOIN why_fun_venues y ON y.id = v.venue_id AND y.couple_id = v.couple_id
-        JOIN special_dates s ON s.couple_id = v.couple_id AND (
-          (COALESCE(s.recurrence, 'ONCE') = 'ONCE' AND s.special_date = v.scheduled_at) OR
-          (s.recurrence = 'ANNUAL' AND EXTRACT(MONTH FROM s.special_date) = EXTRACT(MONTH FROM v.scheduled_at) AND EXTRACT(DAY FROM s.special_date) = EXTRACT(DAY FROM v.scheduled_at)) OR
-          (s.recurrence = 'MONTHLY' AND EXTRACT(DAY FROM s.special_date) = EXTRACT(DAY FROM v.scheduled_at)))
-        WHERE v.couple_id = :coupleId AND v.scheduled_at <= :today AND (CAST(:specialDateId AS bigint) IS NULL OR s.id = :specialDateId)
+        WHERE v.couple_id = :coupleId AND v.scheduled_at <= :today
+      ), event_rows AS (
+        SELECT s.id AS special_date_id, e.occurred_on, e.section, e.experience_id, e.image_url
+        FROM experience_events e JOIN special_dates s
+          ON s.couple_id = e.couple_id AND s.recurrence = 'ONCE' AND s.special_date = e.occurred_on
+        WHERE CAST(:specialDateId AS bigint) IS NULL OR s.id = :specialDateId
+        UNION ALL
+        SELECT s.id, e.occurred_on, e.section, e.experience_id, e.image_url
+        FROM experience_events e JOIN special_dates s
+          ON s.couple_id = e.couple_id AND s.recurrence = 'ANNUAL'
+          AND EXTRACT(MONTH FROM s.special_date) = EXTRACT(MONTH FROM e.occurred_on)
+          AND EXTRACT(DAY FROM s.special_date) = EXTRACT(DAY FROM e.occurred_on)
+        WHERE CAST(:specialDateId AS bigint) IS NULL OR s.id = :specialDateId
+        UNION ALL
+        SELECT s.id, e.occurred_on, e.section, e.experience_id, e.image_url
+        FROM experience_events e JOIN special_dates s
+          ON s.couple_id = e.couple_id AND s.recurrence = 'MONTHLY'
+          AND EXTRACT(DAY FROM s.special_date) = EXTRACT(DAY FROM e.occurred_on)
+        WHERE CAST(:specialDateId AS bigint) IS NULL OR s.id = :specialDateId
       ), event_summary AS (
         SELECT special_date_id, occurred_on, COUNT(*) AS experience_count,
           (ARRAY_AGG(image_url ORDER BY section, experience_id) FILTER (WHERE image_url IS NOT NULL))[1] AS image_url
