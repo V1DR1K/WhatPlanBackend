@@ -193,6 +193,57 @@ class PhotoStorageProcessingTest {
         }
     }
 
+    @Test
+    void keepsProcessingSlotUntilInterruptedDecoderHasTerminated() throws Exception {
+        CountDownLatch decoderTerminationWaitEntered = new CountDownLatch(1);
+        CountDownLatch allowDecoderTermination = new CountDownLatch(1);
+        Process interruptedDecoder = mock(Process.class);
+        when(interruptedDecoder.waitFor(1, TimeUnit.SECONDS)).thenThrow(new InterruptedException("Simulated cancellation"));
+        when(interruptedDecoder.isAlive()).thenReturn(true);
+        when(interruptedDecoder.destroyForcibly()).thenReturn(interruptedDecoder);
+        when(interruptedDecoder.waitFor()).thenAnswer(invocation -> {
+            decoderTerminationWaitEntered.countDown();
+            if (!allowDecoderTermination.await(2, TimeUnit.SECONDS)) {
+                throw new InterruptedException("Timed out waiting for decoder termination");
+            }
+            return 137;
+        });
+        Process alreadyFinishedDecoder = mock(Process.class);
+        when(alreadyFinishedDecoder.waitFor(1, TimeUnit.SECONDS)).thenReturn(true);
+        when(alreadyFinishedDecoder.exitValue()).thenReturn(1);
+
+        java.util.concurrent.atomic.AtomicInteger decoderStarts = new java.util.concurrent.atomic.AtomicInteger();
+        PhotoStorage storage = new PhotoStorage(1024 * 1024, 1024 * 1024L, 100_000, 8_000, 1, 1,
+                (input, output) -> decoderStarts.getAndIncrement() == 0 ? interruptedDecoder : alreadyFinishedDecoder);
+        byte[] validWebpHeader = webp("VP8X", extendedHeader(1, 1));
+
+        try (var executor = Executors.newSingleThreadExecutor()) {
+            var firstUpload = executor.submit(() -> {
+                try {
+                    storage.store(new Item(), upload(validWebpHeader));
+                    throw new AssertionError("Interrupted image processing must fail");
+                } catch (IOException expected) {
+                    return Thread.currentThread().isInterrupted();
+                }
+            });
+            assertTrue(decoderTerminationWaitEntered.await(2, TimeUnit.SECONDS));
+
+            ResponseStatusException busy = assertThrows(ResponseStatusException.class,
+                    () -> storage.store(new Item(), upload(validWebpHeader)));
+            assertEquals(HttpStatus.SERVICE_UNAVAILABLE, busy.getStatusCode());
+            assertEquals(1, decoderStarts.get());
+
+            allowDecoderTermination.countDown();
+            assertTrue(firstUpload.get(2, TimeUnit.SECONDS), "The interrupt flag is restored after the child exits");
+            assertEquals(HttpStatus.BAD_REQUEST,
+                    assertThrows(ResponseStatusException.class,
+                            () -> storage.store(new Item(), upload(validWebpHeader))).getStatusCode());
+            assertEquals(2, decoderStarts.get(), "A later upload can start only after the child process is reaped");
+        } finally {
+            allowDecoderTermination.countDown();
+        }
+    }
+
     private static PhotoStorage storage(long maxDecodedBytes, long maxPixels, int maxDimension, int concurrency) {
         return storage(1024 * 1024, maxDecodedBytes, maxPixels, maxDimension, concurrency);
     }
