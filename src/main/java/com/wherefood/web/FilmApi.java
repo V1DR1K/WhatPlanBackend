@@ -130,7 +130,7 @@ public class FilmApi {
   @GetMapping(value = "/films/{id}/photo", produces = "image/webp") ResponseEntity<byte[]> photo(@PathVariable Long id, @RequestParam(defaultValue = "false") boolean thumbnail) {
    findFilm(id);
    FilmPhoto photo = filmPhotos.findByFilmIdAndCoupleId(id, CoupleContext.current()).orElseThrow(() -> notFound("Foto"));
-    return ResponseEntity.ok().cacheControl(CacheControl.noStore()).contentType(MediaType.valueOf("image/webp")).body(storage.bytes(thumbnail ? photo.thumbnailBase64 : photo.imageBase64));
+    return PrivateMediaResponse.webp(storage.bytes(thumbnail ? photo.thumbnailBase64 : photo.imageBase64));
   }
   @PostMapping("/films") @ResponseStatus(HttpStatus.CREATED) FilmDto add(@RequestBody @Valid FilmRequest request, @AuthenticationPrincipal User author) {
    return film(catalogService.create(request, author), true);

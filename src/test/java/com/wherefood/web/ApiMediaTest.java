@@ -46,10 +46,11 @@ class ApiMediaTest {
   when(items.findByIdAndCoupleId(42L, null)).thenReturn(Optional.of(item));
   when(photos.findByItemIdAndCoupleId(42L, null)).thenReturn(Optional.of(photo));
 
-   var response = new Api(null, null, null, null, null, items, photos, null, null, null, null, null, new PhotoStorage()).itemPhoto(42L, true);
+  var response = new Api(null, null, null, null, null, items, photos, null, null, null, null, null, new PhotoStorage()).itemPhoto(42L, true);
 
   assertEquals("image/webp", response.getHeaders().getContentType().toString());
   assertEquals("no-store", response.getHeaders().getCacheControl());
+  assertTrue(response.getHeaders().getVary().containsAll(java.util.List.of("Authorization", "Cookie")));
   assertArrayEquals(new byte[] {4, 5}, response.getBody());
   }
 

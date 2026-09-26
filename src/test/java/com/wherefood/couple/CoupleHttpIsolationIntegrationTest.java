@@ -319,6 +319,7 @@ class CoupleHttpIsolationIntegrationTest {
         ResponseEntity<byte[]> ownPhoto = getPhoto(fixture.placeB(), USER_B_AUTH_ID);
         assertThat(ownPhoto.getStatusCode().value()).isEqualTo(200);
         assertThat(ownPhoto.getHeaders().getCacheControl()).contains("no-store");
+        assertThat(ownPhoto.getHeaders().getVary()).contains("Authorization", "Cookie");
         assertThat(new String(ownPhoto.getBody(), StandardCharsets.UTF_8)).isEqualTo("private-photo-b");
 
         assertThat(putReview(fixture.placeA(), USER_A2_AUTH_ID, "Review from member two").getStatusCode().value())
@@ -331,6 +332,11 @@ class CoupleHttpIsolationIntegrationTest {
         assertThat(get("/api/places/" + fixture.placeA(), ADMIN_AUTH_ID, null).getStatusCode().value()).isEqualTo(404);
         assertThat(get("/api/places", ORPHAN_AUTH_ID, null).getBody()).doesNotContain("Private place A", "Private place B");
         assertThat(get("/api/places/" + fixture.placeA(), ORPHAN_AUTH_ID, null).getStatusCode().value()).isEqualTo(404);
+
+        ResponseEntity<String> leaveCouple = http.postForEntity(url("/api/couple/leave"),
+                new HttpEntity<>(authHeaders(USER_B_AUTH_ID)), String.class);
+        assertThat(leaveCouple.getStatusCode().value()).isEqualTo(204);
+        assertThat(getPhoto(fixture.placeB(), USER_B_AUTH_ID).getStatusCode().value()).isEqualTo(404);
 
         REDIS.stop();
         assertProblem(http.postForEntity(url("/api/auth/login"),

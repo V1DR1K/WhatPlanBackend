@@ -112,7 +112,7 @@ public class WhyFunActivityApi {
   @DeleteMapping("/activities/{id}") @ResponseStatus(HttpStatus.NO_CONTENT) void deleteActivity(@PathVariable Long id, @AuthenticationPrincipal User author) { activityService.delete(id, author); }
   @GetMapping(value = "/activities/{id}/photo", produces = "image/webp") ResponseEntity<byte[]> activityPhoto(@PathVariable Long id, @RequestParam(defaultValue = "false") boolean thumbnail) {
    WhyFunVenue activity = findActivity(id); WhyFunVenuePhoto photo = profilePhoto(activity).orElseThrow(() -> notFound("Foto"));
-    return ResponseEntity.ok().cacheControl(CacheControl.noStore()).contentType(MediaType.valueOf("image/webp")).body(storage.bytes(thumbnail ? photo.thumbnailBase64 : photo.imageBase64));
+    return PrivateMediaResponse.webp(storage.bytes(thumbnail ? photo.thumbnailBase64 : photo.imageBase64));
   }
   @PostMapping(value = "/activities/{id}/photo", consumes = MediaType.MULTIPART_FORM_DATA_VALUE) ActivityDto uploadActivityPhoto(@PathVariable Long id, @RequestPart("file") MultipartFile file, @AuthenticationPrincipal User author) throws IOException {
    return activity(mediaService.uploadVenuePhoto(id, file, author));
@@ -138,7 +138,7 @@ public class WhyFunActivityApi {
   mediaService.deleteVisitPhoto(photoId, author);
  }
  @GetMapping(value = "/activity-visit-photos/{photoId}", produces = "image/webp") ResponseEntity<byte[]> photo(@PathVariable Long photoId, @RequestParam(defaultValue = "false") boolean thumbnail) {
-   WhyFunVisitPhoto photo = photos.findByIdAndCoupleId(photoId, CoupleContext.current()).orElseThrow(() -> notFound("Foto")); return ResponseEntity.ok().cacheControl(CacheControl.noStore()).contentType(MediaType.valueOf("image/webp")).body(storage.bytes(thumbnail ? photo.thumbnailBase64 : photo.imageBase64));
+   WhyFunVisitPhoto photo = photos.findByIdAndCoupleId(photoId, CoupleContext.current()).orElseThrow(() -> notFound("Foto")); return PrivateMediaResponse.webp(storage.bytes(thumbnail ? photo.thumbnailBase64 : photo.imageBase64));
  }
 
  @PostMapping("/activity-visits/{id}/reviews") @ResponseStatus(HttpStatus.CREATED) ActivityReviewDto addReview(@PathVariable Long id, @RequestBody @Valid ActivityReviewRequest request, @AuthenticationPrincipal User author) {

@@ -146,7 +146,7 @@ public class Api {
   @GetMapping("/places/{id}") PlaceDto getPlace(@PathVariable Long id) { Place place = active(places.findDetailedByIdAndCoupleId(id, CoupleContext.current()).orElseThrow(() -> notFound("Lugar"))); return place(place, placeSummaries(List.of(place)).get(id)); }
  @GetMapping(value = "/places/{id}/photo", produces = "image/webp") ResponseEntity<byte[]> placePhoto(@PathVariable Long id, @RequestParam(defaultValue = "false") boolean thumbnail) {
   active(places.findByIdAndCoupleId(id, CoupleContext.current()).orElseThrow(() -> notFound("Lugar"))); PlacePhoto photo = placePhotos.findByPlaceIdAndCoupleId(id, CoupleContext.current()).orElseThrow(() -> notFound("Foto"));
-    return ResponseEntity.ok().cacheControl(CacheControl.noStore()).contentType(MediaType.valueOf("image/webp")).body(storage.bytes(thumbnail ? photo.thumbnailBase64 : photo.imageBase64));
+    return PrivateMediaResponse.webp(storage.bytes(thumbnail ? photo.thumbnailBase64 : photo.imageBase64));
  }
 
  @PutMapping("/places/{id}/review") PlaceReviewDto saveReview(@PathVariable Long id, @RequestBody @jakarta.validation.Valid PlaceReviewRequest request, @AuthenticationPrincipal User author) {
@@ -205,7 +205,7 @@ public class Api {
   @PostMapping(value = "/items/{id}/photo", consumes = MediaType.MULTIPART_FORM_DATA_VALUE) ItemDto upload(@PathVariable Long id, @RequestPart("file") MultipartFile file, @AuthenticationPrincipal User author) throws IOException { ItemPhoto photo = mediaService.uploadItemPhoto(id, file, author); return item(photo.item, photo); }
   @GetMapping(value = "/items/{id}/photo", produces = "image/webp") ResponseEntity<byte[]> itemPhoto(@PathVariable Long id, @RequestParam(defaultValue = "false") boolean thumbnail) {
    active(items.findByIdAndCoupleId(id, CoupleContext.current()).orElseThrow(() -> notFound("Ítem"))); ItemPhoto photo = photos.findByItemIdAndCoupleId(id, CoupleContext.current()).orElseThrow(() -> notFound("Foto"));
-   return ResponseEntity.ok().cacheControl(CacheControl.noStore()).contentType(MediaType.valueOf("image/webp")).body(storage.bytes(thumbnail ? photo.thumbnailBase64 : photo.imageBase64));
+   return PrivateMediaResponse.webp(storage.bytes(thumbnail ? photo.thumbnailBase64 : photo.imageBase64));
   }
 
   @PostMapping(value = "/place-visits/{id}/photos", consumes = MediaType.MULTIPART_FORM_DATA_VALUE) PlaceVisitDto uploadVisitPhoto(@PathVariable Long id, @RequestPart("file") MultipartFile file, @AuthenticationPrincipal User author) throws IOException {
@@ -219,7 +219,7 @@ public class Api {
   }
   @GetMapping(value = "/place-visit-photos/{photoId}", produces = "image/webp") ResponseEntity<byte[]> visitPhoto(@PathVariable Long photoId, @RequestParam(defaultValue = "false") boolean thumbnail) {
    PlaceVisitPhoto photo = visitPhotos.findByIdAndCoupleId(photoId, CoupleContext.current()).orElseThrow(() -> notFound("Foto"));
-    return ResponseEntity.ok().cacheControl(CacheControl.noStore()).contentType(MediaType.valueOf("image/webp")).body(storage.bytes(thumbnail ? photo.thumbnailBase64 : photo.imageBase64));
+    return PrivateMediaResponse.webp(storage.bytes(thumbnail ? photo.thumbnailBase64 : photo.imageBase64));
   }
   @PostMapping("/place-visits/{id}/reviews") @ResponseStatus(HttpStatus.CREATED) PlaceVisitReviewDto addVisitReview(@PathVariable Long id, @RequestBody @jakarta.validation.Valid PlaceVisitReviewRequest request, @AuthenticationPrincipal User author) {
    return visitReview(visitReviewService.create(id, request, author));
