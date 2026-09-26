@@ -30,6 +30,53 @@ class WhyFunApiTest {
  void clearCoupleContext() { CoupleContext.clear(); }
 
  @Test
+ void paginatesActivityVisitsWithStableKeysetAndPreservesLegacyNullDates() {
+  UUID coupleId = UUID.randomUUID();
+  CoupleContext.set(coupleId);
+  WhyFunVenues activities = mock(WhyFunVenues.class);
+  WhyFunVisits visits = mock(WhyFunVisits.class);
+  WhyFunVisitPhotos photos = mock(WhyFunVisitPhotos.class);
+  WhyFunVisitReviews reviews = mock(WhyFunVisitReviews.class);
+  User member = new User(); member.id = 9L; member.username = "member";
+  WhyFunCategory category = category(1L, "Arte");
+  WhyFunCategory subcategory = category(2L, "Museos"); subcategory.parent = category;
+  WhyFunVenue venue = activity(4L, "Museo", category, subcategory, member, "2026-09-20T00:00:00Z");
+  when(activities.findDetailedByIdAndCoupleId(4L, coupleId)).thenReturn(Optional.of(venue));
+  when(reviews.ratingsByActivityIdInAndCoupleId(any(), org.mockito.ArgumentMatchers.eq(coupleId)))
+          .thenReturn(List.of());
+  when(visits.countsByActivityIdInAndCoupleId(any(), org.mockito.ArgumentMatchers.eq(coupleId)))
+          .thenReturn(List.of());
+
+  WhyFunVisit newestLegacy = visit(12L, venue, member, null);
+  WhyFunVisit olderLegacy = visit(11L, venue, member, null);
+  when(visits.findActivityHistoryPageIds(org.mockito.ArgumentMatchers.eq(4L),
+          org.mockito.ArgumentMatchers.eq(coupleId), org.mockito.ArgumentMatchers.isNull(),
+          org.mockito.ArgumentMatchers.isNull(), org.mockito.ArgumentMatchers.any(
+                  org.springframework.data.domain.Pageable.class))).thenReturn(List.of(12L, 11L));
+  LocalDateIdCursor next = new LocalDateIdCursor(null, 12L);
+  when(visits.findActivityHistoryPageIds(org.mockito.ArgumentMatchers.eq(4L),
+          org.mockito.ArgumentMatchers.eq(coupleId), org.mockito.ArgumentMatchers.isNull(),
+          org.mockito.ArgumentMatchers.eq(12L), org.mockito.ArgumentMatchers.any(
+                  org.springframework.data.domain.Pageable.class))).thenReturn(List.of(11L));
+  when(visits.findAllByIdInAndVenueIdAndCoupleId(List.of(12L), 4L, coupleId)).thenReturn(List.of(newestLegacy));
+  when(visits.findAllByIdInAndVenueIdAndCoupleId(List.of(11L), 4L, coupleId)).thenReturn(List.of(olderLegacy));
+  when(photos.findByVisitIdAndCoupleIdOrderByPositionAscIdAsc(any(), org.mockito.ArgumentMatchers.eq(coupleId)))
+          .thenReturn(List.of());
+  when(reviews.findByVisitIdAndCoupleIdOrderByAuthorUsername(any(), org.mockito.ArgumentMatchers.eq(coupleId)))
+          .thenReturn(List.of());
+  when(reviews.authorsByVisitIdAndCoupleId(any(), org.mockito.ArgumentMatchers.eq(coupleId))).thenReturn(List.of());
+
+  WhyFunActivityApi api = new WhyFunActivityApi(null, activities, null, visits, photos, reviews, null);
+  KeysetSlice<ActivityVisitDto> first = api.listVisits(4L, null, 1);
+  KeysetSlice<ActivityVisitDto> second = api.listVisits(4L, first.nextCursor(), 1);
+
+  assertEquals(List.of(12L), first.content().stream().map(ActivityVisitDto::id).toList());
+  assertEquals(next.encode(), first.nextCursor());
+  assertEquals(List.of(11L), second.content().stream().map(ActivityVisitDto::id).toList());
+  assertEquals(null, second.nextCursor());
+ }
+
+ @Test
   void separatesUpcomingAndPastPlans() throws Exception {
    Method matcher = WhyFunApi.class.getDeclaredMethod("matchesTimeline", WhyFunVenue.class, String.class, LocalDate.class);
   matcher.setAccessible(true);
@@ -156,4 +203,5 @@ class WhyFunApiTest {
   private static PhotoMetadata photo(Long id, Integer width, Integer height) { return new PhotoMetadata() { public Long getId() { return id; } public Integer getWidth() { return width; } public Integer getHeight() { return height; } public Instant getCreatedAt() { return Instant.parse("2026-07-23T00:00:00Z"); } }; }
   private static ActivityRating rating(Long activityId, Double rating) { return new ActivityRating() { public Long getActivityId() { return activityId; } public Double getRating() { return rating; } }; }
   private static ActivityVisitCount count(Long activityId, Long visitCount) { return new ActivityVisitCount() { public Long getActivityId() { return activityId; } public Long getVisitCount() { return visitCount; } }; }
+  private static WhyFunVisit visit(Long id, WhyFunVenue venue, User member, LocalDate scheduledAt) { WhyFunVisit visit = new WhyFunVisit(); visit.id = id; visit.venue = venue; visit.createdBy = visit.updatedBy = member; visit.scheduledAt = scheduledAt; visit.createdAt = visit.updatedAt = Instant.parse("2026-09-26T00:00:00Z"); return visit; }
 }

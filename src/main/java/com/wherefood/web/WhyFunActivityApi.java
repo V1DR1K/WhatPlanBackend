@@ -118,7 +118,29 @@ public class WhyFunActivityApi {
    return activity(mediaService.uploadVenuePhoto(id, file, author));
   }
 
- @GetMapping("/activities/{id}/visits") @Transactional(readOnly = true) List<ActivityVisitDto> listVisits(@PathVariable Long id) { WhyFunVenue activity = findActivity(id); ActivityDto dto = activity(activity); return visits.findByVenueIdAndCoupleIdOrderByScheduledAtDescIdDesc(id, CoupleContext.current()).stream().map(visit -> visit(visit, dto)).toList(); }
+ @GetMapping("/activities/{id}/visits") @Transactional(readOnly = true)
+ KeysetSlice<ActivityVisitDto> listVisits(@PathVariable Long id,
+         @RequestParam(required = false) String cursor,
+         @RequestParam(defaultValue = "10") int size) {
+  WhyFunVenue activity = findActivity(id);
+  LocalDateIdCursor position = LocalDateIdCursor.decode(cursor);
+  int limit = Math.max(1, Math.min(size, 30));
+  UUID coupleId = CoupleContext.current();
+  List<Long> ids = visits.findActivityHistoryPageIds(id, coupleId,
+          position == null ? null : position.date(), position == null ? null : position.id(),
+          org.springframework.data.domain.PageRequest.of(0, limit + 1));
+  boolean hasMore = ids.size() > limit;
+  List<Long> pageIds = ids.stream().limit(limit).toList();
+  Map<Long, WhyFunVisit> byId = pageIds.isEmpty() ? Map.of() : visits
+          .findAllByIdInAndVenueIdAndCoupleId(pageIds, id, coupleId).stream()
+          .collect(java.util.stream.Collectors.toMap(value -> value.id, value -> value));
+  List<WhyFunVisit> page = pageIds.stream().map(byId::get).filter(Objects::nonNull).toList();
+  ActivityDto activityDto = activity(activity);
+  List<ActivityVisitDto> content = page.stream().map(value -> visit(value, activityDto)).toList();
+  String nextCursor = hasMore && !page.isEmpty()
+          ? new LocalDateIdCursor(page.getLast().scheduledAt, page.getLast().id).encode() : null;
+  return new KeysetSlice<>(content, nextCursor);
+ }
   @PostMapping("/activities/{id}/visits") @ResponseStatus(HttpStatus.CREATED) ActivityVisitDto addVisit(@PathVariable Long id, @RequestBody @Valid ActivityVisitRequest request, @AuthenticationPrincipal User author) {
    return visit(visitService.create(id, request, author));
  }

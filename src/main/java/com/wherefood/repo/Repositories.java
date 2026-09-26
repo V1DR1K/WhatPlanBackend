@@ -629,10 +629,12 @@ public final class Repositories {
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("select visit from WhyFunVisit visit where visit.id = :id and visit.coupleId = :coupleId")
     Optional<WhyFunVisit> findLockedByIdAndCoupleId(@Param("id") Long id, @Param("coupleId") java.util.UUID coupleId);
-    @EntityGraph(attributePaths = {"venue", "venue.category", "venue.subcategory", "venue.createdBy", "venue.updatedBy", "venue.schedules", "createdBy", "updatedBy"}) List<WhyFunVisit> findByVenueIdOrderByScheduledAtDescIdDesc(Long venueId);
-    @EntityGraph(attributePaths = {"venue", "venue.category", "venue.subcategory", "venue.createdBy", "venue.updatedBy", "venue.schedules", "createdBy", "updatedBy"}) List<WhyFunVisit> findByVenueIdAndCoupleIdOrderByScheduledAtDescIdDesc(Long venueId, java.util.UUID coupleId);
+    @Query("select visit.id from WhyFunVisit visit where visit.venue.id = :venueId and visit.coupleId = :coupleId and ((:cursorDate is null and :cursorId is null) or (:cursorDate is not null and (visit.scheduledAt < :cursorDate or (visit.scheduledAt = :cursorDate and visit.id < :cursorId) or visit.scheduledAt is null)) or (:cursorDate is null and :cursorId is not null and visit.scheduledAt is null and visit.id < :cursorId)) order by visit.scheduledAt desc nulls last, visit.id desc")
+    List<Long> findActivityHistoryPageIds(@Param("venueId") Long venueId, @Param("coupleId") java.util.UUID coupleId,
+            @Param("cursorDate") LocalDate cursorDate, @Param("cursorId") Long cursorId, Pageable pageable);
+    @EntityGraph(attributePaths = {"venue", "venue.category", "venue.subcategory", "venue.createdBy", "venue.updatedBy", "venue.schedules", "createdBy", "updatedBy"})
+    List<WhyFunVisit> findAllByIdInAndVenueIdAndCoupleId(Collection<Long> ids, Long venueId, java.util.UUID coupleId);
     @EntityGraph(attributePaths = {"venue", "venue.category", "venue.subcategory", "venue.createdBy", "venue.updatedBy", "venue.schedules", "createdBy", "updatedBy"}) Optional<WhyFunVisit> findDetailedByIdAndCoupleId(Long id, java.util.UUID coupleId);
-      @EntityGraph(attributePaths = {"venue", "venue.category", "venue.subcategory", "venue.createdBy", "venue.updatedBy", "venue.schedules", "createdBy", "updatedBy"}) List<WhyFunVisit> findAllByCoupleId(java.util.UUID coupleId);
    @EntityGraph(attributePaths = {"venue", "venue.category", "venue.subcategory", "venue.createdBy", "venue.updatedBy", "venue.schedules", "createdBy", "updatedBy"}) List<WhyFunVisit> findByCoupleIdAndScheduledAtOrderByScheduledAtDescIdDesc(java.util.UUID coupleId, LocalDate scheduledAt);
      @Query("select v.venue.id as activityId, count(v) as visitCount from WhyFunVisit v where v.venue.id in :activityIds group by v.venue.id") List<ActivityVisitCount> countsByActivityIdIn(@Param("activityIds") Collection<Long> activityIds);
      @Query("select v.venue.id as activityId, count(v) as visitCount from WhyFunVisit v where v.venue.id in :activityIds and v.coupleId=:coupleId group by v.venue.id") List<ActivityVisitCount> countsByActivityIdInAndCoupleId(@Param("activityIds") Collection<Long> activityIds, @Param("coupleId") java.util.UUID coupleId);

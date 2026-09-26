@@ -276,6 +276,46 @@ class CoupleHttpIsolationIntegrationTest {
         assertCoupleScopedDetail("/api/why-fun/activities/", fixture.activityA(), fixture.activityB(), "Museo pareja A");
         assertCoupleScopedDetail("/api/why-fun/activity-visits/", fixture.activityVisitA(), fixture.activityVisitB(), "Museo pareja A");
 
+        long previousActivityVisitA;
+        long newestActivityVisitA;
+        try (Connection connection = adminConnection()) {
+            long author = scalarLong(connection, "select id from users where username = 'http-user-a1'");
+            previousActivityVisitA = insertActivityVisit(connection, fixture.activityA(), author, COUPLE_A_ID);
+            newestActivityVisitA = insertActivityVisit(connection, fixture.activityA(), author, COUPLE_A_ID);
+        }
+        String activityVisitsPath = "/api/why-fun/activities/" + fixture.activityA() + "/visits";
+        ResponseEntity<String> firstActivityVisitPage = get(activityVisitsPath + "?size=1", USER_A1_AUTH_ID, null);
+        JsonNode firstActivityVisitPageBody = objectMapper.readTree(firstActivityVisitPage.getBody());
+        assertThat(firstActivityVisitPage.getStatusCode().value()).isEqualTo(200);
+        assertThat(firstActivityVisitPageBody.path("content").get(0).path("id").asLong())
+                .isEqualTo(newestActivityVisitA);
+        String activityVisitsCursor = firstActivityVisitPageBody.path("nextCursor").asText();
+        assertThat(activityVisitsCursor).isNotBlank();
+        ResponseEntity<String> secondActivityVisitPage = get(activityVisitsPath + "?size=1&cursor="
+                + activityVisitsCursor, USER_A1_AUTH_ID, null);
+        JsonNode secondActivityVisitPageBody = objectMapper.readTree(secondActivityVisitPage.getBody());
+        assertThat(secondActivityVisitPageBody.path("content").get(0).path("id").asLong())
+                .isEqualTo(previousActivityVisitA);
+        assertThat(secondActivityVisitPageBody.path("content").get(0).path("activity").path("name").asText())
+                .isEqualTo("Museo pareja A");
+        String secondCursor = secondActivityVisitPageBody.path("nextCursor").asText();
+        ResponseEntity<String> finalActivityVisitPage = get(activityVisitsPath + "?size=1&cursor="
+                + secondCursor, USER_A1_AUTH_ID, null);
+        JsonNode finalActivityVisitPageBody = objectMapper.readTree(finalActivityVisitPage.getBody());
+        assertThat(finalActivityVisitPageBody.path("content").get(0).path("id").asLong())
+                .isEqualTo(fixture.activityVisitA());
+        assertThat(finalActivityVisitPageBody.path("nextCursor").isNull()).isTrue();
+
+        ResponseEntity<String> activityVisitsB = get("/api/why-fun/activities/" + fixture.activityB()
+                + "/visits?size=1", USER_B_AUTH_ID, null);
+        JsonNode activityVisitsBBody = objectMapper.readTree(activityVisitsB.getBody());
+        assertThat(activityVisitsB.getStatusCode().value()).isEqualTo(200);
+        assertThat(activityVisitsBBody.path("content").get(0).path("id").asLong())
+                .isEqualTo(fixture.activityVisitB());
+        assertThat(activityVisitsBBody.path("nextCursor").isNull()).isTrue();
+        assertThat(activityVisitsB.getBody()).contains("Museo pareja B").doesNotContain("Museo pareja A");
+        assertProblem(get(activityVisitsPath + "?cursor=not-a-cursor", USER_A1_AUTH_ID, null), 400, "INVALID_REQUEST");
+
         ResponseEntity<String> plansForA = get("/api/why-fun/plans?categoryId=" + fixture.activityCategoryId()
                 + "&subcategoryId=" + fixture.activitySubcategoryId() + "&timeline=UNSCHEDULED&size=30",
                 USER_A1_AUTH_ID, null);
