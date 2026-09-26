@@ -72,6 +72,20 @@ class PhotoStorageProcessingTest {
     }
 
     @Test
+    void rejectsGifContentEvenWhenClientLabelsItAsPng() throws Exception {
+        BufferedImage image = new BufferedImage(2, 2, BufferedImage.TYPE_INT_RGB);
+        ByteArrayOutputStream encodedGif = new ByteArrayOutputStream();
+        assertTrue(ImageIO.write(image, "gif", encodedGif));
+        MultipartFile disguisedGif = new MockMultipartFile("file", "photo.png", "image/png", encodedGif.toByteArray());
+        PhotoStorage storage = storage(1024 * 1024, 1024 * 1024L, 100, 100);
+
+        ResponseStatusException error = assertThrows(ResponseStatusException.class,
+                () -> storage.store(new Item(), disguisedGif));
+
+        assertEquals(HttpStatus.BAD_REQUEST, error.getStatusCode());
+    }
+
+    @Test
     void rejectsOversizedExtendedWebpDimensionsBeforeLaunchingDecoder() {
         PhotoStorage storage = storage(50L * 1024 * 1024, 25_000_000L, 8_000, 2);
 

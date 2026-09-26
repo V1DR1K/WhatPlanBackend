@@ -160,6 +160,9 @@ public class PhotoStorage {
       ImageReader reader = readers.next();
       try {
        reader.setInput(input, true, true);
+       if (!isSupportedRasterFormat(reader.getFormatName())) {
+        throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "El formato de imagen no está permitido");
+       }
        validateDimensions(reader.getWidth(0), reader.getHeight(0));
        return reader.read(0);
       } catch (IOException exception) {
@@ -190,6 +193,11 @@ public class PhotoStorage {
     Files.deleteIfExists(input);
     Files.deleteIfExists(output);
    }
+  }
+
+  private static boolean isSupportedRasterFormat(String formatName) {
+   return "jpeg".equalsIgnoreCase(formatName) || "jpg".equalsIgnoreCase(formatName)
+           || "png".equalsIgnoreCase(formatName);
   }
 
   private void validateDimensions(BufferedImage image) {
