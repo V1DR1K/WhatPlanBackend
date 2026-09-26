@@ -10,6 +10,9 @@ import static org.mockito.Mockito.when;
 import com.wherefood.domain.Place;
 import com.wherefood.domain.PlaceVisit;
 import com.wherefood.domain.PlaceVisitPhoto;
+import com.wherefood.domain.Film;
+import com.wherefood.domain.FilmPhoto;
+import com.wherefood.domain.FilmView;
 import com.wherefood.domain.SpecialDate;
 import com.wherefood.domain.SpecialDateOccurrence;
 import com.wherefood.domain.SpecialDateRecurrence;
@@ -100,6 +103,29 @@ class WhenDatesApiTest {
   assertEquals("/place-visit-photos/24", entry.sourcePhotos().getFirst().url());
   assertEquals("/place-visit-photos/25?thumbnail=true", entry.sourcePhotos().get(1).thumbnailUrl());
   verify(visits).findByCoupleIdAndVisitedOnOrderByVisitedOnDescIdDesc(null, visit.visitedOn);
+ }
+
+ @Test
+ void versionsMutableFilmPhotoUrlsInTimelineAndSourcePhotos() {
+  SpecialDates specialDates = mock(SpecialDates.class);
+  SpecialDate specialDate = new SpecialDate(); specialDate.id = 3L; specialDate.label = "Aniversario"; specialDate.date = LocalDate.of(2020, 2, 14); specialDate.recurrence = SpecialDateRecurrence.ANNUAL;
+  LocalDate watchedOn = LocalDate.of(2026, 2, 14);
+  Film film = new Film(); film.id = 20L; film.title = "Película privada";
+  FilmView view = new FilmView(); view.id = 21L; view.film = film; view.watchedOn = watchedOn;
+  FilmPhoto photo = new FilmPhoto(); photo.id = 55L; photo.width = 1200; photo.height = 1800;
+  FilmViews filmViews = mock(FilmViews.class); FilmPhotos filmPhotos = mock(FilmPhotos.class);
+  SpecialDateOccurrences occurrences = mock(SpecialDateOccurrences.class);
+  when(specialDates.findByIdAndCoupleId(3L, null)).thenReturn(Optional.of(specialDate));
+  when(occurrences.findBySpecialDateIdAndOccurredOnAndCoupleId(3L, watchedOn, null)).thenReturn(Optional.empty());
+  when(filmViews.findByCoupleIdAndWatchedOnOrderByWatchedOnDescIdDesc(null, watchedOn)).thenReturn(List.of(view));
+  when(filmPhotos.findByFilmIdAndCoupleId(20L, null)).thenReturn(Optional.of(photo));
+  WhenDatesApi api = new WhenDatesApi(specialDates, occurrences, mock(SpecialDateOccurrenceComments.class), mock(SpecialDateOccurrencePhotos.class), mock(PlaceVisits.class), filmViews, mock(Cookings.class), mock(WhyFunVisits.class), mock(PlacePhotos.class), mock(PlaceVisitPhotos.class), filmPhotos, mock(RecipePhotos.class), mock(WhyFunVenuePhotos.class), mock(WhyFunVisitPhotos.class), mock(PhotoStorage.class), mock(CoupleMembers.class));
+
+  WhenDateEntryDto entry = api.occurrence(3L, watchedOn).entries().getFirst();
+
+  assertEquals("/films/20/photo?thumbnail=true&v=55", entry.imageUrl());
+  assertEquals("/films/20/photo?v=55", entry.sourcePhotos().getFirst().url());
+  assertEquals("/films/20/photo?thumbnail=true&v=55", entry.sourcePhotos().getFirst().thumbnailUrl());
  }
 
  private static WhenDateSummaryProjection summary(Long id, String label, String recurrence, LocalDate date, Long count, String imageUrl) {
