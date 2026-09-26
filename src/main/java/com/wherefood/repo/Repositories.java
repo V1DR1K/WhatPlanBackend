@@ -89,6 +89,9 @@ public final class Repositories {
  }
   public interface HighlightTags extends JpaRepository<HighlightTag, Long> { List<HighlightTag> findAllByOrderByNameAsc(); }
   public interface SpecialDates extends CoupleScopedRepository<SpecialDate> {
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("select specialDate from SpecialDate specialDate where specialDate.id = :id and specialDate.coupleId = :coupleId")
+    Optional<SpecialDate> findLockedByIdAndCoupleId(@Param("id") Long id, @Param("coupleId") java.util.UUID coupleId);
     List<SpecialDate> findAllByCoupleIdOrderByDateAscLabelAscIdAsc(java.util.UUID coupleId);
 
     @Query(value = """
@@ -288,6 +291,9 @@ public final class Repositories {
   }
 
      public interface PlaceVisits extends CoupleScopedRepository<PlaceVisit> {
+        @Lock(LockModeType.PESSIMISTIC_WRITE)
+        @Query("select visit from PlaceVisit visit where visit.id = :id and visit.coupleId = :coupleId")
+        Optional<PlaceVisit> findLockedByIdAndCoupleId(@Param("id") Long id, @Param("coupleId") java.util.UUID coupleId);
         @EntityGraph(attributePaths = {"place", "createdBy", "updatedBy"}) List<PlaceVisit> findAllByCoupleId(java.util.UUID coupleId);
    @EntityGraph(attributePaths = {"place", "createdBy", "updatedBy"}) List<PlaceVisit> findByPlaceIdOrderByVisitedOnDescIdDesc(Long placeId);
         @Query(value = "select v.id from place_visits v where v.place_id = :placeId and v.couple_id = :coupleId order by v.visited_on desc, v.id desc limit :limit offset :offset", nativeQuery = true)
@@ -502,6 +508,9 @@ public final class Repositories {
   }
 
   public interface WhyFunVenues extends CoupleScopedRepository<WhyFunVenue> {
+     @Lock(LockModeType.PESSIMISTIC_WRITE)
+     @Query("select venue from WhyFunVenue venue where venue.id = :id and venue.coupleId = :coupleId")
+     Optional<WhyFunVenue> findLockedByIdAndCoupleId(@Param("id") Long id, @Param("coupleId") java.util.UUID coupleId);
      @EntityGraph(attributePaths = {"category", "subcategory", "createdBy", "updatedBy", "schedules"}) List<WhyFunVenue> findAllByCoupleId(java.util.UUID coupleId);
    @Query(value = """
            select venue.id
@@ -617,6 +626,9 @@ public final class Repositories {
    }
 
     public interface WhyFunVisits extends CoupleScopedRepository<WhyFunVisit> {
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("select visit from WhyFunVisit visit where visit.id = :id and visit.coupleId = :coupleId")
+    Optional<WhyFunVisit> findLockedByIdAndCoupleId(@Param("id") Long id, @Param("coupleId") java.util.UUID coupleId);
     @EntityGraph(attributePaths = {"venue", "venue.category", "venue.subcategory", "venue.createdBy", "venue.updatedBy", "venue.schedules", "createdBy", "updatedBy"}) List<WhyFunVisit> findByVenueIdOrderByScheduledAtDescIdDesc(Long venueId);
     @EntityGraph(attributePaths = {"venue", "venue.category", "venue.subcategory", "venue.createdBy", "venue.updatedBy", "venue.schedules", "createdBy", "updatedBy"}) List<WhyFunVisit> findByVenueIdAndCoupleIdOrderByScheduledAtDescIdDesc(Long venueId, java.util.UUID coupleId);
     @EntityGraph(attributePaths = {"venue", "venue.category", "venue.subcategory", "venue.createdBy", "venue.updatedBy", "venue.schedules", "createdBy", "updatedBy"}) Optional<WhyFunVisit> findDetailedByIdAndCoupleId(Long id, java.util.UUID coupleId);

@@ -124,11 +124,13 @@ public class WhenDateMutationService {
     }
 
     private SpecialDateOccurrence ensureOccurrence(SpecialDate date, LocalDate occurredOn, User actor) {
-        validateOccurrence(date, occurredOn);
-        return occurrences.findDetailedBySpecialDateIdAndOccurredOnAndCoupleId(date.id, occurredOn, CoupleContext.current())
+        SpecialDate lockedDate = specialDates.findLockedByIdAndCoupleId(date.id, CoupleContext.current())
+                .orElseThrow(() -> notFound("Fecha especial"));
+        validateOccurrence(lockedDate, occurredOn);
+        return occurrences.findDetailedBySpecialDateIdAndOccurredOnAndCoupleId(lockedDate.id, occurredOn, CoupleContext.current())
                 .orElseGet(() -> {
                     SpecialDateOccurrence value = new SpecialDateOccurrence();
-                    value.specialDate = date;
+                    value.specialDate = lockedDate;
                     value.occurredOn = occurredOn;
                     value.createdBy = value.updatedBy = actor;
                     value.createdAt = value.updatedAt = Instant.now();

@@ -146,11 +146,15 @@ public class WhyFunMediaService {
     }
 
     private WhyFunVenue findVenue(Long id) {
+        venues.findLockedByIdAndCoupleId(id, CoupleContext.current())
+                .orElseThrow(() -> notFound("Actividad"));
         return venues.findDetailedByIdAndCoupleId(id, CoupleContext.current())
                 .orElseThrow(() -> notFound("Actividad"));
     }
 
     private WhyFunVisit findVisit(Long id) {
+        visits.findLockedByIdAndCoupleId(id, CoupleContext.current())
+                .orElseThrow(() -> notFound("Visita"));
         return visits.findDetailedByIdAndCoupleId(id, CoupleContext.current())
                 .orElseThrow(() -> notFound("Visita"));
     }

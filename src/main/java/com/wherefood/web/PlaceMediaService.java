@@ -135,6 +135,8 @@ public class PlaceMediaService {
     }
 
     private PlaceVisit activeVisit(Long id) {
+        visits.findLockedByIdAndCoupleId(id, CoupleContext.current())
+                .orElseThrow(() -> notFound("Visita"));
         return visits.findDetailedByIdAndCoupleId(id, CoupleContext.current())
                 .filter(value -> value.place.deactivatedAt == null)
                 .orElseThrow(() -> notFound("Visita"));

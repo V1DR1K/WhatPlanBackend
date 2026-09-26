@@ -9,7 +9,11 @@ import com.wherefood.couple.CoupleService;
 import com.wherefood.domain.Role;
 import com.wherefood.domain.User;
 import com.wherefood.repo.Repositories;
+import com.wherefood.web.PlaceMediaService;
+import com.wherefood.web.WhenDateMutationService;
+import com.wherefood.web.WhyFunMediaService;
 import io.jsonwebtoken.Jwts;
+import java.awt.image.BufferedImage;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
@@ -37,6 +41,7 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import javax.imageio.ImageIO;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.jpa.repository.Query;
@@ -59,6 +64,7 @@ import org.springframework.web.multipart.MaxUploadSizeExceededException;
 import org.springframework.web.server.ResponseStatusException;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
+import org.springframework.mock.web.MockMultipartFile;
 import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.containers.PostgreSQLContainer;
 import org.testcontainers.junit.jupiter.Container;
@@ -106,6 +112,15 @@ class CoupleHttpIsolationIntegrationTest {
 
     @Autowired
     private CoupleService coupleService;
+
+    @Autowired
+    private PlaceMediaService placeMediaService;
+
+    @Autowired
+    private WhyFunMediaService whyFunMediaService;
+
+    @Autowired
+    private WhenDateMutationService whenDateMutationService;
 
     @Autowired
     private Repositories.Users users;
@@ -631,6 +646,175 @@ class CoupleHttpIsolationIntegrationTest {
         }
     }
 
+    @Test
+    void concurrentGalleryUploadsRespectPerAggregatePhotoLimits() throws Exception {
+        InvitationRaceFixture pair = createAcceptedPair("media-gallery-limit-race");
+        User owner = pair.owner();
+        UUID coupleId = pair.coupleId();
+        long placeVisitId;
+        long activityId;
+        long activityVisitId;
+        long specialDateId;
+        LocalDate occurrenceDate = LocalDate.now(ZoneId.of("America/Argentina/Buenos_Aires"));
+
+        try (Connection connection = adminConnection()) {
+            long placeCategoryId = insertCategory(connection);
+            long placeId = insertPlace(connection, "Gallery quota place", placeCategoryId, owner.id, coupleId);
+            placeVisitId = insertSpecialDateAndVisit(connection, placeId, owner.id, coupleId,
+                    "Gallery quota place visit", occurrenceDate, "ONCE", occurrenceDate);
+            for (int index = 0; index < 3; index++) {
+                insertGalleryPhoto(connection, "place_visit_photos", "visit_id", placeVisitId,
+                        owner.id, coupleId, index);
+            }
+
+            String suffix = coupleId.toString().replace("-", "");
+            long categoryId = insertActivityCategory(connection, "Gallery quota " + suffix,
+                    "gallery-quota-" + suffix, null);
+            long subcategoryId = insertActivityCategory(connection, "Gallery quota sub " + suffix,
+                    "gallery-quota-sub-" + suffix, categoryId);
+            activityId = insertActivity(connection, "Gallery quota activity", categoryId,
+                    subcategoryId, owner.id, coupleId);
+            for (int index = 0; index < 11; index++) {
+                insertSinglePhoto(connection, "why_fun_venue_photos", "venue_id", activityId, coupleId);
+            }
+            activityVisitId = insertActivityVisit(connection, activityId, owner.id, coupleId);
+            for (int index = 0; index < 3; index++) {
+                insertGalleryPhoto(connection, "why_fun_visit_photos", "visit_id", activityVisitId,
+                        owner.id, coupleId, index);
+            }
+
+            try (PreparedStatement specialDate = connection.prepareStatement("""
+                    insert into special_dates(special_date, label, recurrence, couple_id)
+                    values (?, ?, 'ONCE', ?) returning id
+                    """)) {
+                specialDate.setObject(1, occurrenceDate);
+                specialDate.setString(2, "Gallery quota occurrence " + suffix);
+                specialDate.setObject(3, coupleId);
+                try (ResultSet result = specialDate.executeQuery()) {
+                    result.next();
+                    specialDateId = result.getLong(1);
+                }
+            }
+            long occurrenceId = insertOccurrence(connection, specialDateId, occurrenceDate, owner.id, coupleId);
+            for (int index = 0; index < 3; index++) {
+                insertGalleryPhoto(connection, "special_date_occurrence_photos", "occurrence_id",
+                        occurrenceId, owner.id, coupleId, index);
+            }
+        }
+
+        assertConcurrentGalleryLimit(coupleId, owner, "place_visits", placeVisitId,
+                "place_visit_photos", "visit_id", placeVisitId, 4,
+                file -> placeMediaService.uploadVisitPhoto(placeVisitId, file, owner));
+        assertConcurrentGalleryLimit(coupleId, owner, "why_fun_visits", activityVisitId,
+                "why_fun_visit_photos", "visit_id", activityVisitId, 4,
+                file -> whyFunMediaService.uploadVisitPhoto(activityVisitId, file, owner));
+        long occurrenceId = occurrenceIdFor(specialDateId, occurrenceDate, coupleId);
+        assertConcurrentGalleryLimit(coupleId, owner, "special_dates", specialDateId,
+                "special_date_occurrence_photos", "occurrence_id", occurrenceId, 4,
+                file -> whenDateMutationService.uploadPhoto(specialDateId, occurrenceDate, file, owner));
+        assertConcurrentGalleryLimit(coupleId, owner, "why_fun_venues", activityId,
+                "why_fun_venue_photos", "venue_id", activityId, 12,
+                file -> whyFunMediaService.uploadPlanPhoto(activityId, file, owner));
+    }
+
+    private void assertConcurrentGalleryLimit(UUID coupleId, User owner, String parentTable, long parentId,
+            String photoTable, String photoParentColumn, long photoParentId, int expectedPhotoCount,
+            GalleryUpload upload) throws Exception {
+        byte[] png = tinyPng();
+        ExecutorService executor = Executors.newFixedThreadPool(2);
+        CyclicBarrier start = new CyclicBarrier(2);
+        try (Connection blocker = adminConnection()) {
+            blocker.setAutoCommit(false);
+            try (PreparedStatement lock = blocker.prepareStatement(
+                    "select id from " + parentTable + " where id = ? for update")) {
+                lock.setLong(1, parentId);
+                try (ResultSet result = lock.executeQuery()) {
+                    assertThat(result.next()).isTrue();
+                }
+            }
+
+            CompletableFuture<Integer> first = uploadAsync(executor, start, coupleId, png, upload);
+            CompletableFuture<Integer> second = uploadAsync(executor, start, coupleId, png, upload);
+            awaitDatabaseLockWaiter(blocker);
+            blocker.commit();
+
+            assertThat(List.of(first.get(20, TimeUnit.SECONDS), second.get(20, TimeUnit.SECONDS)))
+                    .containsExactlyInAnyOrder(200, 409);
+            try (Connection verification = adminConnection(); PreparedStatement count = verification.prepareStatement(
+                    "select count(*) from " + photoTable + " where " + photoParentColumn + " = ? and couple_id = ?")) {
+                count.setLong(1, photoParentId);
+                count.setObject(2, coupleId);
+                try (ResultSet result = count.executeQuery()) {
+                    result.next();
+                    assertThat(result.getInt(1)).isEqualTo(expectedPhotoCount);
+                }
+            }
+        } finally {
+            executor.shutdownNow();
+            CoupleContext.clear();
+        }
+    }
+
+    private CompletableFuture<Integer> uploadAsync(ExecutorService executor, CyclicBarrier start,
+            UUID coupleId, byte[] png, GalleryUpload upload) {
+        return CompletableFuture.supplyAsync(() -> {
+            try {
+                start.await(10, TimeUnit.SECONDS);
+                CoupleContext.set(coupleId);
+                upload.upload(new MockMultipartFile("file", "tiny.png", "image/png", png));
+                return 200;
+            } catch (ResponseStatusException rejected) {
+                return rejected.getStatusCode().value();
+            } catch (Exception exception) {
+                throw new java.util.concurrent.CompletionException(exception);
+            } finally {
+                CoupleContext.clear();
+            }
+        }, executor);
+    }
+
+    private static byte[] tinyPng() throws IOException {
+        BufferedImage image = new BufferedImage(2, 2, BufferedImage.TYPE_INT_RGB);
+        ByteArrayOutputStream encoded = new ByteArrayOutputStream();
+        ImageIO.write(image, "png", encoded);
+        return encoded.toByteArray();
+    }
+
+    private long occurrenceIdFor(long specialDateId, LocalDate date, UUID coupleId) throws Exception {
+        try (Connection connection = adminConnection(); PreparedStatement occurrence = connection.prepareStatement(
+                "select id from special_date_occurrences where special_date_id = ? and occurred_on = ? and couple_id = ?")) {
+            occurrence.setLong(1, specialDateId);
+            occurrence.setObject(2, date);
+            occurrence.setObject(3, coupleId);
+            try (ResultSet result = occurrence.executeQuery()) {
+                assertThat(result.next()).isTrue();
+                return result.getLong(1);
+            }
+        }
+    }
+
+    private static void awaitDatabaseLockWaiter(Connection blocker) throws Exception {
+        long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(10);
+        int blockerPid;
+        try (PreparedStatement statement = blocker.prepareStatement("select pg_backend_pid()");
+                ResultSet result = statement.executeQuery()) {
+            result.next();
+            blockerPid = result.getInt(1);
+        }
+        while (System.nanoTime() < deadline) {
+            try (PreparedStatement statement = blocker.prepareStatement(
+                    "select count(*) from pg_stat_activity where ? = any(pg_blocking_pids(pid))")) {
+                statement.setInt(1, blockerPid);
+                try (ResultSet result = statement.executeQuery()) {
+                    result.next();
+                    if (result.getInt(1) > 0) return;
+                }
+            }
+            Thread.sleep(20);
+        }
+        throw new AssertionError("Media mutation did not wait for the aggregate row lock");
+    }
+
     private CompletableFuture<CoupleService.CoupleSnapshot> acceptAsync(
             ExecutorService executor, PendingInvitationFixture fixture, User invitee, CyclicBarrier start) {
         return CompletableFuture.supplyAsync(() -> {
@@ -889,26 +1073,7 @@ class CoupleHttpIsolationIntegrationTest {
     }
 
     private static void awaitCoupleLockWaiter(Connection admin) throws Exception {
-        long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(10);
-        int blockerPid;
-        try (PreparedStatement statement = admin.prepareStatement("select pg_backend_pid()");
-                ResultSet result = statement.executeQuery()) {
-            result.next();
-            blockerPid = result.getInt(1);
-        }
-        while (System.nanoTime() < deadline) {
-            try (PreparedStatement statement = admin.prepareStatement("""
-                    select count(*) from pg_stat_activity where ? = any(pg_blocking_pids(pid))
-                    """)) {
-                statement.setInt(1, blockerPid);
-                try (ResultSet result = statement.executeQuery()) {
-                    result.next();
-                    if (result.getInt(1) > 0) return;
-                }
-            }
-            Thread.sleep(20);
-        }
-        throw new AssertionError("Service transaction did not reach the couple row lock in time");
+        awaitDatabaseLockWaiter(admin);
     }
 
     private static void markMemberLeft(Connection admin, UUID coupleId, Long userId) throws Exception {
@@ -1184,15 +1349,21 @@ class CoupleHttpIsolationIntegrationTest {
 
     private static long insertGalleryPhoto(Connection connection, String table, String parentColumn, long parentId,
             long authorId, UUID coupleId) throws Exception {
+        return insertGalleryPhoto(connection, table, parentColumn, parentId, authorId, coupleId, 0);
+    }
+
+    private static long insertGalleryPhoto(Connection connection, String table, String parentColumn, long parentId,
+            long authorId, UUID coupleId, int position) throws Exception {
         String sql = "insert into " + table + "(" + parentColumn
                 + ", image_base64, thumbnail_base64, width, height, position, created_by, couple_id)"
-                + " values (?, ?, ?, 1, 1, 0, ?, ?) returning id";
+                + " values (?, ?, ?, 1, 1, ?, ?, ?) returning id";
         try (PreparedStatement statement = connection.prepareStatement(sql)) {
             statement.setLong(1, parentId);
             statement.setString(2, encodedPhoto(table + "-full"));
             statement.setString(3, encodedPhoto(table + "-thumbnail"));
-            statement.setLong(4, authorId);
-            statement.setObject(5, coupleId);
+            statement.setInt(4, position);
+            statement.setLong(5, authorId);
+            statement.setObject(6, coupleId);
             try (ResultSet result = statement.executeQuery()) { result.next(); return result.getLong(1); }
         }
     }
@@ -1524,4 +1695,8 @@ class CoupleHttpIsolationIntegrationTest {
     private record UploadAttempt(String path, String table) {}
     private record InvitationRaceFixture(UUID coupleId, User owner, long invitationId) {}
     private record PendingInvitationFixture(UUID coupleId, long invitationId, String token, User invitee) {}
+    @FunctionalInterface
+    private interface GalleryUpload {
+        void upload(MockMultipartFile file) throws Exception;
+    }
 }
