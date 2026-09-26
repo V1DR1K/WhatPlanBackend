@@ -11,6 +11,7 @@ import com.wherefood.config.CoupleContext;
 import com.wherefood.repo.Repositories.CoupleInvitations;
 import com.wherefood.repo.Repositories.CoupleMembers;
 import com.wherefood.repo.Repositories.Couples;
+import com.wherefood.repo.Repositories.InvitationLocator;
 import com.wherefood.repo.Repositories.Users;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
@@ -108,10 +109,12 @@ public class CoupleService {
         if (rawToken == null || rawToken.length() != 43 || !rawToken.matches("[A-Za-z0-9_-]{43}")) throw notFound("Invitación");
         user = users.findLockedById(user.id).orElseThrow(() -> notFound("Usuario"));
         if (members.findActiveCoupleIdByUserId(user.id).isPresent()) throw conflict("Primero tenés que dejar tu pareja actual");
-        CoupleInvitation invitation = invitations.findByTokenHash(hash(rawToken)).orElseThrow(() -> notFound("Invitación"));
-        Couple couple = couples.findLockedById(invitation.couple.id).orElseThrow(() -> notFound("Pareja"));
+        InvitationLocator locator = invitations.findInvitationLocatorByTokenHash(hash(rawToken))
+                .orElseThrow(() -> notFound("Invitación"));
+        Couple couple = couples.findLockedById(locator.getCoupleId()).orElseThrow(() -> notFound("Pareja"));
         CoupleContext.set(couple.id);
-        invitation = invitations.findLockedByIdAndCoupleId(invitation.id, couple.id).orElseThrow(() -> notFound("Invitación"));
+        CoupleInvitation invitation = invitations.findLockedByIdAndCoupleId(locator.getId(), couple.id)
+                .orElseThrow(() -> notFound("Invitación"));
         Instant now = Instant.now();
         if (couple.status == CoupleStatus.CLOSED || invitation.status != CoupleInvitationStatus.PENDING) throw notFound("Invitación");
         if (!invitation.expiresAt.isAfter(now)) {
@@ -188,7 +191,8 @@ public class CoupleService {
 
     private static CoupleSnapshot snapshot(Couple couple, List<CoupleMember> members, CoupleInvitation invitation, User current) {
         return new CoupleSnapshot(couple.id, couple.status.name(), members.stream().map(member -> new MemberSnapshot(
-                member.id, member.user.id, member.displayName, member.user.username, member.user.id.equals(current.id))).toList(),
+                member.id, member.user.getId(), member.displayName, member.user.getUsername(),
+                member.user.getId().equals(current.id))).toList(),
                 invitation == null ? null : new InvitationSnapshot(invitation.id, null, invitation.expiresAt));
     }
 

@@ -21,6 +21,11 @@ public final class Repositories {
   String getImageUrl();
  }
 
+ public interface InvitationLocator {
+  Long getId();
+  java.util.UUID getCoupleId();
+ }
+
  public interface Users extends JpaRepository<User, Long> {
    @Lock(LockModeType.PESSIMISTIC_WRITE)
    @Query("select u from User u where u.id = :id")
@@ -40,8 +45,9 @@ public final class Repositories {
    @Query("select m.couple.id from CoupleMember m where m.user.id = :userId and m.status = com.wherefood.domain.CoupleMemberStatus.ACTIVE")
    Optional<java.util.UUID> findActiveCoupleIdByUserId(@Param("userId") Long userId);
 
-   @EntityGraph(attributePaths = {"user"})
-   List<CoupleMember> findByCoupleIdAndStatusOrderBySlot(java.util.UUID coupleId, CoupleMemberStatus status);
+   @Query("select m from CoupleMember m join fetch m.user where m.couple.id = :coupleId and m.status = :status order by m.slot")
+   List<CoupleMember> findByCoupleIdAndStatusOrderBySlot(@Param("coupleId") java.util.UUID coupleId,
+           @Param("status") CoupleMemberStatus status);
 
    @EntityGraph(attributePaths = {"couple", "user"})
    Optional<CoupleMember> findByCoupleIdAndUserIdAndStatus(java.util.UUID coupleId, Long userId, CoupleMemberStatus status);
@@ -55,6 +61,9 @@ public final class Repositories {
  }
 
  public interface CoupleInvitations extends JpaRepository<CoupleInvitation, Long> {
+   @Query("select i.id as id, i.couple.id as coupleId from CoupleInvitation i where i.tokenHash = :tokenHash")
+   Optional<InvitationLocator> findInvitationLocatorByTokenHash(@Param("tokenHash") String tokenHash);
+
    @EntityGraph(attributePaths = {"couple", "createdBy"})
    Optional<CoupleInvitation> findByTokenHash(String tokenHash);
 

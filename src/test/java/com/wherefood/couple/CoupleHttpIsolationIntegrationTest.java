@@ -398,6 +398,37 @@ class CoupleHttpIsolationIntegrationTest {
         }
     }
 
+    @Test
+    void invitationAcceptanceRechecksRevocationAfterWaitingForCoupleLock() throws Exception {
+        PendingInvitationFixture fixture = createPendingInvitation("invite-accept-race");
+        ExecutorService executor = Executors.newSingleThreadExecutor();
+        try (Connection admin = adminConnection()) {
+            admin.setAutoCommit(false);
+            lockCouple(admin, fixture.coupleId());
+            CompletableFuture<CoupleService.CoupleSnapshot> staleAccept = CompletableFuture.supplyAsync(() -> {
+                CoupleContext.set(fixture.coupleId());
+                try {
+                    return coupleService.accept(fixture.token(), fixture.invitee());
+                } finally {
+                    CoupleContext.clear();
+                }
+            }, executor);
+            awaitCoupleLockWaiter(admin);
+            revokeInvitation(admin, fixture.invitationId());
+            admin.commit();
+
+            ExecutionException failed = org.junit.jupiter.api.Assertions.assertThrows(ExecutionException.class,
+                    () -> staleAccept.get(10, TimeUnit.SECONDS));
+            assertThat(failed.getCause()).isInstanceOf(ResponseStatusException.class);
+            assertThat(((ResponseStatusException) failed.getCause()).getStatusCode().value()).isEqualTo(404);
+            assertThat(invitationStatus(fixture.invitationId())).isEqualTo("REVOKED");
+            assertThat(activeMembershipCount(fixture.invitee().id)).isZero();
+        } finally {
+            executor.shutdownNow();
+            CoupleContext.clear();
+        }
+    }
+
     private ResponseEntity<String> get(String path, UUID subject, String spoofedCoupleId) {
         HttpHeaders headers = authHeaders(subject);
         if (spoofedCoupleId != null) headers.set("X-Couple-Id", spoofedCoupleId);
@@ -514,6 +545,19 @@ class CoupleHttpIsolationIntegrationTest {
         }
     }
 
+    private PendingInvitationFixture createPendingInvitation(String usernamePrefix) {
+        User owner = createTestUser(usernamePrefix + "-owner");
+        User invitee = createTestUser(usernamePrefix + "-invitee");
+        CoupleContext.clear();
+        try {
+            CoupleService.CoupleSnapshot created = coupleService.create(owner);
+            CoupleService.InvitationSnapshot invitation = coupleService.createInvitation(owner);
+            return new PendingInvitationFixture(created.id(), invitation.id(), invitation.token(), invitee);
+        } finally {
+            CoupleContext.clear();
+        }
+    }
+
     private User createTestUser(String username) {
         User user = new User();
         user.username = username;
@@ -534,13 +578,16 @@ class CoupleHttpIsolationIntegrationTest {
 
     private static void awaitCoupleLockWaiter(Connection admin) throws Exception {
         long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(10);
+        int blockerPid;
+        try (PreparedStatement statement = admin.prepareStatement("select pg_backend_pid()");
+                ResultSet result = statement.executeQuery()) {
+            result.next();
+            blockerPid = result.getInt(1);
+        }
         while (System.nanoTime() < deadline) {
-            try (PreparedStatement statement = admin.prepareStatement("""
-                    select count(*) from pg_stat_activity
-                    where datname = current_database() and usename = 'whatplan_runtime'
-                      and wait_event_type = 'Lock' and state = 'active'
-                      and lower(query) like '%couples%'
-                    """)) {
+            try (PreparedStatement statement = admin.prepareStatement(
+                    "select count(*) from pg_stat_activity where ? = any(pg_blocking_pids(pid))")) {
+                statement.setInt(1, blockerPid);
                 try (ResultSet result = statement.executeQuery()) {
                     result.next();
                     if (result.getInt(1) > 0) return;
@@ -560,6 +607,28 @@ class CoupleHttpIsolationIntegrationTest {
             statement.setObject(1, coupleId);
             statement.setLong(2, userId);
             assertThat(statement.executeUpdate()).isEqualTo(1);
+        }
+    }
+
+    private static void revokeInvitation(Connection admin, long invitationId) throws Exception {
+        try (PreparedStatement statement = admin.prepareStatement("""
+                update couple_invitations
+                set status = 'REVOKED', revoked_at = now()
+                where id = ? and status = 'PENDING'
+                """)) {
+            statement.setLong(1, invitationId);
+            assertThat(statement.executeUpdate()).isEqualTo(1);
+        }
+    }
+
+    private static int activeMembershipCount(Long userId) throws Exception {
+        try (Connection admin = adminConnection(); PreparedStatement statement = admin.prepareStatement(
+                "select count(*) from couple_members where user_id = ? and status = 'ACTIVE'")) {
+            statement.setLong(1, userId);
+            try (ResultSet result = statement.executeQuery()) {
+                result.next();
+                return result.getInt(1);
+            }
         }
     }
 
@@ -1031,4 +1100,5 @@ class CoupleHttpIsolationIntegrationTest {
     private record Fixture(Long placeA, Long placeB, Long categoryId, Long activityCategoryId,
             Long activitySubcategoryId) {}
     private record InvitationRaceFixture(UUID coupleId, User owner, long invitationId) {}
+    private record PendingInvitationFixture(UUID coupleId, long invitationId, String token, User invitee) {}
 }

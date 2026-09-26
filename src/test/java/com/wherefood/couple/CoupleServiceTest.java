@@ -5,6 +5,7 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
 import com.wherefood.domain.Couple;
@@ -17,6 +18,7 @@ import com.wherefood.domain.User;
 import com.wherefood.repo.Repositories.CoupleInvitations;
 import com.wherefood.repo.Repositories.CoupleMembers;
 import com.wherefood.repo.Repositories.Couples;
+import com.wherefood.repo.Repositories.InvitationLocator;
 import com.wherefood.repo.Repositories.Users;
 import java.time.Instant;
 import java.util.List;
@@ -78,7 +80,10 @@ class CoupleServiceTest {
         invitation.expiresAt = Instant.now().minusSeconds(1);
         when(users.findLockedById(user.id)).thenReturn(Optional.of(user));
         when(members.findActiveCoupleIdByUserId(user.id)).thenReturn(Optional.empty());
-        when(invitations.findByTokenHash(any())).thenReturn(Optional.of(invitation));
+        InvitationLocator locator = mock(InvitationLocator.class);
+        when(locator.getId()).thenReturn(invitation.id);
+        when(locator.getCoupleId()).thenReturn(couple.id);
+        when(invitations.findInvitationLocatorByTokenHash(any())).thenReturn(Optional.of(locator));
         when(couples.findLockedById(couple.id)).thenReturn(Optional.of(couple));
         when(invitations.findLockedByIdAndCoupleId(invitation.id, couple.id)).thenReturn(Optional.of(invitation));
 
