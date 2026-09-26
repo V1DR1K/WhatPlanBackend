@@ -295,14 +295,19 @@ public final class Repositories {
         @Query("select visit from PlaceVisit visit where visit.id = :id and visit.coupleId = :coupleId")
         Optional<PlaceVisit> findLockedByIdAndCoupleId(@Param("id") Long id, @Param("coupleId") java.util.UUID coupleId);
         @EntityGraph(attributePaths = {"place", "createdBy", "updatedBy"}) List<PlaceVisit> findAllByCoupleId(java.util.UUID coupleId);
-   @EntityGraph(attributePaths = {"place", "createdBy", "updatedBy"}) List<PlaceVisit> findByPlaceIdOrderByVisitedOnDescIdDesc(Long placeId);
-        @Query(value = "select v.id from place_visits v where v.place_id = :placeId and v.couple_id = :coupleId order by v.visited_on desc, v.id desc limit :limit offset :offset", nativeQuery = true)
-        List<Long> findPageIdsByPlaceIdAndCoupleId(@Param("placeId") Long placeId, @Param("coupleId") java.util.UUID coupleId, @Param("limit") int limit, @Param("offset") long offset);
+        @EntityGraph(attributePaths = {"place", "createdBy", "updatedBy"})
+        List<PlaceVisit> findByPlaceIdInAndCoupleIdOrderByPlaceIdAscVisitedOnDescIdDesc(
+                Collection<Long> placeIds, java.util.UUID coupleId);
+        @Query("select v.id from PlaceVisit v where v.place.id = :placeId and v.coupleId = :coupleId order by v.visitedOn desc, v.id desc")
+        List<Long> findFirstHistoryPageIdsByPlaceIdAndCoupleId(@Param("placeId") Long placeId,
+                @Param("coupleId") java.util.UUID coupleId, Pageable pageable);
+        @Query("select v.id from PlaceVisit v where v.place.id = :placeId and v.coupleId = :coupleId and (v.visitedOn < :cursorDate or (v.visitedOn = :cursorDate and v.id < :cursorId)) order by v.visitedOn desc, v.id desc")
+        List<Long> findHistoryPageIdsAfterCursor(@Param("placeId") Long placeId,
+                @Param("coupleId") java.util.UUID coupleId, @Param("cursorDate") LocalDate cursorDate,
+                @Param("cursorId") Long cursorId, Pageable pageable);
         @EntityGraph(attributePaths = {"place", "createdBy", "updatedBy"})
         @Query("select v from PlaceVisit v where v.id in :ids and v.place.id = :placeId and v.coupleId = :coupleId")
         List<PlaceVisit> findAllByIdInAndPlaceIdAndCoupleId(@Param("ids") Collection<Long> ids, @Param("placeId") Long placeId, @Param("coupleId") java.util.UUID coupleId);
-        @EntityGraph(attributePaths = {"place", "createdBy", "updatedBy"}) List<PlaceVisit> findByPlaceIdInAndCoupleIdOrderByPlaceIdAscVisitedOnDescIdDesc(Collection<Long> placeIds, java.util.UUID coupleId);
-        @EntityGraph(attributePaths = {"place", "createdBy", "updatedBy"}) List<PlaceVisit> findByPlaceIdInOrderByPlaceIdAscVisitedOnDescIdDesc(Collection<Long> placeIds);
       @EntityGraph(attributePaths = {"place", "createdBy", "updatedBy"}) List<PlaceVisit> findByCoupleIdAndVisitedOnOrderByVisitedOnDescIdDesc(java.util.UUID coupleId, LocalDate visitedOn);
        @EntityGraph(attributePaths = {"place", "createdBy", "updatedBy"}) Optional<PlaceVisit> findByPlaceIdAndVisitedOn(Long placeId, LocalDate visitedOn);
       boolean existsByPlaceId(Long placeId);

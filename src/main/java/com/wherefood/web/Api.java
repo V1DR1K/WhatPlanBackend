@@ -157,18 +157,25 @@ public class Api {
    return place(mediaService.uploadPlacePhoto(id, file, user));
  }
 
-  @GetMapping("/places/{id}/visits") Slice<PlaceVisitSummaryDto> listVisits(@PathVariable Long id,
-          @RequestParam(required = false) @jakarta.validation.constraints.PositiveOrZero @Max(1_000_000) Long cursor,
+  @GetMapping("/places/{id}/visits") KeysetSlice<PlaceVisitSummaryDto> listVisits(@PathVariable Long id,
+          @RequestParam(required = false) String cursor,
           @RequestParam(defaultValue = "10") @Min(1) @Max(100) int size) {
     active(places.findDetailedByIdAndCoupleId(id, CoupleContext.current()).orElseThrow(() -> notFound("Lugar")));
-    int limit = Math.min(size, 30);
-    long offset = cursor == null ? 0 : cursor;
+    int limit = Math.max(1, Math.min(size, 30));
+    LocalDateIdCursor position = LocalDateIdCursor.decode(cursor);
+    if (position != null && position.date() == null) throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Cursor inválido");
     UUID coupleId = CoupleContext.current();
-    List<Long> ids = visits.findPageIdsByPlaceIdAndCoupleId(id, coupleId, limit + 1, offset);
-    Long next = ids.size() > limit ? offset + limit : null;
+    org.springframework.data.domain.Pageable pagination = org.springframework.data.domain.PageRequest.of(0, limit + 1);
+    List<Long> ids = position == null
+            ? visits.findFirstHistoryPageIdsByPlaceIdAndCoupleId(id, coupleId, pagination)
+            : visits.findHistoryPageIdsAfterCursor(id, coupleId, position.date(), position.id(), pagination);
+    boolean hasMore = ids.size() > limit;
     List<Long> pageIds = ids.stream().limit(limit).toList();
     Map<Long, PlaceVisit> byId = pageIds.isEmpty() ? Map.of() : visits.findAllByIdInAndPlaceIdAndCoupleId(pageIds, id, coupleId).stream().collect(java.util.stream.Collectors.toMap(value -> value.id, value -> value));
-    return new Slice<>(pageIds.stream().map(byId::get).filter(Objects::nonNull).map(Api::visitSummary).toList(), next);
+    List<PlaceVisit> page = pageIds.stream().map(byId::get).filter(Objects::nonNull).toList();
+    String next = hasMore && !page.isEmpty()
+            ? new LocalDateIdCursor(page.getLast().visitedOn, page.getLast().id).encode() : null;
+    return new KeysetSlice<>(page.stream().map(Api::visitSummary).toList(), next);
   }
    @GetMapping("/places/{id}/item-dates") List<LocalDate> itemDates(@PathVariable Long id) {
      active(places.findDetailedByIdAndCoupleId(id, CoupleContext.current()).orElseThrow(() -> notFound("Lugar")));

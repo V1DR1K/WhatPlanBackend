@@ -386,6 +386,28 @@ class CoupleHttpIsolationIntegrationTest {
                 "/api/why-fun/photos/" + fixture.activityVenuePhotoB(), USER_B_AUTH_ID);
         assertThat(get("/api/places/" + fixture.placeB() + "/visits", USER_A1_AUTH_ID, null)
                 .getStatusCode().value()).isEqualTo(404);
+        long historyPlaceId;
+        try (Connection connection = adminConnection()) {
+            long authorId = scalarLong(connection, "select id from users where username = 'http-user-a1'");
+            historyPlaceId = insertPlace(connection, "Keyset history test place", fixture.categoryId(), authorId, COUPLE_A_ID);
+        }
+        LocalDate placeVisitPageDateOne = LocalDate.now(ZoneId.of("America/Argentina/Buenos_Aires")).minusDays(3);
+        LocalDate placeVisitPageDateTwo = placeVisitPageDateOne.plusDays(1);
+        insertPlaceVisitForHistoryTest(historyPlaceId, placeVisitPageDateOne, "http-user-a1", COUPLE_A_ID);
+        insertPlaceVisitForHistoryTest(historyPlaceId, placeVisitPageDateTwo, "http-user-a1", COUPLE_A_ID);
+        assertThat(get("/api/places/" + historyPlaceId + "/visits", USER_B_AUTH_ID, null).getStatusCode().value()).isEqualTo(404);
+        JsonNode placeVisitPageOne = objectMapper.readTree(get("/api/places/" + historyPlaceId + "/visits?size=1",
+                USER_A1_AUTH_ID, null).getBody());
+        assertThat(placeVisitPageOne.path("content")).hasSize(1);
+        assertThat(placeVisitPageOne.path("content").get(0).path("visitedOn").asText()).isEqualTo(placeVisitPageDateTwo.toString());
+        String placeVisitCursor = placeVisitPageOne.path("nextCursor").asText();
+        assertThat(placeVisitCursor).isNotBlank();
+        JsonNode placeVisitPageTwo = objectMapper.readTree(get("/api/places/" + historyPlaceId
+                + "/visits?size=1&cursor=" + placeVisitCursor, USER_A1_AUTH_ID, null).getBody());
+        assertThat(placeVisitPageTwo.path("content")).hasSize(1);
+        assertThat(placeVisitPageTwo.path("content").get(0).path("visitedOn").asText()).isEqualTo(placeVisitPageDateOne.toString());
+        assertProblem(get("/api/places/" + historyPlaceId + "/visits?cursor=invalid", USER_A1_AUTH_ID, null),
+                400, "INVALID_REQUEST");
         assertThat(get("/api/places/" + fixture.placeB() + "/item-dates", USER_A1_AUTH_ID, null)
                 .getStatusCode().value()).isEqualTo(404);
         assertThat(get("/api/items?placeId=" + fixture.placeB(), USER_A1_AUTH_ID, null)
@@ -1477,6 +1499,19 @@ class CoupleHttpIsolationIntegrationTest {
 
     private static String encodedPhoto(String value) {
         return Base64.getEncoder().encodeToString(value.getBytes(StandardCharsets.UTF_8));
+    }
+
+    private static void insertPlaceVisitForHistoryTest(long placeId, LocalDate visitedOn, String username,
+            UUID coupleId) throws Exception {
+        try (Connection connection = adminConnection(); PreparedStatement statement = connection.prepareStatement(
+                "insert into place_visits(place_id, visited_on, created_by, updated_by, couple_id) "
+                        + "select ?, ?, u.id, u.id, ? from users u where u.username = ?")) {
+            statement.setLong(1, placeId);
+            statement.setDate(2, java.sql.Date.valueOf(visitedOn));
+            statement.setObject(3, coupleId);
+            statement.setString(4, username);
+            assertThat(statement.executeUpdate()).isEqualTo(1);
+        }
     }
 
     private static long insertItem(Connection connection, long visitId, long authorId, UUID coupleId) throws Exception {

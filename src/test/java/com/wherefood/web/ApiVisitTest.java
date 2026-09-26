@@ -53,18 +53,66 @@ class ApiVisitTest {
     Places places = mock(Places.class); PlaceVisits visits = mock(PlaceVisits.class);
     User author = user(7L, "tomas"); Place place = place(4L, author, Instant.parse("2026-07-23T00:00:00Z"));
     when(places.findDetailedByIdAndCoupleId(4L, coupleId)).thenReturn(Optional.of(place));
-    when(visits.findPageIdsByPlaceIdAndCoupleId(4L, coupleId, 3, 0)).thenReturn(List.of(12L, 11L, 10L));
+    when(visits.findFirstHistoryPageIdsByPlaceIdAndCoupleId(4L, coupleId,
+            org.springframework.data.domain.PageRequest.of(0, 3))).thenReturn(List.of(12L, 11L, 10L));
     PlaceVisit newest = visit(12L, place, author, LocalDate.of(2026, 7, 23));
     PlaceVisit next = visit(11L, place, author, LocalDate.of(2026, 7, 22));
     when(visits.findAllByIdInAndPlaceIdAndCoupleId(List.of(12L, 11L), 4L, coupleId)).thenReturn(List.of(next, newest));
 
-    Slice<PlaceVisitSummaryDto> result = new Api(null, null, null, places, visits, null, null, null,
-            null, null, null, null, null).listVisits(4L, null, 2);
+    Api api = new Api(null, null, null, places, visits, null, null, null,
+            null, null, null, null, null);
+    KeysetSlice<PlaceVisitSummaryDto> result = api.listVisits(4L, null, 2);
 
     assertEquals(List.of(12L, 11L), result.content().stream().map(PlaceVisitSummaryDto::id).toList());
-    assertEquals(2L, result.nextCursor());
-    verify(visits).findPageIdsByPlaceIdAndCoupleId(4L, coupleId, 3, 0);
+    assertEquals(new LocalDateIdCursor(LocalDate.of(2026, 7, 22), 11L).encode(), result.nextCursor());
+    verify(visits).findFirstHistoryPageIdsByPlaceIdAndCoupleId(4L, coupleId,
+            org.springframework.data.domain.PageRequest.of(0, 3));
     verify(visits).findAllByIdInAndPlaceIdAndCoupleId(List.of(12L, 11L), 4L, coupleId);
+
+    when(visits.findHistoryPageIdsAfterCursor(4L, coupleId, LocalDate.of(2026, 7, 22), 11L,
+            org.springframework.data.domain.PageRequest.of(0, 3))).thenReturn(List.of(10L));
+    PlaceVisit oldest = visit(10L, place, author, LocalDate.of(2026, 7, 21));
+    when(visits.findAllByIdInAndPlaceIdAndCoupleId(List.of(10L), 4L, coupleId)).thenReturn(List.of(oldest));
+    KeysetSlice<PlaceVisitSummaryDto> secondPage = api.listVisits(4L, result.nextCursor(), 2);
+    assertEquals(List.of(10L), secondPage.content().stream().map(PlaceVisitSummaryDto::id).toList());
+    assertNull(secondPage.nextCursor());
+    verify(visits).findHistoryPageIdsAfterCursor(4L, coupleId, LocalDate.of(2026, 7, 22), 11L,
+            org.springframework.data.domain.PageRequest.of(0, 3));
+  }
+
+  @Test
+  void rejectsNullDateCursorForNonNullablePlaceVisitHistory() {
+    UUID coupleId = UUID.randomUUID(); CoupleContext.set(coupleId);
+    Places places = mock(Places.class); PlaceVisits visits = mock(PlaceVisits.class);
+    User author = user(7L, "tomas");
+    when(places.findDetailedByIdAndCoupleId(4L, coupleId)).thenReturn(Optional.of(place(4L, author, Instant.now())));
+    Api api = new Api(null, null, null, places, visits, null, null, null,
+            null, null, null, null, null);
+
+    ResponseStatusException error = assertThrows(ResponseStatusException.class,
+            () -> api.listVisits(4L, new LocalDateIdCursor(null, 10L).encode(), 10));
+
+    assertEquals(HttpStatus.BAD_REQUEST, error.getStatusCode());
+    verify(visits, org.mockito.Mockito.never()).findFirstHistoryPageIdsByPlaceIdAndCoupleId(
+            any(), any(), any());
+    verify(visits, org.mockito.Mockito.never()).findHistoryPageIdsAfterCursor(any(), any(), any(), any(), any());
+  }
+
+  @Test
+  void clampsVisitHistoryPageSizeBeforeQuerying() {
+    UUID coupleId = UUID.randomUUID(); CoupleContext.set(coupleId);
+    Places places = mock(Places.class); PlaceVisits visits = mock(PlaceVisits.class);
+    User author = user(7L, "tomas");
+    when(places.findDetailedByIdAndCoupleId(4L, coupleId)).thenReturn(Optional.of(place(4L, author, Instant.now())));
+    Api api = new Api(null, null, null, places, visits, null, null, null,
+            null, null, null, null, null);
+
+    KeysetSlice<PlaceVisitSummaryDto> result = api.listVisits(4L, null, 0);
+
+    assertTrue(result.content().isEmpty());
+    assertNull(result.nextCursor());
+    verify(visits).findFirstHistoryPageIdsByPlaceIdAndCoupleId(4L, coupleId,
+            org.springframework.data.domain.PageRequest.of(0, 2));
   }
 
   @Test
