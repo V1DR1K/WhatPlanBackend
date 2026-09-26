@@ -87,7 +87,10 @@ public final class Repositories {
  public interface Categories extends JpaRepository<Category, Long> {
   List<Category> findByActiveTrueOrderByName();
  }
-  public interface HighlightTags extends JpaRepository<HighlightTag, Long> { List<HighlightTag> findAllByOrderByNameAsc(); }
+  public interface HighlightTags extends JpaRepository<HighlightTag, Long> {
+    List<HighlightTag> findByActiveTrueOrderByNameAsc();
+    List<HighlightTag> findAllByOrderByNameAsc();
+  }
   public interface SpecialDates extends CoupleScopedRepository<SpecialDate> {
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("select specialDate from SpecialDate specialDate where specialDate.id = :id and specialDate.coupleId = :coupleId")
@@ -270,8 +273,6 @@ public final class Repositories {
   List<Place> findActiveByIdInAndCoupleId(@Param("ids") Collection<Long> ids,
           @Param("coupleId") java.util.UUID coupleId);
   @EntityGraph(attributePaths = {"category", "createdBy", "highlightTags"}) @Query("select p from Place p where p.id=:id and p.coupleId=:coupleId") Optional<Place> findDetailedByIdAndCoupleId(@Param("id") Long id, @Param("coupleId") java.util.UUID coupleId);
-  boolean existsByCategoryId(Long categoryId);
-  boolean existsByHighlightTagsId(Long tagId);
  }
 
  public interface PlaceMetric {

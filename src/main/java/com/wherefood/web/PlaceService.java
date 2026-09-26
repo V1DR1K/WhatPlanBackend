@@ -54,10 +54,14 @@ public class PlaceService {
     public Place update(Long placeId, PlaceRequest request, User actor) {
         authorization.requireActiveMember(actor);
         Place place = findActive(placeId);
-        apply(place, request);
-        place.category = categories.findById(request.categoryId())
+        Category selectedCategory = categories.findById(request.categoryId())
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND,
                         "Categoría no encontrada"));
+        if (!selectedCategory.active && (place.category == null || !selectedCategory.id.equals(place.category.id))) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Categoría no encontrada");
+        }
+        apply(place, request);
+        place.category = selectedCategory;
         place.updatedBy = actor;
         place.updatedAt = Instant.now();
         return places.save(place);
@@ -100,13 +104,20 @@ public class PlaceService {
         place.sourceUrl = request.sourceUrl();
         place.mapsUrl = request.mapsUrl();
         place.acceptsReservations = request.acceptsReservations();
-        place.highlightTags.clear();
-        if (request.tagIds() == null || request.tagIds().isEmpty()) return;
+        if (request.tagIds() == null || request.tagIds().isEmpty()) {
+            place.highlightTags.clear();
+            return;
+        }
         Set<Long> ids = new LinkedHashSet<>(request.tagIds());
         List<HighlightTag> selected = highlightTags.findAllById(ids);
         if (selected.size() != ids.size()) {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Etiqueta no encontrada");
         }
+        Set<Long> existingIds = place.highlightTags.stream().map(tag -> tag.id).collect(java.util.stream.Collectors.toSet());
+        if (selected.stream().anyMatch(tag -> !tag.active && !existingIds.contains(tag.id))) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Etiqueta no encontrada");
+        }
+        place.highlightTags.clear();
         place.highlightTags.addAll(selected);
     }
 }

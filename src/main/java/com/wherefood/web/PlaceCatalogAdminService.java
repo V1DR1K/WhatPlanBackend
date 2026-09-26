@@ -4,7 +4,6 @@ import com.wherefood.domain.Category;
 import com.wherefood.domain.HighlightTag;
 import com.wherefood.repo.Repositories.Categories;
 import com.wherefood.repo.Repositories.HighlightTags;
-import com.wherefood.repo.Repositories.Places;
 import java.time.Instant;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -18,12 +17,10 @@ import org.springframework.web.server.ResponseStatusException;
 public class PlaceCatalogAdminService {
     private final Categories categories;
     private final HighlightTags tags;
-    private final Places places;
 
-    public PlaceCatalogAdminService(Categories categories, HighlightTags tags, Places places) {
+    public PlaceCatalogAdminService(Categories categories, HighlightTags tags) {
         this.categories = categories;
         this.tags = tags;
-        this.places = places;
     }
 
     @Transactional
@@ -47,11 +44,8 @@ public class PlaceCatalogAdminService {
     @PreAuthorize("hasRole('ADMIN')")
     public void deleteCategory(Long id) {
         Category value = categories.findById(id).orElseThrow(() -> notFound("Categoría"));
-        if (places.existsByCategoryId(id)) {
-            throw new ResponseStatusException(HttpStatus.CONFLICT,
-                    "No podés borrar un rubro que tiene lugares asociados");
-        }
-        categories.delete(value);
+        value.active = false;
+        categories.save(value);
     }
 
     @Transactional
@@ -74,11 +68,8 @@ public class PlaceCatalogAdminService {
     @PreAuthorize("hasRole('ADMIN')")
     public void deleteTag(Long id) {
         HighlightTag value = tags.findById(id).orElseThrow(() -> notFound("Etiqueta"));
-        if (places.existsByHighlightTagsId(id)) {
-            throw new ResponseStatusException(HttpStatus.CONFLICT,
-                    "No podés borrar una etiqueta asignada a lugares");
-        }
-        tags.delete(value);
+        value.active = false;
+        tags.save(value);
     }
 
     private static void apply(Category value, CategoryRequest request) {
@@ -91,6 +82,7 @@ public class PlaceCatalogAdminService {
     private static void apply(HighlightTag value, HighlightTagRequest request) {
         value.name = request.name().trim();
         value.emoji = request.emoji().trim();
+        if (request.active() != null) value.active = request.active();
     }
 
     private static ResponseStatusException notFound(String resource) {

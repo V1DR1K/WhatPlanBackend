@@ -18,8 +18,10 @@ import com.wherefood.couple.CoupleAuthorizationService;
 
 record CategoryRequest(@NotBlank @Size(max = 60) String name, @NotBlank @Size(max = 60) String slug, @NotBlank @Size(max = 40) String icon, boolean active) {}
 record CategoryDto(Long id, String name, String slug, String icon, boolean active) {}
-record HighlightTagRequest(@NotBlank @Size(max = 60) String name, @NotBlank @Size(max = 20) String emoji) {}
-record HighlightTagDto(Long id, String name, String emoji) {}
+record HighlightTagRequest(@NotBlank @Size(max = 60) String name, @NotBlank @Size(max = 20) String emoji, Boolean active) {
+ HighlightTagRequest(String name, String emoji) { this(name, emoji, null); }
+}
+record HighlightTagDto(Long id, String name, String emoji, boolean active) {}
 record PlaceRequest(@NotBlank @Size(max = 120) String name, @Size(max = 300) String address, @Size(max = 1000) @SafeHttpUrl String sourceUrl, @Size(max = 1000) @SafeHttpUrl String mapsUrl, boolean acceptsReservations, @NotNull @Positive Long categoryId, @Size(max = 30) List<@NotNull @Positive Long> tagIds) {}
 record VisitRequest(@NotNull LocalDate visitedOn) {}
 record ItemRequest(@NotBlank @Size(max = 120) String name) {}
@@ -81,7 +83,7 @@ public class Api {
     this(users, categories, highlightTags, places, visits, items, photos, itemReviews, reviews, placePhotos,
             visitPhotos, visitReviews, storage, visitReviewService, visitService, itemService,
             itemReviewService, placeReviewService, placeService, mediaService,
-            new PlaceCatalogAdminService(categories, highlightTags, places));
+            new PlaceCatalogAdminService(categories, highlightTags));
    }
 
    @org.springframework.beans.factory.annotation.Autowired public Api(Users users, Categories categories, HighlightTags highlightTags, Places places, PlaceVisits visits, Items items, Photos photos, ItemReviews itemReviews, PlaceReviews reviews, PlacePhotos placePhotos, PlaceVisitPhotos visitPhotos, PlaceVisitReviews visitReviews, PhotoStorage storage, PlaceVisitReviewService visitReviewService, PlaceVisitService visitService, ItemService itemService, ItemReviewService itemReviewService, PlaceReviewService placeReviewService, PlaceService placeService, PlaceMediaService mediaService, PlaceCatalogAdminService catalogAdminService) {
@@ -93,7 +95,8 @@ public class Api {
  @PostMapping("/categories") @PreAuthorize("hasRole('ADMIN')") CategoryDto addCategory(@RequestBody @jakarta.validation.Valid CategoryRequest request) { return category(catalogAdminService.createCategory(request)); }
  @PutMapping("/categories/{id}") @PreAuthorize("hasRole('ADMIN')") CategoryDto updateCategory(@PathVariable Long id, @RequestBody @jakarta.validation.Valid CategoryRequest request) { return category(catalogAdminService.updateCategory(id, request)); }
  @DeleteMapping("/categories/{id}") @PreAuthorize("hasRole('ADMIN')") @ResponseStatus(HttpStatus.NO_CONTENT) void deleteCategory(@PathVariable Long id) { catalogAdminService.deleteCategory(id); }
- @GetMapping("/highlight-tags") List<HighlightTagDto> tags() { return highlightTags.findAllByOrderByNameAsc().stream().map(Api::tag).toList(); }
+ @GetMapping("/highlight-tags") List<HighlightTagDto> tags() { return highlightTags.findByActiveTrueOrderByNameAsc().stream().map(Api::tag).toList(); }
+ @GetMapping("/highlight-tags/all") @PreAuthorize("hasRole('ADMIN')") List<HighlightTagDto> allTags() { return highlightTags.findAllByOrderByNameAsc().stream().map(Api::tag).toList(); }
  @PostMapping("/highlight-tags") @PreAuthorize("hasRole('ADMIN')") HighlightTagDto addTag(@RequestBody @jakarta.validation.Valid HighlightTagRequest request) { return tag(catalogAdminService.createTag(request)); }
  @PutMapping("/highlight-tags/{id}") @PreAuthorize("hasRole('ADMIN')") HighlightTagDto updateTag(@PathVariable Long id, @RequestBody @jakarta.validation.Valid HighlightTagRequest request) { return tag(catalogAdminService.updateTag(id, request)); }
  @DeleteMapping("/highlight-tags/{id}") @PreAuthorize("hasRole('ADMIN')") @ResponseStatus(HttpStatus.NO_CONTENT) void deleteTag(@PathVariable Long id) { catalogAdminService.deleteTag(id); }
@@ -307,7 +310,7 @@ public class Api {
   private static PlaceReviewDto review(PlaceReview review) { return new PlaceReviewDto(review.author.username, review.comment, review.location, review.heating, review.bathrooms, review.exterior, review.seating, review.service, review.ambiance); }
   private static PlaceReviewDto review(PlaceReviewSummary review) { return new PlaceReviewDto(review.getAuthor(), review.getComment(), review.getLocation(), review.getHeating(), review.getBathrooms(), review.getExterior(), review.getSeating(), review.getService(), review.getAmbiance()); }
  private static CategoryDto category(Category category) { return new CategoryDto(category.id, category.name, category.slug, category.icon, category.active); }
- private static HighlightTagDto tag(HighlightTag tag) { return new HighlightTagDto(tag.id, tag.name, tag.emoji); }
+ private static HighlightTagDto tag(HighlightTag tag) { return new HighlightTagDto(tag.id, tag.name, tag.emoji, tag.active); }
   private static void apply(ItemReview review, ItemReviewRequest request) { review.comment = request.comment() == null || request.comment().isBlank() ? null : request.comment(); review.taste = request.taste(); review.price = request.price(); }
   private static void apply(PlaceVisitReview review, PlaceVisitReviewRequest request) { review.overall = request.overall(); review.comment = request.comment() == null || request.comment().isBlank() ? null : request.comment(); review.taste = request.taste(); review.price = request.price(); }
   private static ResponseStatusException notFound(String type) { return new ResponseStatusException(HttpStatus.NOT_FOUND, type + " no encontrado"); }
