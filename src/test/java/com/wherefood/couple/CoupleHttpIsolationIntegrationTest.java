@@ -5,6 +5,11 @@ import static org.assertj.core.api.Assertions.assertThat;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.jsonwebtoken.Jwts;
+import java.io.ByteArrayOutputStream;
+import java.io.IOException;
+import java.io.InputStream;
+import java.net.HttpURLConnection;
+import java.net.URL;
 import java.nio.charset.StandardCharsets;
 import java.security.KeyPair;
 import java.security.KeyPairGenerator;
@@ -170,6 +175,7 @@ class CoupleHttpIsolationIntegrationTest {
         assertProblem(internalError, 500, "INTERNAL_ERROR");
         assertThat(internalError.getBody()).doesNotContain("sensitive test failure detail");
         assertProblem(get("/__test/upload-error", USER_A1_AUTH_ID, null), 413, "UPLOAD_TOO_LARGE");
+        assertProblem(postOversizedPhoto(fixture.placeA(), USER_A1_AUTH_ID), 413, "UPLOAD_TOO_LARGE");
 
         HttpHeaders unacceptableHeaders = authHeaders(USER_A1_AUTH_ID);
         unacceptableHeaders.setAccept(java.util.List.of(MediaType.APPLICATION_XML));
@@ -310,6 +316,38 @@ class CoupleHttpIsolationIntegrationTest {
         HttpHeaders headers = authHeaders(subject);
         if (spoofedCoupleId != null) headers.set("X-Couple-Id", spoofedCoupleId);
         return http.exchange(url(path), HttpMethod.GET, new HttpEntity<>(headers), String.class);
+    }
+
+    private ResponseEntity<String> postOversizedPhoto(Long placeId, UUID subject) throws IOException {
+        String boundary = "----WhatPlanFixedLengthBoundary";
+        ByteArrayOutputStream body = new ByteArrayOutputStream();
+        body.write(("--" + boundary + "\r\n"
+                + "Content-Disposition: form-data; name=\"file\"; filename=\"oversized.jpg\"\r\n"
+                + "Content-Type: image/jpeg\r\n\r\n").getBytes(StandardCharsets.US_ASCII));
+        body.write(new byte[10 * 1024 * 1024 + 1]);
+        body.write(("\r\n--" + boundary + "--\r\n").getBytes(StandardCharsets.US_ASCII));
+
+        HttpURLConnection connection = (HttpURLConnection) new URL(url("/api/places/" + placeId + "/photo"))
+                .openConnection();
+        connection.setRequestMethod("POST");
+        connection.setDoOutput(true);
+        connection.setRequestProperty("Authorization", "Bearer " + accessToken(subject));
+        connection.setRequestProperty("Content-Type", "multipart/form-data; boundary=" + boundary);
+        connection.setFixedLengthStreamingMode(body.size());
+        try {
+            connection.getOutputStream().write(body.toByteArray());
+            int status = connection.getResponseCode();
+            HttpHeaders headers = new HttpHeaders();
+            String contentType = connection.getHeaderField("Content-Type");
+            if (contentType != null) headers.setContentType(MediaType.parseMediaType(contentType));
+            String requestId = connection.getHeaderField("X-Request-Id");
+            if (requestId != null) headers.set("X-Request-Id", requestId);
+            InputStream responseBody = status >= 400 ? connection.getErrorStream() : connection.getInputStream();
+            String responseText = responseBody == null ? "" : new String(responseBody.readAllBytes(), StandardCharsets.UTF_8);
+            return new ResponseEntity<>(responseText, headers, org.springframework.http.HttpStatusCode.valueOf(status));
+        } finally {
+            connection.disconnect();
+        }
     }
 
     private void assertProblem(ResponseEntity<String> response, int status, String errorCode) throws Exception {
