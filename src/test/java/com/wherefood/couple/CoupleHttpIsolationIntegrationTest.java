@@ -51,6 +51,8 @@ import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
+import org.springframework.core.io.ByteArrayResource;
+import org.springframework.util.LinkedMultiValueMap;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MaxUploadSizeExceededException;
@@ -359,6 +361,32 @@ class CoupleHttpIsolationIntegrationTest {
         assertThat(get("/api/when-dates?size=12", USER_B_AUTH_ID, null).getBody())
                 .contains("Private anniversary B").doesNotContain("Attempted occurrence comment");
 
+        assertCrossCoupleCoverDenied("/api/place-visits/" + fixture.placeVisitA() + "/cover/"
+                        + fixture.placeVisitPhotoB(),
+                "/api/place-visits/" + fixture.placeVisitA(), USER_A1_AUTH_ID);
+        assertCrossCoupleCoverDenied("/api/why-fun/activity-visits/" + fixture.activityVisitA() + "/cover/"
+                        + fixture.activityVisitPhotoB(),
+                "/api/why-fun/activity-visits/" + fixture.activityVisitA(), USER_A1_AUTH_ID);
+        assertCrossCoupleCoverDenied("/api/when-dates/occurrences/" + fixture.occurrenceA() + "/cover/"
+                        + fixture.occurrencePhotoB(),
+                "/api/when-dates/special-dates/" + fixture.specialDateA() + "/occurrences/"
+                        + fixture.occurrenceDate(), USER_A1_AUTH_ID);
+
+        for (UploadAttempt upload : List.of(
+                new UploadAttempt("/api/places/" + fixture.placeB() + "/photo", "place_photos"),
+                new UploadAttempt("/api/items/" + fixture.itemB() + "/photo", "item_photos"),
+                new UploadAttempt("/api/place-visits/" + fixture.placeVisitB() + "/photos", "place_visit_photos"),
+                new UploadAttempt("/api/how-cook/recipes/" + fixture.recipeB() + "/photo", "recipe_photos"),
+                new UploadAttempt("/api/films/" + fixture.filmB() + "/photo", "film_photos"),
+                new UploadAttempt("/api/why-fun/activities/" + fixture.activityB() + "/photo", "why_fun_venue_photos"),
+                new UploadAttempt("/api/why-fun/activity-visits/" + fixture.activityVisitB() + "/photos", "why_fun_visit_photos"),
+                new UploadAttempt("/api/when-dates/special-dates/" + fixture.specialDateB() + "/occurrences/"
+                        + fixture.occurrenceDate() + "/photos", "special_date_occurrence_photos"))) {
+            long photosBefore = tableCount(upload.table());
+            assertProblem(postPhoto(upload.path(), USER_A1_AUTH_ID), 404, "NOT_FOUND");
+            assertThat(tableCount(upload.table())).as("no photo inserted for %s", upload.path()).isEqualTo(photosBefore);
+        }
+
         assertThat(putPlace(fixture.placeA(), USER_A2_AUTH_ID, "Shared edit by member A2", fixture.categoryId())
                 .getStatusCode().value()).isEqualTo(200);
         assertThat(get("/api/places/" + fixture.placeA(), USER_A1_AUTH_ID, null).getBody())
@@ -588,6 +616,10 @@ class CoupleHttpIsolationIntegrationTest {
         return http.exchange(url(path), method, new HttpEntity<>(body, headers), String.class);
     }
 
+    private ResponseEntity<String> putWithoutBody(String path, UUID subject) {
+        return http.exchange(url(path), HttpMethod.PUT, new HttpEntity<>(authHeaders(subject)), String.class);
+    }
+
     private void assertCrossCoupleDeleteDenied(String deletePath, String ownerReadPath, UUID owner, String marker) throws Exception {
         assertProblem(delete(deletePath, USER_A1_AUTH_ID), 404, "NOT_FOUND");
         ResponseEntity<String> ownerRead = get(ownerReadPath, owner, null);
@@ -606,6 +638,23 @@ class CoupleHttpIsolationIntegrationTest {
 
     private void assertCrossCoupleCreateDenied(String path, UUID attacker, String body) throws Exception {
         assertProblem(jsonRequest(path, HttpMethod.POST, attacker, body), 404, "NOT_FOUND");
+    }
+
+    private void assertCrossCoupleCoverDenied(String updatePath, String readPath, UUID attacker) throws Exception {
+        ResponseEntity<String> before = get(readPath, attacker, null);
+        assertThat(before.getStatusCode().value()).isEqualTo(200);
+        assertProblem(putWithoutBody(updatePath, attacker), 404, "NOT_FOUND");
+        assertThat(get(readPath, attacker, null).getBody()).isEqualTo(before.getBody());
+    }
+
+    private long tableCount(String table) throws Exception {
+        if (!List.of("place_photos", "item_photos", "place_visit_photos", "recipe_photos", "film_photos",
+                "why_fun_venue_photos", "why_fun_visit_photos", "special_date_occurrence_photos").contains(table)) {
+            throw new IllegalArgumentException("Unexpected photo table");
+        }
+        try (Connection connection = adminConnection()) {
+            return scalarLong(connection, "select count(*) from " + table);
+        }
     }
 
     private void assertCoupleScopedDetail(String pathPrefix, Long idA, Long idB, String markerA) {
@@ -662,6 +711,19 @@ class CoupleHttpIsolationIntegrationTest {
         } finally {
             connection.disconnect();
         }
+    }
+
+    private ResponseEntity<String> postPhoto(String path, UUID subject) {
+        HttpHeaders headers = authHeaders(subject);
+        headers.setContentType(MediaType.MULTIPART_FORM_DATA);
+        LinkedMultiValueMap<String, Object> parts = new LinkedMultiValueMap<>();
+        parts.add("file", new ByteArrayResource(new byte[] {1, 2, 3}) {
+            @Override
+            public String getFilename() {
+                return "cross-couple.webp";
+            }
+        });
+        return http.postForEntity(url(path), new HttpEntity<>(parts, headers), String.class);
     }
 
     private void assertProblem(ResponseEntity<String> response, int status, String errorCode) throws Exception {
@@ -930,6 +992,7 @@ class CoupleHttpIsolationIntegrationTest {
             privatePhotoPaths.add("/api/why-fun/photos/" + activityVenuePhotoB);
             long specialDateB = scalarLong(connection, "select id from special_dates where label = 'Private anniversary B'");
             long specialDateA = scalarLong(connection, "select id from special_dates where label = 'Private anniversary A'");
+            long occurrenceA = insertOccurrence(connection, specialDateA, today, userA1, COUPLE_A_ID);
             long occurrenceB = insertOccurrence(connection, specialDateB, today, userB, COUPLE_B_ID);
             long occurrencePhotoB = insertGalleryPhoto(connection, "special_date_occurrence_photos", "occurrence_id", occurrenceB, userB, COUPLE_B_ID);
             privatePhotoPaths.add("/api/when-dates/photos/" + occurrencePhotoB);
@@ -938,7 +1001,8 @@ class CoupleHttpIsolationIntegrationTest {
             return new Fixture(placeA, placeB, categoryId, activityCategoryId, activitySubcategoryId,
                     placeVisitA, placeVisitB, itemB, recipeA, recipeB, cookingA, cookingB, filmA, filmB,
                     activityA, activityB, activityVisitA, activityVisitB, specialDateA, specialDateB,
-                    occurrencePhotoB, today, List.copyOf(privatePhotoPaths));
+                    visitPhotoB, activityVisitPhotoB, occurrenceA, occurrencePhotoB, today,
+                    List.copyOf(privatePhotoPaths));
         }
     }
 
@@ -1400,8 +1464,10 @@ class CoupleHttpIsolationIntegrationTest {
             Long activitySubcategoryId, Long placeVisitA, Long placeVisitB, Long itemB,
             Long recipeA, Long recipeB, Long cookingA, Long cookingB, Long filmA, Long filmB,
             Long activityA, Long activityB, Long activityVisitA, Long activityVisitB,
-            Long specialDateA, Long specialDateB, Long occurrencePhotoB, LocalDate occurrenceDate,
+            Long specialDateA, Long specialDateB, Long placeVisitPhotoB, Long activityVisitPhotoB,
+            Long occurrenceA, Long occurrencePhotoB, LocalDate occurrenceDate,
             List<String> privatePhotoPaths) {}
+    private record UploadAttempt(String path, String table) {}
     private record InvitationRaceFixture(UUID coupleId, User owner, long invitationId) {}
     private record PendingInvitationFixture(UUID coupleId, long invitationId, String token, User invitee) {}
 }
