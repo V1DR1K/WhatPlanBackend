@@ -30,6 +30,7 @@ import java.util.Date;
 import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CyclicBarrier;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -429,6 +430,49 @@ class CoupleHttpIsolationIntegrationTest {
         }
     }
 
+    @Test
+    void concurrentInvitationAcceptanceAllowsOnlyOneInvitee() throws Exception {
+        PendingInvitationFixture fixture = createPendingInvitation("invite-double-accept-race");
+        User secondInvitee = createTestUser("invite-double-accept-race-second");
+        ExecutorService executor = Executors.newFixedThreadPool(2);
+        CyclicBarrier start = new CyclicBarrier(2);
+        try {
+            CompletableFuture<CoupleService.CoupleSnapshot> first = acceptAsync(executor, fixture, fixture.invitee(), start);
+            CompletableFuture<CoupleService.CoupleSnapshot> second = acceptAsync(executor, fixture, secondInvitee, start);
+            int accepted = 0;
+            for (CompletableFuture<CoupleService.CoupleSnapshot> attempt : List.of(first, second)) {
+                try {
+                    attempt.get(20, TimeUnit.SECONDS);
+                    accepted++;
+                } catch (ExecutionException rejected) {
+                    assertThat(rejected.getCause()).isInstanceOf(ResponseStatusException.class);
+                    assertThat(((ResponseStatusException) rejected.getCause()).getStatusCode().value()).isEqualTo(404);
+                }
+            }
+            assertThat(accepted).isEqualTo(1);
+            assertThat(invitationStatus(fixture.invitationId())).isEqualTo("ACCEPTED");
+            assertThat(activeMemberCount(fixture.coupleId())).isEqualTo(2);
+        } finally {
+            executor.shutdownNow();
+            CoupleContext.clear();
+        }
+    }
+
+    private CompletableFuture<CoupleService.CoupleSnapshot> acceptAsync(
+            ExecutorService executor, PendingInvitationFixture fixture, User invitee, CyclicBarrier start) {
+        return CompletableFuture.supplyAsync(() -> {
+            CoupleContext.set(fixture.coupleId());
+            try {
+                start.await(10, TimeUnit.SECONDS);
+                return coupleService.accept(fixture.token(), invitee);
+            } catch (Exception exception) {
+                throw new java.util.concurrent.CompletionException(exception);
+            } finally {
+                CoupleContext.clear();
+            }
+        }, executor);
+    }
+
     private ResponseEntity<String> get(String path, UUID subject, String spoofedCoupleId) {
         HttpHeaders headers = authHeaders(subject);
         if (spoofedCoupleId != null) headers.set("X-Couple-Id", spoofedCoupleId);
@@ -585,8 +629,9 @@ class CoupleHttpIsolationIntegrationTest {
             blockerPid = result.getInt(1);
         }
         while (System.nanoTime() < deadline) {
-            try (PreparedStatement statement = admin.prepareStatement(
-                    "select count(*) from pg_stat_activity where ? = any(pg_blocking_pids(pid))")) {
+            try (PreparedStatement statement = admin.prepareStatement("""
+                    select count(*) from pg_stat_activity where ? = any(pg_blocking_pids(pid))
+                    """)) {
                 statement.setInt(1, blockerPid);
                 try (ResultSet result = statement.executeQuery()) {
                     result.next();
@@ -625,6 +670,17 @@ class CoupleHttpIsolationIntegrationTest {
         try (Connection admin = adminConnection(); PreparedStatement statement = admin.prepareStatement(
                 "select count(*) from couple_members where user_id = ? and status = 'ACTIVE'")) {
             statement.setLong(1, userId);
+            try (ResultSet result = statement.executeQuery()) {
+                result.next();
+                return result.getInt(1);
+            }
+        }
+    }
+
+    private static int activeMemberCount(UUID coupleId) throws Exception {
+        try (Connection admin = adminConnection(); PreparedStatement statement = admin.prepareStatement(
+                "select count(*) from couple_members where couple_id = ? and status = 'ACTIVE'")) {
+            statement.setObject(1, coupleId);
             try (ResultSet result = statement.executeQuery()) {
                 result.next();
                 return result.getInt(1);
