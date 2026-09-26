@@ -124,6 +124,7 @@ Dep.: C09, C11. Añadir registro y recuperación de acceso, conservar invitació
 
 **C13 · Frontend · P1 · `fix(session): clear private state on membership change`**
 Dep.: C08, C12. Vaciar React Query, blobs/object URLs y estado de vistas en logout, cambio de cuenta, aceptar invitación y dejar pareja. Coordinar varias pestañas sin persistir access/refresh tokens en storage. Mostrar 401/403/404/429 sin datos previos; tests de usuario A → salida → B en la misma pestaña y después de recarga. Backend: en el commit correspondiente de C08/C04, no permitir nuevas lecturas tras salida.
+Avance local 2026-09-26: el frontend ya limpia QueryClient y caché de blobs ante salida/cambio, conserva el access token solo en memoria, usa refresh por cookie y sincroniza cambios entre pestañas; salir fuerza navegación y `MediaImage` revoca object URLs al desmontarse. `couple.test.ts` (`0c555ad`) verifica A→salida→B en la misma pestaña, que una respuesta de media pendiente de A se descarte al salir y que tras recarga simulada el refresh use credenciales de cookie con caché nuevo vacío. `privateState.test.ts` cubre notificación entre pestañas. Suite frontend: 46 tests, build de producción correcto, lint 0 errores y 17 avisos. C13 sigue parcial: falta prueba E2E en navegador real de navegación/desmontaje/object URLs y flujos de salida/aceptación, además de validar estados 401/403/404/429 sin contenido anterior bajo navegación real; no se alteró el diseño visual.
 
 ### Fase C: datos, cifrado y operación
 
