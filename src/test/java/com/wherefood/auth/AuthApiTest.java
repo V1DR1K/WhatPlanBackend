@@ -20,7 +20,9 @@ class AuthApiTest {
     private final CentralAuthClient central = mock(CentralAuthClient.class);
     private final CentralJwt jwt = mock(CentralJwt.class);
     private final LocalUserProvisioner provisioner = mock(LocalUserProvisioner.class);
-    private final AuthApi api = new AuthApi(central, jwt, provisioner, Set.of("https://whatplan.test"), 604800);
+    private final LoginAttemptProtection loginAttemptProtection = mock(LoginAttemptProtection.class);
+    private final AuthApi api = new AuthApi(central, jwt, provisioner, loginAttemptProtection,
+            Set.of("https://whatplan.test"), 604800);
 
     @Test
     void provisionsAUserReturnedByCentralLoginWithoutAnAllowlist() {
@@ -39,11 +41,25 @@ class AuthApiTest {
         AuthResponse result = api.login(new LoginRequest("new-user", "password"), response);
 
         verify(central).login("new-user", "password");
+        verify(loginAttemptProtection).checkAccount("new-user");
         verify(provisioner).provision(userId, "new-user");
         org.junit.jupiter.api.Assertions.assertEquals("new-user", result.username());
         org.junit.jupiter.api.Assertions.assertTrue(response.getHeader("Set-Cookie").contains("Secure"));
         org.junit.jupiter.api.Assertions.assertTrue(response.getHeader("Set-Cookie").contains("HttpOnly"));
         org.junit.jupiter.api.Assertions.assertEquals("no-store", response.getHeader("Cache-Control"));
+    }
+
+    @Test
+    void blocksLoginBeforeCallingCentralAuthWhenAccountBudgetIsExhausted() {
+        org.mockito.Mockito.doThrow(new com.wherefood.config.RetryAfterResponseStatusException(
+                HttpStatus.TOO_MANY_REQUESTS, "too many", 900))
+                .when(loginAttemptProtection).checkAccount("new-user");
+
+        ResponseStatusException error = org.junit.jupiter.api.Assertions.assertThrows(ResponseStatusException.class,
+                () -> api.login(new LoginRequest("new-user", "password"), new MockHttpServletResponse()));
+
+        org.junit.jupiter.api.Assertions.assertEquals(HttpStatus.TOO_MANY_REQUESTS, error.getStatusCode());
+        org.mockito.Mockito.verifyNoInteractions(central);
     }
 
     @Test

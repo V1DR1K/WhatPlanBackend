@@ -4,6 +4,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 
+import com.wherefood.config.RetryAfterResponseStatusException;
 import java.sql.SQLException;
 import org.hibernate.exception.ConstraintViolationException;
 import org.junit.jupiter.api.Test;
@@ -68,6 +69,16 @@ class ApiExceptionHandlerTest {
         assertEquals(HttpStatus.TOO_MANY_REQUESTS, response.getStatusCode());
         assertEquals("RATE_LIMITED", response.getBody().getProperties().get("errorCode"));
         assertEquals("Demasiadas solicitudes. Intentá nuevamente más tarde.", response.getBody().getDetail());
+    }
+
+    @Test
+    void preservesRetryAfterForAccountRateLimitsAndUpstreamBulkhead() {
+        ResponseEntity<ProblemDetail> response = handler.status(new RetryAfterResponseStatusException(
+                HttpStatus.SERVICE_UNAVAILABLE, "private detail", 1));
+
+        assertEquals(HttpStatus.SERVICE_UNAVAILABLE, response.getStatusCode());
+        assertEquals("1", response.getHeaders().getFirst("Retry-After"));
+        assertEquals("El servicio requerido no está disponible temporalmente.", response.getBody().getDetail());
     }
 
     @Test

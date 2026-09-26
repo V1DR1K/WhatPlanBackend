@@ -40,17 +40,20 @@ public class AuthApi {
     private final CentralAuthClient central;
     private final CentralJwt jwt;
     private final LocalUserProvisioner provisioner;
+    private final LoginAttemptProtection loginAttemptProtection;
     private final Set<String> cookieAllowedOrigins;
     private final Duration refreshCookieTtl;
 
     @org.springframework.beans.factory.annotation.Autowired
     public AuthApi(CentralAuthClient central, CentralJwt jwt, LocalUserProvisioner provisioner,
+                   LoginAttemptProtection loginAttemptProtection,
                    @Value("${app.auth-cookie-allowed-origins}") String allowedOrigins,
                    @Value("${app.auth-refresh-cookie-ttl-seconds:604800}") long refreshCookieTtlSeconds) {
-        this(central, jwt, provisioner, parseOrigins(allowedOrigins), refreshCookieTtlSeconds);
+        this(central, jwt, provisioner, loginAttemptProtection, parseOrigins(allowedOrigins), refreshCookieTtlSeconds);
     }
 
     AuthApi(CentralAuthClient central, CentralJwt jwt, LocalUserProvisioner provisioner,
+            LoginAttemptProtection loginAttemptProtection,
             Set<String> cookieAllowedOrigins, long refreshCookieTtlSeconds) {
         if (cookieAllowedOrigins == null || cookieAllowedOrigins.isEmpty()) {
             throw new IllegalStateException("AUTH_COOKIE_ALLOWED_ORIGINS must contain at least one exact origin");
@@ -61,6 +64,7 @@ public class AuthApi {
         this.central = central;
         this.jwt = jwt;
         this.provisioner = provisioner;
+        this.loginAttemptProtection = loginAttemptProtection;
         this.cookieAllowedOrigins = Set.copyOf(cookieAllowedOrigins);
         this.refreshCookieTtl = Duration.ofSeconds(refreshCookieTtlSeconds);
     }
@@ -68,6 +72,7 @@ public class AuthApi {
     @PostMapping("/login")
     AuthResponse login(@Valid @RequestBody LoginRequest request, HttpServletResponse servletResponse) {
         noStore(servletResponse);
+        loginAttemptProtection.checkAccount(request.username());
         TokenResponse tokenResponse = central.login(request.username(), request.password());
         return authenticatedResponse(tokenResponse, servletResponse);
     }

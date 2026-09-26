@@ -11,17 +11,25 @@ import org.springframework.web.client.RestClientResponseException;
 import org.springframework.web.client.RestClientException;
 import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import java.time.Duration;
+import java.util.concurrent.Semaphore;
 
 @Component
 public class CentralAuthClient {
     private final RestClient client;
+    private final Semaphore concurrentRequests;
 
+    @org.springframework.beans.factory.annotation.Autowired
     public CentralAuthClient(RestClient.Builder builder, @Value("${app.auth-service-url}") String serviceUrl,
             @Value("${app.auth-service-connect-timeout-seconds:3}") int connectTimeoutSeconds,
-            @Value("${app.auth-service-read-timeout-seconds:5}") int readTimeoutSeconds) {
+            @Value("${app.auth-service-read-timeout-seconds:5}") int readTimeoutSeconds,
+            @Value("${app.auth-service-max-concurrent-requests:32}") int maxConcurrentRequests) {
         if (connectTimeoutSeconds < 1 || connectTimeoutSeconds > 30 || readTimeoutSeconds < 1 || readTimeoutSeconds > 60) {
             throw new IllegalArgumentException("Central authentication timeouts are outside allowed bounds");
         }
+        if (maxConcurrentRequests < 1 || maxConcurrentRequests > 256) {
+            throw new IllegalArgumentException("Central authentication concurrency must be between 1 and 256");
+        }
+        this.concurrentRequests = new Semaphore(maxConcurrentRequests);
         SimpleClientHttpRequestFactory requestFactory = new SimpleClientHttpRequestFactory();
         requestFactory.setConnectTimeout(Duration.ofSeconds(connectTimeoutSeconds));
         requestFactory.setReadTimeout(Duration.ofSeconds(readTimeoutSeconds));
@@ -49,16 +57,20 @@ public class CentralAuthClient {
     }
 
     private <T> T get(String path, String authorization, Class<T> responseType) {
+        acquireRequestSlot();
         try {
             return client.get().uri(path).header(HttpHeaders.AUTHORIZATION, authorization).retrieve().body(responseType);
         } catch (RestClientResponseException ex) {
             throw upstreamFailure(ex);
         } catch (RestClientException ex) {
             throw unavailable();
+        } finally {
+            concurrentRequests.release();
         }
     }
 
     private <T> T post(String path, Object request, String authorization, Class<T> responseType) {
+        acquireRequestSlot();
         try {
             var call = client.post().uri(path).body(request);
             if (authorization != null) call.header(HttpHeaders.AUTHORIZATION, authorization);
@@ -67,6 +79,15 @@ public class CentralAuthClient {
             throw upstreamFailure(ex);
         } catch (RestClientException ex) {
             throw unavailable();
+        } finally {
+            concurrentRequests.release();
+        }
+    }
+
+    private void acquireRequestSlot() {
+        if (!concurrentRequests.tryAcquire()) {
+            throw new RetryAfterResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE,
+                    "El servicio de autenticación está ocupado temporalmente.", 1);
         }
     }
 

@@ -7,6 +7,7 @@ Current fixed-window policies:
 | Request | Limit | Window | Identity |
 | --- | ---: | ---: | --- |
 | `POST /api/auth/login` | 10 | 15 minutes | Client IP |
+| `POST /api/auth/login` | 30 | 15 minutes | Normalized account name, shared across backend replicas |
 | `POST /api/auth/register` (reserved for the central-auth integration) | 5 | 30 minutes | Client IP |
 | `POST /api/auth/refresh` | 60 per IP and 10 per refresh cookie | 5 minutes | Separate IP and refresh-cookie counters (cookie hashed before Redis key storage) |
 | `POST /api/couple/invitations` | 20 | 5 minutes | Authenticated local account, otherwise client IP |
@@ -24,6 +25,8 @@ Set `TRUSTED_PROXY_ADDRESSES` to a comma-separated list of exact IP addresses fo
 ## Authentication-service timeouts
 
 Configure `AUTH_SERVICE_CONNECT_TIMEOUT_SECONDS` (1–30, default 3) and `AUTH_SERVICE_READ_TIMEOUT_SECONDS` (1–60, default 5). Network failures/timeouts become a sanitized `503`. Requests are not automatically retried: login, refresh, and logout are stateful and automatic retries can duplicate effects or rotate refresh credentials unexpectedly.
+
+`AUTH_SERVICE_MAX_CONCURRENT_REQUESTS` bounds simultaneous calls from each backend instance to Central Auth (1–256, default 32). Requests above the instance limit fail fast with sanitized `503` and `Retry-After: 1`; permits are released on success and failure. The account-level login budget is independent of IP limits to make password spraying across changing IPs more expensive; it is keyed by a SHA-256 digest in Redis and fails closed if Redis is unavailable.
 
 ## Operations
 

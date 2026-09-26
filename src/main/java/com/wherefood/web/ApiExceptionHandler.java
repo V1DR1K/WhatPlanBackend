@@ -1,6 +1,7 @@
 package com.wherefood.web;
 
 import com.wherefood.config.ProblemDetailsSupport;
+import com.wherefood.config.RetryAfterResponseStatusException;
 import java.util.Map;
 import java.util.stream.Collectors;
 import org.springframework.dao.DataIntegrityViolationException;
@@ -74,7 +75,12 @@ public class ApiExceptionHandler {
             case BAD_GATEWAY, SERVICE_UNAVAILABLE, GATEWAY_TIMEOUT -> "El servicio requerido no está disponible temporalmente.";
             default -> resolved.is5xxServerError() ? "Ocurrió un error interno." : "No se pudo completar la solicitud.";
         };
-        return ProblemDetailsSupport.response(resolved, stableErrorCode(resolved), detail);
+        ResponseEntity<ProblemDetail> response = ProblemDetailsSupport.response(resolved, stableErrorCode(resolved), detail);
+        if (exception instanceof RetryAfterResponseStatusException retry) {
+            return ResponseEntity.status(response.getStatusCode()).headers(response.getHeaders())
+                    .header("Retry-After", Long.toString(retry.retryAfterSeconds())).body(response.getBody());
+        }
+        return response;
     }
 
     @ExceptionHandler(AccessDeniedException.class)

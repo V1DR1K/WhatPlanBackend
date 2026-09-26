@@ -38,6 +38,7 @@ app.auth-cookie-allowed-origins: ${AUTH_COOKIE_ALLOWED_ORIGINS}
 app.auth-refresh-cookie-ttl-seconds: ${AUTH_REFRESH_COOKIE_TTL_SECONDS:604800}
 app.auth-service-connect-timeout-seconds: ${AUTH_SERVICE_CONNECT_TIMEOUT_SECONDS:3}
 app.auth-service-read-timeout-seconds: ${AUTH_SERVICE_READ_TIMEOUT_SECONDS:5}
+app.auth-service-max-concurrent-requests: ${AUTH_SERVICE_MAX_CONCURRENT_REQUESTS:32}
 app.rate-limit.trusted-proxy-addresses: ${TRUSTED_PROXY_ADDRESSES:}
 app.runtime.auth-service-url: ${AUTH_SERVICE_URL}
 app.runtime.database-url: ${DATABASE_URL}
