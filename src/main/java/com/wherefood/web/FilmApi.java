@@ -23,8 +23,10 @@ record PlatformDto(Long id, String name, String icon, boolean active) {}
 record FilmRequest(@Positive Long tmdbId, @Size(max = 200) String title, @Size(max = 200) String originalTitle, @Size(max = 3000) String synopsis, LocalDate releaseDate, @Size(max = 1000) @SafeHttpUrl String posterPath, LocalDate watchedOn, @Size(max = 12) List<@Size(max = 80) String> genres, @Positive Long platformId) {}
 record FilmViewRequest(@NotNull LocalDate watchedOn) {}
 record FilmReviewRequest(@Min(1) @Max(5) short rating, @Size(max = 1000) String comment, LocalDate watchedOn, @Size(max = 300) String favoriteCharacter, @Size(max = 20) Map<@NotBlank @Pattern(regexp = "[a-z_]{1,80}") String, @NotNull @Min(1) @Max(5) Short> metrics) {}
-record FilmGenreOptionRequest(@NotBlank @Size(max = 80) String name, @NotBlank @Size(max = 20) String emoji) {}
-record FilmGenreOptionDto(Long id, String name, String emoji) {}
+record FilmGenreOptionRequest(@NotBlank @Size(max = 80) String name, @NotBlank @Size(max = 20) String emoji, Boolean active) {
+ FilmGenreOptionRequest(String name, String emoji) { this(name, emoji, null); }
+}
+record FilmGenreOptionDto(Long id, String name, String emoji, boolean active) {}
 record FilmReviewDto(Long id, String author, short rating, String comment, LocalDate watchedOn, String favoriteCharacter, Map<String, Short> metrics) {}
 record FilmViewDto(Long id, LocalDate watchedOn, String createdBy, String updatedBy, List<FilmReviewDto> reviews, Instant createdAt) {}
  record FilmDto(Long id, Long tmdbId, String title, String originalTitle, String synopsis, LocalDate releaseDate, String posterUrl, String thumbnailUrl, Integer posterWidth, Integer posterHeight, List<String> genres, PlatformDto platform, int watchedCount, LocalDate lastWatchedOn, String author, List<FilmReviewDto> reviews, List<FilmViewDto> views, Instant createdAt, Instant updatedAt, TmdbMovieDto tmdb) {}
@@ -79,7 +81,7 @@ public class FilmApi {
            FilmCatalogService catalogService, FilmMediaService mediaService) {
     this(films, reviews, views, platforms, filmPhotos, genreOptions, storage, tmdb, reviewService,
             viewService, catalogService, mediaService,
-            new FilmCatalogAdminService(platforms, genreOptions, films));
+            new FilmCatalogAdminService(platforms, genreOptions));
    }
 
    @org.springframework.beans.factory.annotation.Autowired
@@ -99,7 +101,8 @@ public class FilmApi {
  @PostMapping("/watch-platforms") @PreAuthorize("hasRole('ADMIN')") PlatformDto addPlatform(@RequestBody @Valid PlatformRequest request) { return platform(catalogAdminService.createPlatform(request)); }
  @PutMapping("/watch-platforms/{id}") @PreAuthorize("hasRole('ADMIN')") PlatformDto updatePlatform(@PathVariable Long id, @RequestBody @Valid PlatformRequest request) { return platform(catalogAdminService.updatePlatform(id, request)); }
  @DeleteMapping("/watch-platforms/{id}") @PreAuthorize("hasRole('ADMIN')") @ResponseStatus(HttpStatus.NO_CONTENT) void deletePlatform(@PathVariable Long id) { catalogAdminService.deletePlatform(id); }
-  @GetMapping("/film-genres") List<FilmGenreOptionDto> genres() { return genreOptions.findAllByOrderByNameAsc().stream().map(FilmApi::genre).toList(); }
+  @GetMapping("/film-genres") List<FilmGenreOptionDto> genres() { return genreOptions.findByActiveTrueOrderByNameAsc().stream().map(FilmApi::genre).toList(); }
+  @GetMapping("/film-genres/all") @PreAuthorize("hasRole('ADMIN')") List<FilmGenreOptionDto> allGenres() { return genreOptions.findAllByOrderByNameAsc().stream().map(FilmApi::genre).toList(); }
   @PostMapping("/film-genres") @PreAuthorize("hasRole('ADMIN')") FilmGenreOptionDto addGenre(@RequestBody @Valid FilmGenreOptionRequest request) { return genre(catalogAdminService.createGenre(request)); }
   @PutMapping("/film-genres/{id}") @PreAuthorize("hasRole('ADMIN')") FilmGenreOptionDto updateGenre(@PathVariable Long id, @RequestBody @Valid FilmGenreOptionRequest request) { return genre(catalogAdminService.updateGenre(id, request)); }
   @DeleteMapping("/film-genres/{id}") @PreAuthorize("hasRole('ADMIN')") @ResponseStatus(HttpStatus.NO_CONTENT) void deleteGenre(@PathVariable Long id) { catalogAdminService.deleteGenre(id); }
@@ -192,7 +195,7 @@ public class FilmApi {
   private static String posterUrl(String posterPath) { return posterPath; }
     private static String photoUrl(Long filmId, boolean thumbnail, Long photoId) { return "/films/" + filmId + "/photo?" + (thumbnail ? "thumbnail=true&" : "") + "v=" + photoId; }
   private static PlatformDto platform(WatchPlatform value) { return new PlatformDto(value.id, value.name, value.icon, value.active); }
-  private static FilmGenreOptionDto genre(FilmGenreOption value) { return new FilmGenreOptionDto(value.id, value.name, value.emoji); }
+  private static FilmGenreOptionDto genre(FilmGenreOption value) { return new FilmGenreOptionDto(value.id, value.name, value.emoji, value.active); }
    private static FilmViewDto view(FilmView value, List<FilmReviewDto> reviews) { return new FilmViewDto(value.id, value.watchedOn, value.createdBy.username, value.updatedBy == null ? value.createdBy.username : value.updatedBy.username, reviews, value.createdAt); }
    private static FilmReviewDto review(FilmReview value) { return review(value, value.author.username); }
    private static FilmReviewDto review(FilmReview value, String author) { return new FilmReviewDto(value.id, author, value.rating, value.comment, value.view.watchedOn, value.favoriteCharacter, Map.copyOf(value.metrics)); }

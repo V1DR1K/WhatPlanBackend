@@ -98,7 +98,9 @@ public class FilmCatalogService {
                             .limit(12).collect(Collectors.toCollection(LinkedHashSet::new));
             List<FilmGenreOption> selected = names.isEmpty() ? List.of()
                     : genreOptions.findAllByNameIn(names);
-            if (selected.size() != names.size()) {
+            Set<String> previouslyAssigned = film.genres.stream().map(genre -> genre.name).collect(Collectors.toSet());
+            if (selected.size() != names.size()
+                    || selected.stream().anyMatch(genre -> !genre.active && !previouslyAssigned.contains(genre.name))) {
                 throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Género no encontrado");
             }
             film.genres.clear();
@@ -118,8 +120,11 @@ public class FilmCatalogService {
             film.genres.clear();
         }
         film.platform = request.platformId() == null ? null
-                : platforms.findById(request.platformId()).orElseThrow(() ->
-                        new ResponseStatusException(HttpStatus.NOT_FOUND, "Plataforma no encontrada"));
+                : platforms.findById(request.platformId())
+                        .filter(platform -> platform.active || (film.platform != null
+                                && request.platformId().equals(film.platform.id)))
+                        .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND,
+                                "Plataforma no encontrada"));
     }
 
     private static String blankToNull(String value) {

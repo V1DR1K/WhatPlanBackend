@@ -3,7 +3,6 @@ package com.wherefood.web;
 import com.wherefood.domain.FilmGenreOption;
 import com.wherefood.domain.WatchPlatform;
 import com.wherefood.repo.Repositories.FilmGenreOptions;
-import com.wherefood.repo.Repositories.Films;
 import com.wherefood.repo.Repositories.WatchPlatforms;
 import java.time.Instant;
 import org.springframework.http.HttpStatus;
@@ -18,12 +17,10 @@ import org.springframework.web.server.ResponseStatusException;
 public class FilmCatalogAdminService {
     private final WatchPlatforms platforms;
     private final FilmGenreOptions genres;
-    private final Films films;
 
-    public FilmCatalogAdminService(WatchPlatforms platforms, FilmGenreOptions genres, Films films) {
+    public FilmCatalogAdminService(WatchPlatforms platforms, FilmGenreOptions genres) {
         this.platforms = platforms;
         this.genres = genres;
-        this.films = films;
     }
 
     @Transactional
@@ -47,11 +44,8 @@ public class FilmCatalogAdminService {
     @PreAuthorize("hasRole('ADMIN')")
     public void deletePlatform(Long id) {
         WatchPlatform value = platforms.findById(id).orElseThrow(() -> notFound("Plataforma"));
-        if (films.existsByPlatformId(id)) {
-            throw new ResponseStatusException(HttpStatus.CONFLICT,
-                    "No podés borrar una plataforma usada por películas");
-        }
-        platforms.delete(value);
+        value.active = false;
+        platforms.save(value);
     }
 
     @Transactional
@@ -74,7 +68,9 @@ public class FilmCatalogAdminService {
     @Transactional
     @PreAuthorize("hasRole('ADMIN')")
     public void deleteGenre(Long id) {
-        genres.delete(genres.findById(id).orElseThrow(() -> notFound("Género")));
+        FilmGenreOption value = genres.findById(id).orElseThrow(() -> notFound("Género"));
+        value.active = false;
+        genres.save(value);
     }
 
     private static void apply(WatchPlatform value, PlatformRequest request) {
@@ -86,6 +82,7 @@ public class FilmCatalogAdminService {
     private static void apply(FilmGenreOption value, FilmGenreOptionRequest request) {
         value.name = request.name().trim();
         value.emoji = request.emoji().trim();
+        if (request.active() != null) value.active = request.active();
     }
 
     private static ResponseStatusException notFound(String type) {

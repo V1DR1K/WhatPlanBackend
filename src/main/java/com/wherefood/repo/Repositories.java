@@ -407,7 +407,8 @@ public final class Repositories {
   List<WatchPlatform> findAllByOrderByNameAsc();
  }
 
- public interface FilmGenreOptions extends JpaRepository<FilmGenreOption, Long> {
+  public interface FilmGenreOptions extends JpaRepository<FilmGenreOption, Long> {
+   List<FilmGenreOption> findByActiveTrueOrderByNameAsc();
    List<FilmGenreOption> findAllByOrderByNameAsc();
    List<FilmGenreOption> findAllByNameIn(Collection<String> names);
   }
@@ -467,7 +468,6 @@ public final class Repositories {
           @Param("coupleId") java.util.UUID coupleId);
   @EntityGraph(attributePaths = {"platform", "createdBy", "genres"}) @Query("select f from Film f where f.id=:id and f.coupleId=:coupleId") Optional<Film> findDetailedByIdAndCoupleId(@Param("id") Long id, @Param("coupleId") java.util.UUID coupleId);
   Optional<Film> findByTmdbIdAndCoupleId(Long tmdbId, java.util.UUID coupleId);
-  boolean existsByPlatformId(Long platformId);
   }
 
 
