@@ -207,6 +207,20 @@ class ApiVisitTest {
   }
 
   @Test
+  void scopesPlaceItemDatesToTheAuthenticatedCouple() {
+    UUID coupleId = UUID.randomUUID(); CoupleContext.set(coupleId);
+    Places places = mock(Places.class); Items items = mock(Items.class);
+    User author = user(7L, "tomas");
+    when(places.findDetailedByIdAndCoupleId(4L, coupleId)).thenReturn(Optional.of(place(4L, author, Instant.now())));
+    List<LocalDate> dates = List.of(LocalDate.of(2026, 7, 23));
+    when(items.findItemDatesByPlaceIdAndCoupleId(4L, coupleId)).thenReturn(dates);
+    Api api = new Api(null, null, null, places, null, items, null, null, null, null, null, null, null);
+
+    assertEquals(dates, api.itemDates(4L));
+    verify(items).findItemDatesByPlaceIdAndCoupleId(4L, coupleId);
+  }
+
+  @Test
   void queriesFilteredPlacePageWithinCurrentCouple() {
     Places places = mock(Places.class);
     UUID coupleId = UUID.randomUUID(); CoupleContext.set(coupleId);

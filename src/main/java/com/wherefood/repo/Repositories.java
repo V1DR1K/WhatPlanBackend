@@ -359,7 +359,9 @@ public final class Repositories {
      @EntityGraph(attributePaths = {"createdBy", "visit", "visit.place"})
      @Query("select i from Item i where i.visit.place.id = :placeId and i.visit.visitedOn = :visitDate and i.deletedAt is null order by i.id desc")
      List<Item> findCatalogByPlaceIdAndVisitDate(@Param("placeId") Long placeId, @Param("visitDate") LocalDate visitDate, Pageable pageable);
-   @Query("select distinct i.visit.visitedOn from Item i where i.visit.place.id = :placeId and i.deletedAt is null order by i.visit.visitedOn desc") List<LocalDate> findItemDatesByPlaceId(@Param("placeId") Long placeId);
+   @Query("select distinct i.visit.visitedOn from Item i where i.visit.place.id = :placeId and i.coupleId = :coupleId and i.visit.coupleId = :coupleId and i.deletedAt is null order by i.visit.visitedOn desc")
+   List<LocalDate> findItemDatesByPlaceIdAndCoupleId(@Param("placeId") Long placeId,
+           @Param("coupleId") java.util.UUID coupleId);
    @Query("select i.visit.place.id as placeId, count(distinct i) as itemCount, coalesce(avg(review.taste), 0.0) as tasteAverage, coalesce(avg(review.price), 0.0) as priceAverage from Item i left join i.reviews review where i.visit.place.id in :ids and i.deletedAt is null group by i.visit.place.id") List<PlaceMetric> metrics(@Param("ids") Collection<Long> ids);
   }
 

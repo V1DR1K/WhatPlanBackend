@@ -393,8 +393,12 @@ class CoupleHttpIsolationIntegrationTest {
         }
         LocalDate placeVisitPageDateOne = LocalDate.now(ZoneId.of("America/Argentina/Buenos_Aires")).minusDays(3);
         LocalDate placeVisitPageDateTwo = placeVisitPageDateOne.plusDays(1);
-        insertPlaceVisitForHistoryTest(historyPlaceId, placeVisitPageDateOne, "http-user-a1", COUPLE_A_ID);
+        long historyVisitId = insertPlaceVisitForHistoryTest(historyPlaceId, placeVisitPageDateOne, "http-user-a1", COUPLE_A_ID);
         insertPlaceVisitForHistoryTest(historyPlaceId, placeVisitPageDateTwo, "http-user-a1", COUPLE_A_ID);
+        try (Connection connection = adminConnection()) {
+            long authorId = scalarLong(connection, "select id from users where username = 'http-user-a1'");
+            insertItem(connection, historyVisitId, authorId, COUPLE_A_ID);
+        }
         assertThat(get("/api/places/" + historyPlaceId + "/visits", USER_B_AUTH_ID, null).getStatusCode().value()).isEqualTo(404);
         JsonNode placeVisitPageOne = objectMapper.readTree(get("/api/places/" + historyPlaceId + "/visits?size=1",
                 USER_A1_AUTH_ID, null).getBody());
@@ -408,6 +412,9 @@ class CoupleHttpIsolationIntegrationTest {
         assertThat(placeVisitPageTwo.path("content").get(0).path("visitedOn").asText()).isEqualTo(placeVisitPageDateOne.toString());
         assertProblem(get("/api/places/" + historyPlaceId + "/visits?cursor=invalid", USER_A1_AUTH_ID, null),
                 400, "INVALID_REQUEST");
+        ResponseEntity<String> itemDatesA = get("/api/places/" + historyPlaceId + "/item-dates", USER_A1_AUTH_ID, null);
+        assertThat(itemDatesA.getStatusCode().value()).isEqualTo(200);
+        assertThat(itemDatesA.getBody()).contains(placeVisitPageDateOne.toString());
         assertThat(get("/api/places/" + fixture.placeB() + "/item-dates", USER_A1_AUTH_ID, null)
                 .getStatusCode().value()).isEqualTo(404);
         assertThat(get("/api/items?placeId=" + fixture.placeB(), USER_A1_AUTH_ID, null)
@@ -1501,16 +1508,21 @@ class CoupleHttpIsolationIntegrationTest {
         return Base64.getEncoder().encodeToString(value.getBytes(StandardCharsets.UTF_8));
     }
 
-    private static void insertPlaceVisitForHistoryTest(long placeId, LocalDate visitedOn, String username,
+    private static long insertPlaceVisitForHistoryTest(long placeId, LocalDate visitedOn, String username,
             UUID coupleId) throws Exception {
         try (Connection connection = adminConnection(); PreparedStatement statement = connection.prepareStatement(
                 "insert into place_visits(place_id, visited_on, created_by, updated_by, couple_id) "
-                        + "select ?, ?, u.id, u.id, ? from users u where u.username = ?")) {
+                        + "select ?, ?, u.id, u.id, ? from users u where u.username = ? returning id")) {
             statement.setLong(1, placeId);
             statement.setDate(2, java.sql.Date.valueOf(visitedOn));
             statement.setObject(3, coupleId);
             statement.setString(4, username);
-            assertThat(statement.executeUpdate()).isEqualTo(1);
+            try (ResultSet result = statement.executeQuery()) {
+                assertThat(result.next()).isTrue();
+                long id = result.getLong(1);
+                assertThat(result.next()).isFalse();
+                return id;
+            }
         }
     }
 

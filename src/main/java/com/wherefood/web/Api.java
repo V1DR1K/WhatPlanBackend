@@ -179,7 +179,7 @@ public class Api {
   }
    @GetMapping("/places/{id}/item-dates") List<LocalDate> itemDates(@PathVariable Long id) {
      active(places.findDetailedByIdAndCoupleId(id, CoupleContext.current()).orElseThrow(() -> notFound("Lugar")));
-     return items.findItemDatesByPlaceId(id);
+     return items.findItemDatesByPlaceIdAndCoupleId(id, CoupleContext.current());
    }
     @GetMapping("/items") Slice<ItemCatalogDto> listItems(@RequestParam @Positive Long placeId, @RequestParam(required = false) LocalDate visitDate, @RequestParam(required = false) @jakarta.validation.constraints.PositiveOrZero @Max(1_000_000) Long cursor, @RequestParam(defaultValue = "30") int size) {
      active(places.findDetailedByIdAndCoupleId(placeId, CoupleContext.current()).orElseThrow(() -> notFound("Lugar")));
