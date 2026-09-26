@@ -162,6 +162,8 @@ public class PhotoStorage {
        reader.setInput(input, true, true);
        validateDimensions(reader.getWidth(0), reader.getHeight(0));
        return reader.read(0);
+      } catch (IOException exception) {
+       throw invalidImage(exception);
       } finally {
        reader.dispose();
       }
@@ -226,6 +228,10 @@ public class PhotoStorage {
   @FunctionalInterface
   interface DecoderProcessStarter {
    Process start(Path input, Path output) throws IOException;
+  }
+
+  private static ResponseStatusException invalidImage(IOException cause) {
+   return new ResponseStatusException(HttpStatus.BAD_REQUEST, "La foto debe ser una imagen válida", cause);
   }
 
   private void validateWebpDimensions(byte[] source) {
@@ -296,6 +302,8 @@ public class PhotoStorage {
         reader.setInput(input, true, true);
         validateDimensions(reader.getWidth(0), reader.getHeight(0));
         return reader.read(0);
+      } catch (IOException exception) {
+        throw invalidImage(exception);
       } finally {
         reader.dispose();
       }

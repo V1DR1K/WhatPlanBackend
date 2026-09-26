@@ -18,6 +18,7 @@ import java.nio.charset.StandardCharsets;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
+import java.util.Arrays;
 import org.junit.jupiter.api.Test;
 import javax.imageio.ImageIO;
 import org.springframework.http.HttpStatus;
@@ -54,6 +55,20 @@ class PhotoStorageProcessingTest {
 
         assertFalse(new String(storage.bytes(photo.imageBase64), StandardCharsets.ISO_8859_1).contains(privateMarker));
         assertFalse(new String(storage.bytes(photo.thumbnailBase64), StandardCharsets.ISO_8859_1).contains(privateMarker));
+    }
+
+    @Test
+    void rejectsTruncatedJpegAsInvalidInput() throws Exception {
+        BufferedImage image = new BufferedImage(2, 2, BufferedImage.TYPE_INT_RGB);
+        ByteArrayOutputStream encodedJpeg = new ByteArrayOutputStream();
+        ImageIO.write(image, "jpeg", encodedJpeg);
+        byte[] truncatedJpeg = Arrays.copyOf(encodedJpeg.toByteArray(), 24);
+        PhotoStorage storage = storage(1024 * 1024, 1024 * 1024L, 100, 100);
+
+        ResponseStatusException error = assertThrows(ResponseStatusException.class,
+                () -> storage.store(new Item(), uploadJpeg(truncatedJpeg)));
+
+        assertEquals(HttpStatus.BAD_REQUEST, error.getStatusCode());
     }
 
     @Test
