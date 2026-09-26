@@ -379,8 +379,16 @@ class CoupleHttpIsolationIntegrationTest {
         assertProblem(jsonRequest("/api/when-dates/special-dates/" + fixture.specialDateB() + "/occurrences/"
                 + fixture.occurrenceDate() + "/comments/me", HttpMethod.PUT, USER_A1_AUTH_ID,
                 "{\"comment\":\"Attempted occurrence comment\"}"), 404, "NOT_FOUND");
+        String occurrencePath = "/api/when-dates/special-dates/" + fixture.specialDateA() + "/occurrences/"
+                + fixture.occurrenceDate();
+        assertThat(jsonRequest(occurrencePath + "/comments/me", HttpMethod.PUT, USER_A1_AUTH_ID,
+                "{\"comment\":\"Member A1 calendar note\"}").getStatusCode().value()).isEqualTo(200);
+        assertThat(jsonRequest(occurrencePath + "/comments/me", HttpMethod.PUT, USER_A2_AUTH_ID,
+                "{\"comment\":\"Member A2 calendar note\"}").getStatusCode().value()).isEqualTo(200);
         assertThat(get("/api/when-dates?size=12", USER_B_AUTH_ID, null).getBody())
                 .contains("Private anniversary B").doesNotContain("Attempted occurrence comment");
+        assertThat(get(occurrencePath, USER_A1_AUTH_ID, null).getBody())
+                .contains("Member A1 calendar note", "Member A2 calendar note");
 
         assertCrossCoupleCoverDenied("/api/place-visits/" + fixture.placeVisitA() + "/cover/"
                         + fixture.placeVisitPhotoB(),
@@ -443,6 +451,11 @@ class CoupleHttpIsolationIntegrationTest {
 
         assertThat(putReview(fixture.placeA(), USER_A2_AUTH_ID, "Review from member two").getStatusCode().value())
                 .isEqualTo(200);
+        assertThat(putReview(fixture.placeA(), USER_A2_AUTH_ID, "Updated review from member two").getStatusCode().value())
+                .isEqualTo(200);
+        assertThat(get("/api/places/" + fixture.placeA(), USER_A1_AUTH_ID, null).getBody())
+                .contains("Review from member one", "Updated review from member two")
+                .doesNotContain("Review from member two\"");
         assertThat(putReview(fixture.placeA(), USER_B_AUTH_ID, "Cross-couple review").getStatusCode().value())
                 .isEqualTo(404);
         assertProblem(jsonRequest("/api/items/" + fixture.itemB() + "/reviews/me", HttpMethod.PUT, USER_A1_AUTH_ID,
@@ -461,6 +474,10 @@ class CoupleHttpIsolationIntegrationTest {
                 HttpMethod.POST, USER_A1_AUTH_ID,
                 "{\"overall\":5,\"comment\":\"Author-owned visit review\",\"taste\":5,\"price\":4}");
         assertThat(ownVisitReview.getStatusCode().value()).isEqualTo(201);
+        assertThat(jsonRequest("/api/place-visits/" + fixture.placeVisitA() + "/reviews/me", HttpMethod.PUT,
+                USER_A2_AUTH_ID,
+                "{\"overall\":3,\"comment\":\"Member A2 visit review\",\"taste\":3,\"price\":2}")
+                .getStatusCode().value()).isEqualTo(200);
         long visitReviewId = objectMapper.readTree(ownVisitReview.getBody()).path("id").asLong();
         assertThat(visitReviewId).isPositive();
         assertProblem(jsonRequest("/api/place-visit-reviews/" + visitReviewId, HttpMethod.PUT, USER_A2_AUTH_ID,
@@ -479,6 +496,42 @@ class CoupleHttpIsolationIntegrationTest {
         assertProblem(delete("/api/films/" + fixture.filmA() + "/reviews/" + filmReviewId,
                 USER_A2_AUTH_ID), 404, "NOT_FOUND");
 
+        ResponseEntity<String> itemCreatedByA1 = jsonRequest("/api/place-visits/" + fixture.placeVisitA() + "/items",
+                HttpMethod.POST, USER_A1_AUTH_ID, "{\"name\":\"Personal review item\"}");
+        assertThat(itemCreatedByA1.getStatusCode().value()).isEqualTo(200);
+        long itemA = objectMapper.readTree(itemCreatedByA1.getBody()).path("id").asLong();
+        assertThat(jsonRequest("/api/items/" + itemA + "/reviews/me", HttpMethod.PUT, USER_A1_AUTH_ID,
+                "{\"comment\":\"Member A1 item review\",\"taste\":5,\"price\":4}")
+                .getStatusCode().value()).isEqualTo(200);
+        assertThat(jsonRequest("/api/items/" + itemA + "/reviews/me", HttpMethod.PUT, USER_A2_AUTH_ID,
+                "{\"comment\":\"Member A2 item review\",\"taste\":2,\"price\":3}")
+                .getStatusCode().value()).isEqualTo(200);
+
+        assertThat(jsonRequest("/api/how-cook/cookings/" + fixture.cookingA() + "/reviews/me", HttpMethod.PUT,
+                USER_A1_AUTH_ID,
+                "{\"rating\":5,\"complexity\":3,\"taste\":5,\"comment\":\"Member A1 cooking review\"}")
+                .getStatusCode().value()).isEqualTo(200);
+        assertThat(jsonRequest("/api/how-cook/cookings/" + fixture.cookingA() + "/reviews/me", HttpMethod.PUT,
+                USER_A2_AUTH_ID,
+                "{\"rating\":2,\"complexity\":4,\"taste\":2,\"comment\":\"Member A2 cooking review\"}")
+                .getStatusCode().value()).isEqualTo(200);
+
+        assertThat(jsonRequest("/api/why-fun/activity-visits/" + fixture.activityVisitA() + "/reviews/me",
+                HttpMethod.PUT, USER_A1_AUTH_ID,
+                "{\"rating\":5,\"comment\":\"Member A1 activity review\"}")
+                .getStatusCode().value()).isEqualTo(200);
+        assertThat(jsonRequest("/api/why-fun/activity-visits/" + fixture.activityVisitA() + "/reviews/me",
+                HttpMethod.PUT, USER_A2_AUTH_ID,
+                "{\"rating\":2,\"comment\":\"Member A2 activity review\"}")
+                .getStatusCode().value()).isEqualTo(200);
+
+        assertThat(jsonRequest("/api/why-fun/plans/" + fixture.activityA() + "/review", HttpMethod.PUT,
+                USER_A1_AUTH_ID, "{\"rating\":5,\"comment\":\"Member A1 plan review\"}")
+                .getStatusCode().value()).isEqualTo(200);
+        assertThat(jsonRequest("/api/why-fun/plans/" + fixture.activityA() + "/review", HttpMethod.PUT,
+                USER_A2_AUTH_ID, "{\"rating\":2,\"comment\":\"Member A2 plan review\"}")
+                .getStatusCode().value()).isEqualTo(200);
+
         try (Connection connection = adminConnection()) {
             long cookingReviewId = scalarLong(connection, "select id from cooking_reviews where cooking_id = "
                     + fixture.cookingA() + " and author_id = (select id from users where username = 'http-user-a1')");
@@ -489,7 +542,15 @@ class CoupleHttpIsolationIntegrationTest {
                     USER_A2_AUTH_ID), 404, "NOT_FOUND");
         }
         assertThat(get("/api/place-visits/" + fixture.placeVisitA(), USER_A1_AUTH_ID, null).getBody())
-                .contains("Author-owned visit review");
+                .contains("Author-owned visit review", "Member A2 visit review");
+        assertThat(get("/api/place-visits/" + fixture.placeVisitA(), USER_A1_AUTH_ID, null).getBody())
+                .contains("Member A1 item review", "Member A2 item review");
+        assertThat(get("/api/how-cook/cookings/" + fixture.cookingA(), USER_A1_AUTH_ID, null).getBody())
+                .contains("Member A1 cooking review", "Member A2 cooking review");
+        assertThat(get("/api/why-fun/activity-visits/" + fixture.activityVisitA(), USER_A1_AUTH_ID, null).getBody())
+                .contains("Member A1 activity review", "Member A2 activity review");
+        assertThat(get("/api/why-fun/plans/" + fixture.activityA(), USER_A1_AUTH_ID, null).getBody())
+                .contains("Member A1 plan review", "Member A2 plan review");
         assertThat(get("/api/films/" + fixture.filmA(), USER_A1_AUTH_ID, null).getBody())
                 .contains("Author-owned film review");
         assertThat(get("/api/how-cook/cookings/" + fixture.cookingA(), USER_A1_AUTH_ID, null).getBody())
@@ -1619,8 +1680,8 @@ class CoupleHttpIsolationIntegrationTest {
         JsonNode json = objectMapper.readTree(place.getBody());
         JsonNode reviews = json.path("reviews");
         assertThat(reviews.size()).isEqualTo(2);
-        assertThat(place.getBody()).contains("Review from member one", "Review from member two")
-                .doesNotContain("Cross-couple review");
+        assertThat(place.getBody()).contains("Review from member one", "Updated review from member two")
+                .doesNotContain("Review from member two\"", "Cross-couple review");
         try (Connection connection = adminConnection(); PreparedStatement statement = connection.prepareStatement(
                 "select count(*), min(comment), max(comment) from place_reviews where place_id = ?")) {
             statement.setLong(1, fixture.placeA());
@@ -1628,7 +1689,7 @@ class CoupleHttpIsolationIntegrationTest {
                 result.next();
                 assertThat(result.getInt(1)).isEqualTo(2);
                 assertThat(result.getString(2)).isEqualTo("Review from member one");
-                assertThat(result.getString(3)).isEqualTo("Review from member two");
+                assertThat(result.getString(3)).isEqualTo("Updated review from member two");
             }
         }
     }
