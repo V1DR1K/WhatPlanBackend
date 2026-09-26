@@ -24,9 +24,22 @@ spring:
   servlet.multipart.max-file-size: 10MB
   servlet.multipart.max-request-size: 11MB
 management:
-  endpoints.web.base-path: /api/actuator
-  endpoints.web.exposure.include: health
-  endpoint.health.show-details: never
+  endpoints:
+    web:
+      base-path: /api/actuator
+      exposure:
+        include:
+          - health
+          - prometheus
+  endpoint:
+    health:
+      show-details: never
+    prometheus:
+      enabled: true
+  prometheus:
+    metrics:
+      export:
+        enabled: true
 app.auth-service-url: ${AUTH_SERVICE_URL}
 app.auth-public-key-pem: ${AUTH_PUBLIC_KEY_PEM}
 app.auth-issuer: ${AUTH_JWT_ISSUER}

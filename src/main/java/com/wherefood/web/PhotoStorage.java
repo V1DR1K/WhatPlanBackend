@@ -3,6 +3,9 @@ package com.wherefood.web;
 import com.wherefood.domain.*;
 import com.drew.imaging.ImageMetadataReader;
 import com.drew.metadata.exif.ExifIFD0Directory;
+import io.micrometer.core.instrument.MeterRegistry;
+import io.micrometer.core.instrument.Metrics;
+import io.micrometer.core.instrument.Timer;
 import net.coobird.thumbnailator.Thumbnails;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
@@ -37,6 +40,7 @@ public class PhotoStorage {
  private final long processTimeoutSeconds;
  private final Semaphore processingSlots;
  private final DecoderProcessStarter decoderProcessStarter;
+ private final MeterRegistry meterRegistry;
 
  public PhotoStorage() {
   this(DEFAULT_MAX_UPLOAD_BYTES, DEFAULT_MAX_DECODED_BYTES, DEFAULT_MAX_PIXELS, DEFAULT_MAX_DIMENSION,
@@ -49,6 +53,12 @@ public class PhotoStorage {
           DEFAULT_MAX_CONCURRENT_PROCESSES);
  }
 
+ public PhotoStorage(long maxUploadBytes, long maxDecodedBytes, long maxPixels, int maxDimension,
+         long processTimeoutSeconds, int maxConcurrentProcesses) {
+  this(maxUploadBytes, maxDecodedBytes, maxPixels, maxDimension, processTimeoutSeconds,
+          maxConcurrentProcesses, PhotoStorage::startWebpDecoder, Metrics.globalRegistry);
+ }
+
  @org.springframework.beans.factory.annotation.Autowired
  public PhotoStorage(
    @org.springframework.beans.factory.annotation.Value("${app.images.max-upload-bytes:10485760}") long maxUploadBytes,
@@ -56,15 +66,24 @@ public class PhotoStorage {
    @org.springframework.beans.factory.annotation.Value("${app.images.max-pixels:25000000}") long maxPixels,
    @org.springframework.beans.factory.annotation.Value("${app.images.max-dimension:8000}") int maxDimension,
    @org.springframework.beans.factory.annotation.Value("${app.images.process-timeout-seconds:10}") long processTimeoutSeconds,
-   @org.springframework.beans.factory.annotation.Value("${app.images.max-concurrent-processes:2}") int maxConcurrentProcesses) {
+   @org.springframework.beans.factory.annotation.Value("${app.images.max-concurrent-processes:2}") int maxConcurrentProcesses,
+   MeterRegistry meterRegistry) {
   this(maxUploadBytes, maxDecodedBytes, maxPixels, maxDimension, processTimeoutSeconds,
-          maxConcurrentProcesses, PhotoStorage::startWebpDecoder);
+          maxConcurrentProcesses, PhotoStorage::startWebpDecoder, meterRegistry);
  }
 
  PhotoStorage(long maxUploadBytes, long maxDecodedBytes, long maxPixels, int maxDimension,
          long processTimeoutSeconds, int maxConcurrentProcesses, DecoderProcessStarter decoderProcessStarter) {
+  this(maxUploadBytes, maxDecodedBytes, maxPixels, maxDimension, processTimeoutSeconds,
+          maxConcurrentProcesses, decoderProcessStarter, Metrics.globalRegistry);
+ }
+
+ PhotoStorage(long maxUploadBytes, long maxDecodedBytes, long maxPixels, int maxDimension,
+         long processTimeoutSeconds, int maxConcurrentProcesses, DecoderProcessStarter decoderProcessStarter,
+         MeterRegistry meterRegistry) {
   if (maxUploadBytes <= 0 || maxDecodedBytes <= 0 || maxPixels <= 0 || maxDimension <= 0
-          || processTimeoutSeconds <= 0 || maxConcurrentProcesses <= 0 || decoderProcessStarter == null) {
+          || processTimeoutSeconds <= 0 || maxConcurrentProcesses <= 0 || decoderProcessStarter == null
+          || meterRegistry == null) {
    throw new IllegalArgumentException("Image processing limits must be positive");
   }
   this.maxUploadBytes = maxUploadBytes;
@@ -74,6 +93,11 @@ public class PhotoStorage {
   this.processTimeoutSeconds = processTimeoutSeconds;
   this.processingSlots = new Semaphore(maxConcurrentProcesses);
   this.decoderProcessStarter = decoderProcessStarter;
+  this.meterRegistry = meterRegistry;
+  for (String outcome : new String[] {"accepted", "rejected", "busy", "error"}) {
+   meterRegistry.counter("whatplan.media.uploads", "outcome", outcome);
+   Timer.builder("whatplan.media.upload.processing").tag("outcome", outcome).register(meterRegistry);
+  }
  }
 
  public ItemPhoto store(Item item, MultipartFile upload) throws IOException {
@@ -131,21 +155,37 @@ public class PhotoStorage {
    return photo;
   }
  private ImageData imageData(MultipartFile upload) throws IOException {
-   if (upload == null || upload.isEmpty() || upload.getSize() > maxUploadBytes) throw new ResponseStatusException(HttpStatus.PAYLOAD_TOO_LARGE, "El archivo de imagen supera el límite permitido");
-   if (!processingSlots.tryAcquire()) {
-    throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE, "El procesamiento de imágenes está ocupado. Intentá nuevamente en unos instantes.");
-   }
+   Timer.Sample sample = Timer.start(meterRegistry);
+   String outcome = "error";
+   boolean acquired = false;
    try {
+    if (upload == null || upload.isEmpty() || upload.getSize() > maxUploadBytes) throw new ResponseStatusException(HttpStatus.PAYLOAD_TOO_LARGE, "El archivo de imagen supera el límite permitido");
+    acquired = processingSlots.tryAcquire();
+    if (!acquired) {
+     throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE, "El procesamiento de imágenes está ocupado. Intentá nuevamente en unos instantes.");
+    }
     byte[] source = upload.getBytes();
     if (source.length > maxUploadBytes) throw new ResponseStatusException(HttpStatus.PAYLOAD_TOO_LARGE, "El archivo de imagen supera el límite permitido");
     BufferedImage image = read(source);
     if (image == null) throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "La foto debe ser una imagen válida");
     validateDimensions(image);
     image = orient(image, source);
-    return new ImageData(Base64.getEncoder().encodeToString(render(image, 1600)),
+    ImageData result = new ImageData(Base64.getEncoder().encodeToString(render(image, 1600)),
             Base64.getEncoder().encodeToString(render(image, 480)), image.getWidth(), image.getHeight());
+    outcome = "accepted";
+    return result;
+   } catch (ResponseStatusException exception) {
+    outcome = exception.getStatusCode().value() == HttpStatus.SERVICE_UNAVAILABLE.value()
+            ? "busy" : exception.getStatusCode().is4xxClientError() ? "rejected" : "error";
+    throw exception;
+   } catch (IOException | RuntimeException exception) {
+    outcome = "error";
+    throw exception;
    } finally {
-    processingSlots.release();
+    if (acquired) processingSlots.release();
+    meterRegistry.counter("whatplan.media.uploads", "outcome", outcome).increment();
+    sample.stop(Timer.builder("whatplan.media.upload.processing")
+            .tag("outcome", outcome).register(meterRegistry));
    }
   }
 

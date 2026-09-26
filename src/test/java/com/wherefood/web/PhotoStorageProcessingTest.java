@@ -10,6 +10,7 @@ import static org.mockito.Mockito.when;
 import com.drew.imaging.ImageMetadataReader;
 import com.drew.metadata.exif.ExifIFD0Directory;
 import com.wherefood.domain.Item;
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
@@ -83,6 +84,30 @@ class PhotoStorageProcessingTest {
                 () -> storage.store(new Item(), disguisedGif));
 
         assertEquals(HttpStatus.BAD_REQUEST, error.getStatusCode());
+    }
+
+    @Test
+    void recordsBoundedUploadMetricsWithoutCoupleIdentifiers() throws Exception {
+        SimpleMeterRegistry registry = new SimpleMeterRegistry();
+        PhotoStorage storage = new PhotoStorage(1024 * 1024, 1024 * 1024L, 100, 100, 1, 1,
+                (input, output) -> { throw new IOException("WebP decoder should not run for JPEG/PNG"); }, registry);
+        BufferedImage image = new BufferedImage(2, 2, BufferedImage.TYPE_INT_RGB);
+        ByteArrayOutputStream png = new ByteArrayOutputStream();
+        assertTrue(ImageIO.write(image, "png", png));
+        storage.store(new Item(), new MockMultipartFile("file", "small.png", "image/png", png.toByteArray()));
+
+        ByteArrayOutputStream gif = new ByteArrayOutputStream();
+        assertTrue(ImageIO.write(image, "gif", gif));
+        ResponseStatusException rejected = assertThrows(ResponseStatusException.class,
+                () -> storage.store(new Item(), new MockMultipartFile("file", "small.png", "image/png", gif.toByteArray())));
+        assertEquals(HttpStatus.BAD_REQUEST, rejected.getStatusCode());
+
+        assertEquals(1.0, registry.get("whatplan.media.uploads").tag("outcome", "accepted").counter().count());
+        assertEquals(1.0, registry.get("whatplan.media.uploads").tag("outcome", "rejected").counter().count());
+        assertEquals(1, registry.get("whatplan.media.upload.processing").tag("outcome", "accepted").timer().count());
+        assertEquals(1, registry.get("whatplan.media.upload.processing").tag("outcome", "rejected").timer().count());
+        assertTrue(registry.get("whatplan.media.uploads").meters().stream()
+                .allMatch(meter -> meter.getId().getTag("couple_id") == null));
     }
 
     @Test

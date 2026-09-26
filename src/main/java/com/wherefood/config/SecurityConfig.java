@@ -42,6 +42,7 @@ public class SecurityConfig {
                                         "FORBIDDEN", "La solicitud no está permitida.", null)))
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers("/api/auth/login", "/api/auth/refresh", "/api/auth/logout", "/api/actuator/health", "/api/actuator/health/**").permitAll()
+                        .requestMatchers("/api/actuator/prometheus").hasRole("ADMIN")
                         .anyRequest().authenticated())
                 .addFilterBefore(filter, UsernamePasswordAuthenticationFilter.class)
                 .addFilterAfter(rateLimit, CentralJwtFilter.class)

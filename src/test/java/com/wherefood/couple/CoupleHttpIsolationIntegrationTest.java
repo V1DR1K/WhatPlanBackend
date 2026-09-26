@@ -192,6 +192,12 @@ class CoupleHttpIsolationIntegrationTest {
         invalidTokenHeaders.setBearerAuth("not-a-valid-jwt");
         assertProblem(http.exchange(url("/api/places"), HttpMethod.GET,
                 new HttpEntity<>(invalidTokenHeaders), String.class), 401, "UNAUTHORIZED");
+        assertProblem(http.getForEntity(url("/api/actuator/prometheus"), String.class), 401, "UNAUTHORIZED");
+        assertProblem(get("/api/actuator/prometheus", USER_A1_AUTH_ID, null), 403, "FORBIDDEN");
+        ResponseEntity<String> adminMetrics = get("/api/actuator/prometheus", ADMIN_AUTH_ID, null);
+        assertThat(adminMetrics.getStatusCode().value()).isEqualTo(200);
+        assertThat(adminMetrics.getBody()).contains("# HELP", "whatplan_media_uploads_total")
+                .doesNotContain(COUPLE_A_ID.toString(), COUPLE_B_ID.toString(), "couple_id");
 
         HttpHeaders loginHeaders = new HttpHeaders();
         loginHeaders.setContentType(MediaType.APPLICATION_JSON);
