@@ -328,6 +328,37 @@ class CoupleHttpIsolationIntegrationTest {
         assertThat(get("/api/places/" + fixture.placeB(), USER_B_AUTH_ID, null).getBody())
                 .contains("Private place B").doesNotContain("Attempted cross-couple edit");
 
+        assertCrossCoupleUpdateDenied("/api/place-visits/" + fixture.placeVisitB(), USER_A1_AUTH_ID,
+                "{\"visitedOn\":\"2026-09-01\"}", "/api/place-visits/" + fixture.placeVisitB(),
+                USER_B_AUTH_ID, "Private photo item B");
+        assertCrossCoupleUpdateDenied("/api/items/" + fixture.itemB(), USER_A1_AUTH_ID,
+                "{\"name\":\"Attempted item edit\"}", "/api/items?placeId=" + fixture.placeB(),
+                USER_B_AUTH_ID, "Private photo item B");
+        assertCrossCoupleUpdateDenied("/api/how-cook/recipes/" + fixture.recipeB(), USER_A1_AUTH_ID,
+                "{\"name\":\"Attempted recipe edit\",\"ingredients\":[],\"steps\":[]}",
+                "/api/how-cook/recipes/" + fixture.recipeB(), USER_B_AUTH_ID, "Torta pareja B");
+        assertCrossCoupleUpdateDenied("/api/how-cook/cookings/" + fixture.cookingB(), USER_A1_AUTH_ID,
+                "{\"home\":\"TOMAS\",\"servings\":2,\"cookedOn\":\"2026-09-01\",\"mealType\":\"ALMUERZO\"}",
+                "/api/how-cook/cookings/" + fixture.cookingB(), USER_B_AUTH_ID, "Torta pareja B");
+        assertCrossCoupleUpdateDenied("/api/films/" + fixture.filmB(), USER_A1_AUTH_ID,
+                "{\"title\":\"Attempted film edit\",\"genres\":[]}",
+                "/api/films/" + fixture.filmB(), USER_B_AUTH_ID, "Private film B");
+        assertCrossCoupleUpdateDenied("/api/why-fun/activities/" + fixture.activityB(), USER_A1_AUTH_ID,
+                "{\"name\":\"Attempted activity edit\",\"address\":\"Private\",\"categoryId\":"
+                        + fixture.activityCategoryId() + ",\"subcategoryId\":" + fixture.activitySubcategoryId() + ",\"schedules\":[]}",
+                "/api/why-fun/activities/" + fixture.activityB(), USER_B_AUTH_ID, "Museo pareja B");
+        assertCrossCoupleUpdateDenied("/api/why-fun/activity-visits/" + fixture.activityVisitB(), USER_A1_AUTH_ID,
+                "{\"scheduledAt\":\"2026-09-01\"}", "/api/why-fun/activity-visits/" + fixture.activityVisitB(),
+                USER_B_AUTH_ID, "Museo pareja B");
+        assertCrossCoupleUpdateDenied("/api/special-dates/" + fixture.specialDateB(), USER_A1_AUTH_ID,
+                "{\"date\":\"2026-09-01\",\"label\":\"Attempted date edit\",\"recurrence\":\"ANNUAL\"}",
+                "/api/special-dates", USER_B_AUTH_ID, "Private anniversary B");
+        assertProblem(jsonRequest("/api/when-dates/special-dates/" + fixture.specialDateB() + "/occurrences/"
+                + fixture.occurrenceDate() + "/comments/me", HttpMethod.PUT, USER_A1_AUTH_ID,
+                "{\"comment\":\"Attempted occurrence comment\"}"), 404, "NOT_FOUND");
+        assertThat(get("/api/when-dates?size=12", USER_B_AUTH_ID, null).getBody())
+                .contains("Private anniversary B").doesNotContain("Attempted occurrence comment");
+
         assertThat(putPlace(fixture.placeA(), USER_A2_AUTH_ID, "Shared edit by member A2", fixture.categoryId())
                 .getStatusCode().value()).isEqualTo(200);
         assertThat(get("/api/places/" + fixture.placeA(), USER_A1_AUTH_ID, null).getBody())
@@ -553,6 +584,15 @@ class CoupleHttpIsolationIntegrationTest {
         ResponseEntity<String> ownerRead = get(ownerReadPath, owner, null);
         assertThat(ownerRead.getStatusCode().value()).as(ownerReadPath).isEqualTo(200);
         assertThat(ownerRead.getBody()).as(ownerReadPath).contains(marker);
+    }
+
+    private void assertCrossCoupleUpdateDenied(String path, UUID attacker, String body,
+            String ownerReadPath, UUID owner, String originalMarker) throws Exception {
+        assertProblem(jsonRequest(path, HttpMethod.PUT, attacker, body), 404, "NOT_FOUND");
+        ResponseEntity<String> ownerRead = get(ownerReadPath, owner, null);
+        assertThat(ownerRead.getStatusCode().value()).as(ownerReadPath).isEqualTo(200);
+        assertThat(ownerRead.getBody()).as(ownerReadPath).contains(originalMarker)
+                .doesNotContain("Attempted");
     }
 
     private void assertCoupleScopedDetail(String pathPrefix, Long idA, Long idB, String markerA) {
