@@ -371,6 +371,15 @@ class CoupleHttpIsolationIntegrationTest {
         assertThat(get("/api/places/" + createdPlaceId, USER_A1_AUTH_ID, null).getStatusCode().value()).isEqualTo(200);
         assertThat(get("/api/places/" + createdPlaceId, USER_B_AUTH_ID, null).getStatusCode().value()).isEqualTo(404);
 
+        assertCrossCoupleCreateDenied("/api/places/" + fixture.placeB() + "/visits", USER_A1_AUTH_ID,
+                "{\"visitedOn\":\"2026-09-02\"}");
+        assertCrossCoupleCreateDenied("/api/place-visits/" + fixture.placeVisitB() + "/items", USER_A1_AUTH_ID,
+                "{\"name\":\"Attempted cross-couple item\"}");
+        assertCrossCoupleCreateDenied("/api/how-cook/recipes/" + fixture.recipeB() + "/cookings", USER_A1_AUTH_ID,
+                "{\"home\":\"TOMAS\",\"servings\":2,\"cookedOn\":\"2026-09-02\",\"mealType\":\"ALMUERZO\"}");
+        assertCrossCoupleCreateDenied("/api/why-fun/activities/" + fixture.activityB() + "/visits", USER_A1_AUTH_ID,
+                "{\"scheduledAt\":\"2026-09-02\"}");
+
         for (String photoPath : fixture.privatePhotoPaths()) {
             ResponseEntity<byte[]> crossCouplePhoto = getPrivatePhoto(photoPath, USER_A1_AUTH_ID);
             assertThat(crossCouplePhoto.getStatusCode().value()).as(photoPath).isEqualTo(404);
@@ -593,6 +602,10 @@ class CoupleHttpIsolationIntegrationTest {
         assertThat(ownerRead.getStatusCode().value()).as(ownerReadPath).isEqualTo(200);
         assertThat(ownerRead.getBody()).as(ownerReadPath).contains(originalMarker)
                 .doesNotContain("Attempted");
+    }
+
+    private void assertCrossCoupleCreateDenied(String path, UUID attacker, String body) throws Exception {
+        assertProblem(jsonRequest(path, HttpMethod.POST, attacker, body), 404, "NOT_FOUND");
     }
 
     private void assertCoupleScopedDetail(String pathPrefix, Long idA, Long idB, String markerA) {
