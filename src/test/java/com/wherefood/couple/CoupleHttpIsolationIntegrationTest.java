@@ -139,6 +139,7 @@ class CoupleHttpIsolationIntegrationTest {
 
     @Test
     void productionHttpChainKeepsReadsWritesReviewsAndPhotosInsideTheAuthenticatedCouple() throws Exception {
+        assertRuntimeDatabaseRoleIsRestricted();
         Fixture fixture = seedFixture();
         benchmarkCalendarSummaryQuery(fixture);
 
@@ -815,6 +816,23 @@ class CoupleHttpIsolationIntegrationTest {
 
     private static Connection adminConnection() throws Exception {
         return DriverManager.getConnection(POSTGRES.getJdbcUrl(), POSTGRES.getUsername(), POSTGRES.getPassword());
+    }
+
+    private static void assertRuntimeDatabaseRoleIsRestricted() throws Exception {
+        try (Connection connection = DriverManager.getConnection(POSTGRES.getJdbcUrl(), "whatplan_runtime",
+                "test-only-runtime-password-0123456789");
+                PreparedStatement statement = connection.prepareStatement("""
+                        select current_user, r.rolsuper, r.rolbypassrls,
+                               row_security_active('public.places'::regclass)
+                        from pg_roles r where r.rolname = current_user
+                        """);
+                ResultSet result = statement.executeQuery()) {
+            assertThat(result.next()).isTrue();
+            assertThat(result.getString(1)).isEqualTo("whatplan_runtime");
+            assertThat(result.getBoolean(2)).isFalse();
+            assertThat(result.getBoolean(3)).isFalse();
+            assertThat(result.getBoolean(4)).isTrue();
+        }
     }
 
     private static String accessToken(UUID subject) {
