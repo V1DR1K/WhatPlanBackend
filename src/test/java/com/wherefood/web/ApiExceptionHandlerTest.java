@@ -79,4 +79,20 @@ class ApiExceptionHandlerTest {
         assertEquals("INVALID_REQUEST", response.getBody().getProperties().get("errorCode"));
         assertEquals(400, response.getBody().getStatus());
     }
+
+    @Test
+    void mapsUpstreamFailuresToStableSanitizedProblemCodes() {
+        ResponseEntity<ProblemDetail> gateway = handler.status(
+                new ResponseStatusException(HttpStatus.BAD_GATEWAY, "private upstream response body"));
+        ResponseEntity<ProblemDetail> unavailable = handler.status(
+                new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE, "private upstream response body"));
+
+        assertEquals(HttpStatus.BAD_GATEWAY, gateway.getStatusCode());
+        assertEquals("UPSTREAM_UNAVAILABLE", gateway.getBody().getProperties().get("errorCode"));
+        assertEquals("El servicio requerido no está disponible temporalmente.", gateway.getBody().getDetail());
+        assertFalse(gateway.getBody().getDetail().contains("private upstream response body"));
+        assertEquals(HttpStatus.SERVICE_UNAVAILABLE, unavailable.getStatusCode());
+        assertEquals("SERVICE_UNAVAILABLE", unavailable.getBody().getProperties().get("errorCode"));
+        assertFalse(unavailable.getBody().getDetail().contains("private upstream response body"));
+    }
 }

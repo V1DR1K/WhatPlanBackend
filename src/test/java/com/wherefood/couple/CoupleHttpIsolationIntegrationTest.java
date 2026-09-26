@@ -141,6 +141,11 @@ class CoupleHttpIsolationIntegrationTest {
         assertThat(unauthenticated.getHeaders().getFirst("X-Request-Id"))
                 .isEqualTo(unauthenticatedProblem.path("requestId").asText());
 
+        HttpHeaders invalidTokenHeaders = new HttpHeaders();
+        invalidTokenHeaders.setBearerAuth("not-a-valid-jwt");
+        assertProblem(http.exchange(url("/api/places"), HttpMethod.GET,
+                new HttpEntity<>(invalidTokenHeaders), String.class), 401, "UNAUTHORIZED");
+
         HttpHeaders loginHeaders = new HttpHeaders();
         loginHeaders.setContentType(MediaType.APPLICATION_JSON);
         ResponseEntity<String> rateLimitedLogin = null;
@@ -295,6 +300,10 @@ class CoupleHttpIsolationIntegrationTest {
         assertThat(get("/api/places/" + fixture.placeA(), ADMIN_AUTH_ID, null).getStatusCode().value()).isEqualTo(404);
         assertThat(get("/api/places", ORPHAN_AUTH_ID, null).getBody()).doesNotContain("Private place A", "Private place B");
         assertThat(get("/api/places/" + fixture.placeA(), ORPHAN_AUTH_ID, null).getStatusCode().value()).isEqualTo(404);
+
+        REDIS.stop();
+        assertProblem(http.postForEntity(url("/api/auth/login"),
+                new HttpEntity<>("{}", loginHeaders), String.class), 503, "RATE_LIMIT_UNAVAILABLE");
     }
 
     private ResponseEntity<String> get(String path, UUID subject, String spoofedCoupleId) {
