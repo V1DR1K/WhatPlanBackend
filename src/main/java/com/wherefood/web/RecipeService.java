@@ -53,7 +53,7 @@ public class RecipeService {
     public void delete(Long recipeId, User actor) {
         authorization.requireActiveMember(actor);
         Recipe recipe = findRecipe(recipeId);
-        if (cookings.existsByRecipeId(recipe.id)) {
+        if (cookings.existsByRecipeIdAndCoupleId(recipe.id, CoupleContext.current())) {
             throw new ResponseStatusException(HttpStatus.CONFLICT,
                     "No podés borrar una receta con preparaciones");
         }

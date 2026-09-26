@@ -98,7 +98,7 @@ class FilmApiTest {
     view.watchedOn = LocalDate.of(2026, 7, 19);
     when(films.findDetailedByIdAndCoupleId(42L, coupleId)).thenReturn(Optional.of(film));
     when(views.findByIdAndFilmIdAndCoupleId(88L, 42L, coupleId)).thenReturn(Optional.of(view));
-    when(reviews.existsByViewIdAndAuthorId(88L, 6L)).thenReturn(false);
+    when(reviews.existsByViewIdAndAuthorIdAndCoupleId(88L, 6L, null)).thenReturn(false);
     when(reviews.save(any(FilmReview.class))).thenAnswer(invocation -> invocation.getArgument(0));
 
     FilmReviewService reviewService = new FilmReviewService(reviews, films, views,
@@ -159,7 +159,7 @@ class FilmApiTest {
    Film film = new Film(); film.id = 42L; film.title = "Sin foto"; film.createdBy = tomas; film.createdAt = film.updatedAt = Instant.parse("2026-07-23T00:00:00Z");
     when(films.findPageIdsByCoupleId(null, null, null, null, null, "date-desc", 6, 0)).thenReturn(List.of(42L));
     when(films.findAllByIdInAndCoupleId(List.of(42L), null)).thenReturn(List.of(film));
-    when(reviews.findByFilmIdAndCoupleIdOrderByViewWatchedOnDescIdDesc(42L, null)).thenReturn(List.of()); when(views.findByFilmIdAndCoupleIdOrderByWatchedOnDescIdDesc(42L, null)).thenReturn(List.of()); when(filmPhotos.findByFilmId(42L)).thenReturn(Optional.empty());
+    when(reviews.findByFilmIdAndCoupleIdOrderByViewWatchedOnDescIdDesc(42L, null)).thenReturn(List.of()); when(views.findByFilmIdAndCoupleIdOrderByWatchedOnDescIdDesc(42L, null)).thenReturn(List.of()); when(filmPhotos.findByFilmIdAndCoupleId(42L, null)).thenReturn(Optional.empty());
     MockMvc mvc = MockMvcBuilders.standaloneSetup(new FilmApi(films, reviews, views, null, filmPhotos, null, null, null)).build();
 
    mvc.perform(get("/api/films")).andExpect(status().isOk());

@@ -48,7 +48,7 @@ public class FilmReviewService {
         Film film = findFilm(filmId);
         FilmView view = views.findByIdAndFilmIdAndCoupleId(viewId, filmId, CoupleContext.current())
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Vista no encontrada"));
-        if (reviews.existsByViewIdAndAuthorId(view.id, actor.id)) {
+        if (reviews.existsByViewIdAndAuthorIdAndCoupleId(view.id, actor.id, CoupleContext.current())) {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "Ya dejaste tu reseña para esta vista");
         }
         return create(film, view, request, actor);
@@ -61,7 +61,7 @@ public class FilmReviewService {
         java.time.LocalDate watchedOn = request.watchedOn() == null ? RosarioClock.today() : request.watchedOn();
         FilmView view = views.findByFilmIdAndWatchedOnAndCoupleId(filmId, watchedOn, CoupleContext.current())
                 .orElseGet(() -> viewService.create(filmId, new FilmViewRequest(watchedOn), actor));
-        if (reviews.existsByViewIdAndAuthorId(view.id, actor.id)) {
+        if (reviews.existsByViewIdAndAuthorIdAndCoupleId(view.id, actor.id, CoupleContext.current())) {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "Ya dejaste tu reseña para esta vista");
         }
         return create(film, view, request, actor);
