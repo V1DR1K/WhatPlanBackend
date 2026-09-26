@@ -315,13 +315,17 @@ class CoupleHttpIsolationIntegrationTest {
         assertThat(get("/api/places/" + createdPlaceId, USER_A1_AUTH_ID, null).getStatusCode().value()).isEqualTo(200);
         assertThat(get("/api/places/" + createdPlaceId, USER_B_AUTH_ID, null).getStatusCode().value()).isEqualTo(404);
 
-        assertThat(get("/api/places/" + fixture.placeB() + "/photo", USER_A1_AUTH_ID, null)
-                .getStatusCode().value()).isEqualTo(404);
-        ResponseEntity<byte[]> ownPhoto = getPhoto(fixture.placeB(), USER_B_AUTH_ID);
-        assertThat(ownPhoto.getStatusCode().value()).isEqualTo(200);
-        assertThat(ownPhoto.getHeaders().getCacheControl()).contains("no-store");
-        assertThat(ownPhoto.getHeaders().getVary()).contains("Authorization", "Cookie");
-        assertThat(new String(ownPhoto.getBody(), StandardCharsets.UTF_8)).isEqualTo("private-photo-b");
+        for (String photoPath : fixture.privatePhotoPaths()) {
+            ResponseEntity<byte[]> crossCouplePhoto = getPrivatePhoto(photoPath, USER_A1_AUTH_ID);
+            assertThat(crossCouplePhoto.getStatusCode().value()).as(photoPath).isEqualTo(404);
+
+            ResponseEntity<byte[]> ownPhoto = getPrivatePhoto(photoPath, USER_B_AUTH_ID);
+            assertThat(ownPhoto.getStatusCode().value()).as(photoPath).isEqualTo(200);
+            assertThat(ownPhoto.getHeaders().getContentType()).as(photoPath).isEqualTo(MediaType.valueOf("image/webp"));
+            assertThat(ownPhoto.getHeaders().getCacheControl()).as(photoPath).contains("no-store");
+            assertThat(ownPhoto.getHeaders().getVary()).as(photoPath).contains("Authorization", "Cookie");
+            assertThat(ownPhoto.getBody()).as(photoPath).isNotEmpty();
+        }
 
         assertThat(putReview(fixture.placeA(), USER_A2_AUTH_ID, "Review from member two").getStatusCode().value())
                 .isEqualTo(200);
@@ -337,7 +341,9 @@ class CoupleHttpIsolationIntegrationTest {
         ResponseEntity<String> leaveCouple = http.postForEntity(url("/api/couple/leave"),
                 new HttpEntity<>(authHeaders(USER_B_AUTH_ID)), String.class);
         assertThat(leaveCouple.getStatusCode().value()).isEqualTo(204);
-        assertThat(getPhoto(fixture.placeB(), USER_B_AUTH_ID).getStatusCode().value()).isEqualTo(404);
+        for (String photoPath : fixture.privatePhotoPaths()) {
+            assertThat(getPrivatePhoto(photoPath, USER_B_AUTH_ID).getStatusCode().value()).as(photoPath).isEqualTo(404);
+        }
 
         REDIS.stop();
         assertProblem(http.postForEntity(url("/api/auth/login"),
@@ -567,8 +573,8 @@ class CoupleHttpIsolationIntegrationTest {
                 new HttpEntity<>(body, headers), String.class);
     }
 
-    private ResponseEntity<byte[]> getPhoto(Long placeId, UUID subject) {
-        return http.exchange(url("/api/places/" + placeId + "/photo"), HttpMethod.GET,
+    private ResponseEntity<byte[]> getPrivatePhoto(String path, UUID subject) {
+        return http.exchange(url(path), HttpMethod.GET,
                 new HttpEntity<>(authHeaders(subject)), byte[].class);
     }
 
@@ -719,6 +725,7 @@ class CoupleHttpIsolationIntegrationTest {
 
     private Fixture seedFixture() throws Exception {
         try (Connection connection = adminConnection()) {
+            List<String> privatePhotoPaths = new java.util.ArrayList<>();
             long categoryId = insertCategory(connection);
             long userA1 = insertUser(connection, "http-user-a1", USER_A1_AUTH_ID, "USER");
             long userA2 = insertUser(connection, "http-user-a2", USER_A2_AUTH_ID, "USER");
@@ -734,7 +741,7 @@ class CoupleHttpIsolationIntegrationTest {
             long placeB = insertPlace(connection, "Private place B", categoryId, userB, COUPLE_B_ID);
             LocalDate today = LocalDate.now(ZoneId.of("America/Argentina/Buenos_Aires"));
             insertSpecialDateAndVisit(connection, placeA, userA1, COUPLE_A_ID, "Private anniversary A", today.minusYears(1), "ANNUAL", today);
-            insertSpecialDateAndVisit(connection, placeB, userB, COUPLE_B_ID, "Private anniversary B", today.minusMonths(1), "MONTHLY", today);
+            long placeVisitB = insertSpecialDateAndVisit(connection, placeB, userB, COUPLE_B_ID, "Private anniversary B", today.minusMonths(1), "MONTHLY", today);
             long archivedPlaceB = insertPlace(connection, "Archived private place B", categoryId, userB, COUPLE_B_ID);
             try (PreparedStatement archive = connection.prepareStatement(
                     "update places set deactivated_at = now() where id = ?")) {
@@ -742,15 +749,25 @@ class CoupleHttpIsolationIntegrationTest {
                 archive.executeUpdate();
             }
             insertPhoto(connection, placeB, COUPLE_B_ID);
+            privatePhotoPaths.add("/api/places/" + placeB + "/photo");
+            long itemB = insertItem(connection, placeVisitB, userB, COUPLE_B_ID);
+            insertSinglePhoto(connection, "item_photos", "item_id", itemB, COUPLE_B_ID);
+            privatePhotoPaths.add("/api/items/" + itemB + "/photo");
+            long visitPhotoB = insertGalleryPhoto(connection, "place_visit_photos", "visit_id", placeVisitB, userB, COUPLE_B_ID);
+            privatePhotoPaths.add("/api/place-visit-photos/" + visitPhotoB);
             insertReview(connection, placeA, userA1, COUPLE_A_ID, "Review from member one");
             long recipeA = insertRecipe(connection, "Torta pareja A", userA1, COUPLE_A_ID);
             long recipeB = insertRecipe(connection, "Torta pareja B", userB, COUPLE_B_ID);
+            insertSinglePhoto(connection, "recipe_photos", "recipe_id", recipeB, COUPLE_B_ID);
+            privatePhotoPaths.add("/api/how-cook/recipes/" + recipeB + "/photo");
             long cookingA = insertCooking(connection, recipeA, userA1, COUPLE_A_ID, "TOMAS");
             long cookingB = insertCooking(connection, recipeB, userB, COUPLE_B_ID, "AVRIL");
             insertCookingReview(connection, cookingA, userA1, COUPLE_A_ID, 5);
             insertCookingReview(connection, cookingB, userB, COUPLE_B_ID, 1);
             long filmA = insertFilm(connection, "Private film A", userA1, COUPLE_A_ID);
             long filmB = insertFilm(connection, "Private film B", userB, COUPLE_B_ID);
+            insertSinglePhoto(connection, "film_photos", "film_id", filmB, COUPLE_B_ID);
+            privatePhotoPaths.add("/api/films/" + filmB + "/photo");
             long dramaGenre = scalarLong(connection, "select id from film_genre_options where lower(name) = 'drama' limit 1");
             insertFilmGenre(connection, filmA, dramaGenre, COUPLE_A_ID);
             insertFilmGenre(connection, filmB, dramaGenre, COUPLE_B_ID);
@@ -758,11 +775,26 @@ class CoupleHttpIsolationIntegrationTest {
             long activitySubcategoryId = insertActivityCategory(connection, "HTTP Activity Subtest", "http-activity-subtest", activityCategoryId);
             long activityA = insertActivity(connection, "Museo pareja A", activityCategoryId, activitySubcategoryId, userA1, COUPLE_A_ID);
             long activityB = insertActivity(connection, "Museo pareja B", activityCategoryId, activitySubcategoryId, userB, COUPLE_B_ID);
+            long activityVenuePhotoB = insertSinglePhoto(connection, "why_fun_venue_photos", "venue_id", activityB, COUPLE_B_ID);
+            try (PreparedStatement cover = connection.prepareStatement(
+                    "update why_fun_venues set cover_photo_id = ? where id = ?")) {
+                cover.setLong(1, activityVenuePhotoB);
+                cover.setLong(2, activityB);
+                cover.executeUpdate();
+            }
+            privatePhotoPaths.add("/api/why-fun/activities/" + activityB + "/photo");
             long activityVisitA = insertActivityVisit(connection, activityA, userA1, COUPLE_A_ID);
             long activityVisitB = insertActivityVisit(connection, activityB, userB, COUPLE_B_ID);
+            long activityVisitPhotoB = insertGalleryPhoto(connection, "why_fun_visit_photos", "visit_id", activityVisitB, userB, COUPLE_B_ID);
+            privatePhotoPaths.add("/api/why-fun/activity-visit-photos/" + activityVisitPhotoB);
+            privatePhotoPaths.add("/api/why-fun/photos/" + activityVenuePhotoB);
+            long specialDateB = scalarLong(connection, "select id from special_dates where label = 'Private anniversary B'");
+            long occurrenceB = insertOccurrence(connection, specialDateB, today, userB, COUPLE_B_ID);
+            long occurrencePhotoB = insertGalleryPhoto(connection, "special_date_occurrence_photos", "occurrence_id", occurrenceB, userB, COUPLE_B_ID);
+            privatePhotoPaths.add("/api/when-dates/photos/" + occurrencePhotoB);
             insertActivityReview(connection, activityVisitA, userA1, COUPLE_A_ID, 5);
             insertActivityReview(connection, activityVisitB, userB, COUPLE_B_ID, 1);
-            return new Fixture(placeA, placeB, categoryId, activityCategoryId, activitySubcategoryId);
+            return new Fixture(placeA, placeB, categoryId, activityCategoryId, activitySubcategoryId, List.copyOf(privatePhotoPaths));
         }
     }
 
@@ -840,7 +872,7 @@ class CoupleHttpIsolationIntegrationTest {
         }
     }
 
-    private static void insertSpecialDateAndVisit(Connection connection, long placeId, long userId, UUID coupleId,
+    private static long insertSpecialDateAndVisit(Connection connection, long placeId, long userId, UUID coupleId,
             String label, LocalDate specialDateOn, String recurrence, LocalDate visitedOn) throws Exception {
         try (PreparedStatement dateStatement = connection.prepareStatement("""
                 insert into special_dates(special_date, label, recurrence, couple_id)
@@ -853,10 +885,70 @@ class CoupleHttpIsolationIntegrationTest {
         }
         try (PreparedStatement visit = connection.prepareStatement("""
                 insert into place_visits(place_id, visited_on, created_by, updated_by, couple_id)
-                values (?, ?, ?, ?, ?)
+                values (?, ?, ?, ?, ?) returning id
                 """)) {
             visit.setLong(1, placeId); visit.setObject(2, visitedOn); visit.setLong(3, userId); visit.setLong(4, userId);
-            visit.setObject(5, coupleId); visit.executeUpdate();
+            visit.setObject(5, coupleId);
+            try (ResultSet result = visit.executeQuery()) { result.next(); return result.getLong(1); }
+        }
+    }
+
+    private static long insertOccurrence(Connection connection, long specialDateId, LocalDate occurredOn,
+            long authorId, UUID coupleId) throws Exception {
+        try (PreparedStatement statement = connection.prepareStatement("""
+                insert into special_date_occurrences(special_date_id, occurred_on, created_by, updated_by, couple_id)
+                values (?, ?, ?, ?, ?) returning id
+                """)) {
+            statement.setLong(1, specialDateId);
+            statement.setObject(2, occurredOn);
+            statement.setLong(3, authorId);
+            statement.setLong(4, authorId);
+            statement.setObject(5, coupleId);
+            try (ResultSet result = statement.executeQuery()) { result.next(); return result.getLong(1); }
+        }
+    }
+
+    private static long insertSinglePhoto(Connection connection, String table, String parentColumn, long parentId,
+            UUID coupleId) throws Exception {
+        String sql = "insert into " + table + "(" + parentColumn
+                + ", image_base64, thumbnail_base64, width, height, couple_id) values (?, ?, ?, 1, 1, ?) returning id";
+        try (PreparedStatement statement = connection.prepareStatement(sql)) {
+            statement.setLong(1, parentId);
+            statement.setString(2, encodedPhoto(table + "-full"));
+            statement.setString(3, encodedPhoto(table + "-thumbnail"));
+            statement.setObject(4, coupleId);
+            try (ResultSet result = statement.executeQuery()) { result.next(); return result.getLong(1); }
+        }
+    }
+
+    private static long insertGalleryPhoto(Connection connection, String table, String parentColumn, long parentId,
+            long authorId, UUID coupleId) throws Exception {
+        String sql = "insert into " + table + "(" + parentColumn
+                + ", image_base64, thumbnail_base64, width, height, position, created_by, couple_id)"
+                + " values (?, ?, ?, 1, 1, 0, ?, ?) returning id";
+        try (PreparedStatement statement = connection.prepareStatement(sql)) {
+            statement.setLong(1, parentId);
+            statement.setString(2, encodedPhoto(table + "-full"));
+            statement.setString(3, encodedPhoto(table + "-thumbnail"));
+            statement.setLong(4, authorId);
+            statement.setObject(5, coupleId);
+            try (ResultSet result = statement.executeQuery()) { result.next(); return result.getLong(1); }
+        }
+    }
+
+    private static String encodedPhoto(String value) {
+        return Base64.getEncoder().encodeToString(value.getBytes(StandardCharsets.UTF_8));
+    }
+
+    private static long insertItem(Connection connection, long visitId, long authorId, UUID coupleId) throws Exception {
+        try (PreparedStatement statement = connection.prepareStatement("""
+                insert into items(visit_id, created_by, name, couple_id)
+                values (?, ?, 'Private photo item B', ?) returning id
+                """)) {
+            statement.setLong(1, visitId);
+            statement.setLong(2, authorId);
+            statement.setObject(3, coupleId);
+            try (ResultSet result = statement.executeQuery()) { result.next(); return result.getLong(1); }
         }
     }
 
@@ -1161,7 +1253,7 @@ class CoupleHttpIsolationIntegrationTest {
     }
 
     private record Fixture(Long placeA, Long placeB, Long categoryId, Long activityCategoryId,
-            Long activitySubcategoryId) {}
+            Long activitySubcategoryId, List<String> privatePhotoPaths) {}
     private record InvitationRaceFixture(UUID coupleId, User owner, long invitationId) {}
     private record PendingInvitationFixture(UUID coupleId, long invitationId, String token, User invitee) {}
 }
