@@ -1,6 +1,7 @@
 package com.wherefood.couple;
 
 import org.flywaydb.core.Flyway;
+import org.postgresql.util.PSQLException;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 import org.testcontainers.containers.PostgreSQLContainer;
@@ -130,30 +131,10 @@ class CoupleRowLevelSecurityTest {
 
     @Test
     void concurrentPhotoUploadsCannotExceedCoupleQuota() throws Exception {
-        UUID coupleId = UUID.fromString("00000000-0000-0000-0000-000000000007");
-        try (Connection admin = adminConnection(); Statement statement = admin.createStatement()) {
-            statement.executeUpdate("insert into couples(id, status, created_by, media_quota_bytes, media_quota_photos) values ('"
-                    + coupleId + "', 'PENDING', 3, 2, 10)");
-            statement.executeUpdate("insert into special_dates(id, special_date, label, recurrence, couple_id) values (9007, date '2026-09-25', 'Quota test', 'ONCE', '"
-                    + coupleId + "')");
-            statement.executeUpdate("insert into special_date_occurrences(id, special_date_id, occurred_on, created_by, updated_by, couple_id) values (9107, 9007, date '2026-09-25', 3, 3, '"
-                    + coupleId + "')");
-        }
-
-        CountDownLatch start = new CountDownLatch(1);
-        ExecutorService executor = Executors.newFixedThreadPool(2);
-        try {
-            Future<Boolean> first = executor.submit(() -> tryInsertQuotaPhoto(coupleId, 9107L, 3L, 1, start));
-            Future<Boolean> second = executor.submit(() -> tryInsertQuotaPhoto(coupleId, 9107L, 3L, 2, start));
-            start.countDown();
-            assertEquals(1, (first.get() ? 1 : 0) + (second.get() ? 1 : 0));
-        } finally {
-            executor.shutdownNow();
-        }
-
-        try (Connection admin = adminConnection()) {
-            assertMediaUsage(admin, coupleId, 2L, 1, 2L, 10);
-        }
+        assertConcurrentPhotoQuota(UUID.fromString("00000000-0000-0000-0000-000000000007"),
+                9007L, 9107L, 2L, 10);
+        assertConcurrentPhotoQuota(UUID.fromString("00000000-0000-0000-0000-000000000008"),
+                9008L, 9108L, 100L, 1);
     }
 
     @Test
@@ -532,8 +513,56 @@ class CoupleRowLevelSecurityTest {
             insert.executeUpdate();
             return true;
         } catch (SQLException quotaExceeded) {
-            if (!"23514".equals(quotaExceeded.getSQLState())) throw quotaExceeded;
+            if (!(quotaExceeded instanceof PSQLException postgresError)
+                    || !"23514".equals(postgresError.getSQLState())
+                    || postgresError.getServerErrorMessage() == null
+                    || !"chk_couples_media_quota".equals(postgresError.getServerErrorMessage().getConstraint())) {
+                throw quotaExceeded;
+            }
             return false;
+        }
+    }
+
+    private static void assertConcurrentPhotoQuota(UUID coupleId, long dateId, long occurrenceId,
+            long quotaBytes, int photoQuota) throws Exception {
+        try (Connection admin = adminConnection()) {
+            try (PreparedStatement couple = admin.prepareStatement(
+                    "insert into couples(id, status, created_by, media_quota_bytes, media_quota_photos) values (?, 'PENDING', 3, ?, ?)")) {
+                couple.setObject(1, coupleId);
+                couple.setLong(2, quotaBytes);
+                couple.setInt(3, photoQuota);
+                couple.executeUpdate();
+            }
+            try (PreparedStatement date = admin.prepareStatement(
+                    "insert into special_dates(id, special_date, label, recurrence, couple_id) values (?, date '2026-09-25', ?, 'ONCE', ?)")) {
+                date.setLong(1, dateId);
+                date.setString(2, "Quota test " + dateId);
+                date.setObject(3, coupleId);
+                date.executeUpdate();
+            }
+            try (PreparedStatement occurrence = admin.prepareStatement(
+                    "insert into special_date_occurrences(id, special_date_id, occurred_on, created_by, updated_by, couple_id) values (?, ?, date '2026-09-25', 3, 3, ?)")) {
+                occurrence.setLong(1, occurrenceId);
+                occurrence.setLong(2, dateId);
+                occurrence.setObject(3, coupleId);
+                occurrence.executeUpdate();
+            }
+        }
+
+        CountDownLatch start = new CountDownLatch(1);
+        ExecutorService executor = Executors.newFixedThreadPool(2);
+        try {
+            Future<Boolean> first = executor.submit(() -> tryInsertQuotaPhoto(coupleId, occurrenceId, 3L, 1, start));
+            Future<Boolean> second = executor.submit(() -> tryInsertQuotaPhoto(coupleId, occurrenceId, 3L, 2, start));
+            start.countDown();
+            assertEquals(1, (first.get() ? 1 : 0) + (second.get() ? 1 : 0),
+                    "Exactly one concurrent insert must be rejected by the media quota trigger");
+        } finally {
+            executor.shutdownNow();
+        }
+
+        try (Connection admin = adminConnection()) {
+            assertMediaUsage(admin, coupleId, 2L, 1, quotaBytes, photoQuota);
         }
     }
 
