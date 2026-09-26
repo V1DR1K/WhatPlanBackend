@@ -441,6 +441,46 @@ class CoupleHttpIsolationIntegrationTest {
         assertProblem(jsonRequest("/api/why-fun/activity-visits/" + fixture.activityVisitB() + "/reviews/me",
                 HttpMethod.PUT, USER_A1_AUTH_ID,
                 "{\"rating\":4,\"comment\":\"Cross-couple review\"}"), 404, "NOT_FOUND");
+
+        ResponseEntity<String> ownVisitReview = jsonRequest("/api/place-visits/" + fixture.placeVisitA() + "/reviews",
+                HttpMethod.POST, USER_A1_AUTH_ID,
+                "{\"overall\":5,\"comment\":\"Author-owned visit review\",\"taste\":5,\"price\":4}");
+        assertThat(ownVisitReview.getStatusCode().value()).isEqualTo(201);
+        long visitReviewId = objectMapper.readTree(ownVisitReview.getBody()).path("id").asLong();
+        assertThat(visitReviewId).isPositive();
+        assertProblem(jsonRequest("/api/place-visit-reviews/" + visitReviewId, HttpMethod.PUT, USER_A2_AUTH_ID,
+                "{\"overall\":1,\"comment\":\"Peer overwrite\",\"taste\":1,\"price\":1}"), 404, "NOT_FOUND");
+        assertProblem(delete("/api/place-visit-reviews/" + visitReviewId, USER_A2_AUTH_ID), 404, "NOT_FOUND");
+
+        ResponseEntity<String> ownFilmReview = jsonRequest("/api/films/" + fixture.filmA() + "/reviews",
+                HttpMethod.POST, USER_A1_AUTH_ID,
+                "{\"rating\":5,\"comment\":\"Author-owned film review\"}");
+        assertThat(ownFilmReview.getStatusCode().value()).isEqualTo(200);
+        long filmReviewId = objectMapper.readTree(ownFilmReview.getBody()).path("id").asLong();
+        assertThat(filmReviewId).isPositive();
+        assertProblem(jsonRequest("/api/films/" + fixture.filmA() + "/reviews/" + filmReviewId,
+                HttpMethod.PUT, USER_A2_AUTH_ID,
+                "{\"rating\":1,\"comment\":\"Peer overwrite\"}"), 404, "NOT_FOUND");
+        assertProblem(delete("/api/films/" + fixture.filmA() + "/reviews/" + filmReviewId,
+                USER_A2_AUTH_ID), 404, "NOT_FOUND");
+
+        try (Connection connection = adminConnection()) {
+            long cookingReviewId = scalarLong(connection, "select id from cooking_reviews where cooking_id = "
+                    + fixture.cookingA() + " and author_id = (select id from users where username = 'http-user-a1')");
+            long activityReviewId = scalarLong(connection, "select id from why_fun_visit_reviews where visit_id = "
+                    + fixture.activityVisitA() + " and author_id = (select id from users where username = 'http-user-a1')");
+            assertProblem(delete("/api/cooking-reviews/" + cookingReviewId, USER_A2_AUTH_ID), 404, "NOT_FOUND");
+            assertProblem(delete("/api/why-fun/activity-visit-reviews/" + activityReviewId,
+                    USER_A2_AUTH_ID), 404, "NOT_FOUND");
+        }
+        assertThat(get("/api/place-visits/" + fixture.placeVisitA(), USER_A1_AUTH_ID, null).getBody())
+                .contains("Author-owned visit review");
+        assertThat(get("/api/films/" + fixture.filmA(), USER_A1_AUTH_ID, null).getBody())
+                .contains("Author-owned film review");
+        assertThat(get("/api/how-cook/cookings/" + fixture.cookingA(), USER_A1_AUTH_ID, null).getBody())
+                .contains("\"rating\":5");
+        assertThat(get("/api/why-fun/activity-visits/" + fixture.activityVisitA(), USER_A1_AUTH_ID, null).getBody())
+                .contains("\"rating\":5");
         assertThat(get("/api/items?placeId=" + fixture.placeB(), USER_B_AUTH_ID, null).getBody())
                 .doesNotContain("Cross-couple review");
         assertThat(get("/api/place-visits/" + fixture.placeVisitB(), USER_B_AUTH_ID, null).getBody())
