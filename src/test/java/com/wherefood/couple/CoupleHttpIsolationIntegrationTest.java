@@ -296,6 +296,25 @@ class CoupleHttpIsolationIntegrationTest {
         assertProblem(hiddenPlace, 404, "NOT_FOUND");
         assertThat(hiddenPlace.getBody()).doesNotContain("Private place B", "coupleId", "couple_id");
         assertThat(get("/api/places/" + fixture.placeA(), USER_B_AUTH_ID, null).getStatusCode().value()).isEqualTo(404);
+        assertCrossCoupleDeleteDenied("/api/places/" + fixture.placeB(), "/api/places/" + fixture.placeB(),
+                USER_B_AUTH_ID, "Private place B");
+        assertCrossCoupleDeleteDenied("/api/place-visits/" + fixture.placeVisitB(), "/api/place-visits/" + fixture.placeVisitB(),
+                USER_B_AUTH_ID, "Private photo item B");
+        assertProblem(delete("/api/items/" + fixture.itemB(), USER_A1_AUTH_ID), 404, "NOT_FOUND");
+        assertThat(get("/api/items?placeId=" + fixture.placeB(), USER_B_AUTH_ID, null).getStatusCode().value()).isEqualTo(200);
+        assertCrossCoupleDeleteDenied("/api/how-cook/recipes/" + fixture.recipeB(), "/api/how-cook/recipes/" + fixture.recipeB(),
+                USER_B_AUTH_ID, "Torta pareja B");
+        assertCrossCoupleDeleteDenied("/api/how-cook/cookings/" + fixture.cookingB(), "/api/how-cook/cookings/" + fixture.cookingB(),
+                USER_B_AUTH_ID, "Torta pareja B");
+        assertCrossCoupleDeleteDenied("/api/films/" + fixture.filmB(), "/api/films/" + fixture.filmB(),
+                USER_B_AUTH_ID, "Private film B");
+        assertCrossCoupleDeleteDenied("/api/why-fun/activities/" + fixture.activityB(), "/api/why-fun/activities/" + fixture.activityB(),
+                USER_B_AUTH_ID, "Museo pareja B");
+        assertCrossCoupleDeleteDenied("/api/why-fun/activity-visits/" + fixture.activityVisitB(),
+                "/api/why-fun/activity-visits/" + fixture.activityVisitB(), USER_B_AUTH_ID, "Museo pareja B");
+        assertProblem(delete("/api/when-dates/photos/" + fixture.occurrencePhotoB(), USER_A1_AUTH_ID), 404, "NOT_FOUND");
+        assertThat(getPrivatePhoto("/api/when-dates/photos/" + fixture.occurrencePhotoB(), USER_B_AUTH_ID)
+                .getStatusCode().value()).isEqualTo(200);
         assertThat(get("/api/places/" + fixture.placeB() + "/visits", USER_A1_AUTH_ID, null)
                 .getStatusCode().value()).isEqualTo(404);
         assertThat(get("/api/places/" + fixture.placeB() + "/item-dates", USER_A1_AUTH_ID, null)
@@ -496,6 +515,17 @@ class CoupleHttpIsolationIntegrationTest {
         HttpHeaders headers = authHeaders(subject);
         if (spoofedCoupleId != null) headers.set("X-Couple-Id", spoofedCoupleId);
         return http.exchange(url(path), HttpMethod.GET, new HttpEntity<>(headers), String.class);
+    }
+
+    private ResponseEntity<String> delete(String path, UUID subject) {
+        return http.exchange(url(path), HttpMethod.DELETE, new HttpEntity<>(authHeaders(subject)), String.class);
+    }
+
+    private void assertCrossCoupleDeleteDenied(String deletePath, String ownerReadPath, UUID owner, String marker) throws Exception {
+        assertProblem(delete(deletePath, USER_A1_AUTH_ID), 404, "NOT_FOUND");
+        ResponseEntity<String> ownerRead = get(ownerReadPath, owner, null);
+        assertThat(ownerRead.getStatusCode().value()).as(ownerReadPath).isEqualTo(200);
+        assertThat(ownerRead.getBody()).as(ownerReadPath).contains(marker);
     }
 
     private void assertCoupleScopedDetail(String pathPrefix, Long idA, Long idB, String markerA) {
@@ -770,7 +800,7 @@ class CoupleHttpIsolationIntegrationTest {
             long placeA = insertPlace(connection, "Private place A", categoryId, userA1, COUPLE_A_ID);
             long placeB = insertPlace(connection, "Private place B", categoryId, userB, COUPLE_B_ID);
             LocalDate today = LocalDate.now(ZoneId.of("America/Argentina/Buenos_Aires"));
-            insertSpecialDateAndVisit(connection, placeA, userA1, COUPLE_A_ID, "Private anniversary A", today.minusYears(1), "ANNUAL", today);
+            long placeVisitA = insertSpecialDateAndVisit(connection, placeA, userA1, COUPLE_A_ID, "Private anniversary A", today.minusYears(1), "ANNUAL", today);
             long placeVisitB = insertSpecialDateAndVisit(connection, placeB, userB, COUPLE_B_ID, "Private anniversary B", today.minusMonths(1), "MONTHLY", today);
             long archivedPlaceB = insertPlace(connection, "Archived private place B", categoryId, userB, COUPLE_B_ID);
             try (PreparedStatement archive = connection.prepareStatement(
@@ -826,8 +856,9 @@ class CoupleHttpIsolationIntegrationTest {
             insertActivityReview(connection, activityVisitA, userA1, COUPLE_A_ID, 5);
             insertActivityReview(connection, activityVisitB, userB, COUPLE_B_ID, 1);
             return new Fixture(placeA, placeB, categoryId, activityCategoryId, activitySubcategoryId,
-                    recipeA, recipeB, cookingA, cookingB, filmA, filmB, activityA, activityB,
-                    activityVisitA, activityVisitB, specialDateA, specialDateB, today, List.copyOf(privatePhotoPaths));
+                    placeVisitA, placeVisitB, itemB, recipeA, recipeB, cookingA, cookingB, filmA, filmB,
+                    activityA, activityB, activityVisitA, activityVisitB, specialDateA, specialDateB,
+                    occurrencePhotoB, today, List.copyOf(privatePhotoPaths));
         }
     }
 
@@ -1286,9 +1317,11 @@ class CoupleHttpIsolationIntegrationTest {
     }
 
     private record Fixture(Long placeA, Long placeB, Long categoryId, Long activityCategoryId,
-            Long activitySubcategoryId, Long recipeA, Long recipeB, Long cookingA, Long cookingB,
-            Long filmA, Long filmB, Long activityA, Long activityB, Long activityVisitA, Long activityVisitB,
-            Long specialDateA, Long specialDateB, LocalDate occurrenceDate, List<String> privatePhotoPaths) {}
+            Long activitySubcategoryId, Long placeVisitA, Long placeVisitB, Long itemB,
+            Long recipeA, Long recipeB, Long cookingA, Long cookingB, Long filmA, Long filmB,
+            Long activityA, Long activityB, Long activityVisitA, Long activityVisitB,
+            Long specialDateA, Long specialDateB, Long occurrencePhotoB, LocalDate occurrenceDate,
+            List<String> privatePhotoPaths) {}
     private record InvitationRaceFixture(UUID coupleId, User owner, long invitationId) {}
     private record PendingInvitationFixture(UUID coupleId, long invitationId, String token, User invitee) {}
 }
