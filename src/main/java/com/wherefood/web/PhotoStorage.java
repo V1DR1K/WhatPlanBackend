@@ -36,6 +36,7 @@ public class PhotoStorage {
  private final int maxDimension;
  private final long processTimeoutSeconds;
  private final Semaphore processingSlots;
+ private final DecoderProcessStarter decoderProcessStarter;
 
  public PhotoStorage() {
   this(DEFAULT_MAX_UPLOAD_BYTES, DEFAULT_MAX_DECODED_BYTES, DEFAULT_MAX_PIXELS, DEFAULT_MAX_DIMENSION,
@@ -56,8 +57,14 @@ public class PhotoStorage {
    @org.springframework.beans.factory.annotation.Value("${app.images.max-dimension:8000}") int maxDimension,
    @org.springframework.beans.factory.annotation.Value("${app.images.process-timeout-seconds:10}") long processTimeoutSeconds,
    @org.springframework.beans.factory.annotation.Value("${app.images.max-concurrent-processes:2}") int maxConcurrentProcesses) {
+  this(maxUploadBytes, maxDecodedBytes, maxPixels, maxDimension, processTimeoutSeconds,
+          maxConcurrentProcesses, PhotoStorage::startWebpDecoder);
+ }
+
+ PhotoStorage(long maxUploadBytes, long maxDecodedBytes, long maxPixels, int maxDimension,
+         long processTimeoutSeconds, int maxConcurrentProcesses, DecoderProcessStarter decoderProcessStarter) {
   if (maxUploadBytes <= 0 || maxDecodedBytes <= 0 || maxPixels <= 0 || maxDimension <= 0
-          || processTimeoutSeconds <= 0 || maxConcurrentProcesses <= 0) {
+          || processTimeoutSeconds <= 0 || maxConcurrentProcesses <= 0 || decoderProcessStarter == null) {
    throw new IllegalArgumentException("Image processing limits must be positive");
   }
   this.maxUploadBytes = maxUploadBytes;
@@ -66,6 +73,7 @@ public class PhotoStorage {
   this.maxDimension = maxDimension;
   this.processTimeoutSeconds = processTimeoutSeconds;
   this.processingSlots = new Semaphore(maxConcurrentProcesses);
+  this.decoderProcessStarter = decoderProcessStarter;
  }
 
  public ItemPhoto store(Item item, MultipartFile upload) throws IOException {
@@ -160,15 +168,20 @@ public class PhotoStorage {
      }
     }
    Path input = Files.createTempFile("wherefood-", ".webp"), output = Files.createTempFile("wherefood-", ".png");
+   Process process = null;
    try {
     Files.write(input, source);
     Files.delete(output);
-    Process process = new ProcessBuilder("dwebp", input.toString(), "-o", output.toString()).redirectOutput(ProcessBuilder.Redirect.DISCARD).redirectError(ProcessBuilder.Redirect.DISCARD).start();
-     if (!process.waitFor(processTimeoutSeconds, TimeUnit.SECONDS)) { process.destroyForcibly(); throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "La foto no pudo procesarse"); }
+    process = decoderProcessStarter.start(input, output);
+     if (!process.waitFor(processTimeoutSeconds, TimeUnit.SECONDS)) {
+      terminateAndWait(process);
+      throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "La foto no pudo procesarse");
+     }
      if (process.exitValue() != 0) throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "La foto debe ser una imagen válida");
       if (!Files.exists(output) || Files.size(output) > maxDecodedBytes) throw new ResponseStatusException(HttpStatus.PAYLOAD_TOO_LARGE, "La imagen descomprimida supera el límite permitido");
       return readDecoded(output);
-   } catch (InterruptedException exception) {
+  } catch (InterruptedException exception) {
+   if (process != null && process.isAlive()) terminateAndWait(process);
     Thread.currentThread().interrupt();
     throw new IOException("No se pudo procesar la imagen", exception);
    } finally {
@@ -187,6 +200,32 @@ public class PhotoStorage {
            || pixels > maxPixels || pixels > maxDecodedBytes / Integer.BYTES) {
     throw new ResponseStatusException(HttpStatus.PAYLOAD_TOO_LARGE, "Las dimensiones de la imagen superan el límite permitido");
    }
+  }
+
+  private static Process startWebpDecoder(Path input, Path output) throws IOException {
+   return new ProcessBuilder("dwebp", input.toString(), "-o", output.toString())
+           .redirectOutput(ProcessBuilder.Redirect.DISCARD)
+           .redirectError(ProcessBuilder.Redirect.DISCARD)
+           .start();
+  }
+
+  private static void terminateAndWait(Process process) {
+   process.destroyForcibly();
+   boolean interrupted = false;
+   while (true) {
+    try {
+     process.waitFor();
+     break;
+    } catch (InterruptedException exception) {
+     interrupted = true;
+    }
+   }
+   if (interrupted) Thread.currentThread().interrupt();
+  }
+
+  @FunctionalInterface
+  interface DecoderProcessStarter {
+   Process start(Path input, Path output) throws IOException;
   }
 
   private void validateWebpDimensions(byte[] source) {
