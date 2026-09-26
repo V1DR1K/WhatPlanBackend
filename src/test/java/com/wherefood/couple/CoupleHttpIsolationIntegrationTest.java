@@ -237,6 +237,8 @@ class CoupleHttpIsolationIntegrationTest {
         assertThat(recipesForA.getBody()).contains("Torta pareja A").doesNotContain("Torta pareja B");
         assertThat(recipesForB.getStatusCode().value()).isEqualTo(200);
         assertThat(recipesForB.getBody()).contains("Torta pareja B").doesNotContain("Torta pareja A");
+        assertCoupleScopedDetail("/api/how-cook/recipes/", fixture.recipeA(), fixture.recipeB(), "Torta pareja A");
+        assertCoupleScopedDetail("/api/how-cook/cookings/", fixture.cookingA(), fixture.cookingB(), "Torta pareja A");
 
         ResponseEntity<String> activitiesForA = get("/api/why-fun/activities?search=museo&categoryId=" + fixture.activityCategoryId()
                 + "&subcategoryId=" + fixture.activitySubcategoryId() + "&visited=true&sort=rating-asc&size=30",
@@ -248,6 +250,8 @@ class CoupleHttpIsolationIntegrationTest {
         assertThat(activitiesForA.getBody()).contains("Museo pareja A").doesNotContain("Museo pareja B");
         assertThat(activitiesForB.getStatusCode().value()).isEqualTo(200);
         assertThat(activitiesForB.getBody()).contains("Museo pareja B").doesNotContain("Museo pareja A");
+        assertCoupleScopedDetail("/api/why-fun/activities/", fixture.activityA(), fixture.activityB(), "Museo pareja A");
+        assertCoupleScopedDetail("/api/why-fun/activity-visits/", fixture.activityVisitA(), fixture.activityVisitB(), "Museo pareja A");
 
         ResponseEntity<String> plansForA = get("/api/why-fun/plans?categoryId=" + fixture.activityCategoryId()
                 + "&subcategoryId=" + fixture.activitySubcategoryId() + "&timeline=UNSCHEDULED&size=30",
@@ -266,6 +270,7 @@ class CoupleHttpIsolationIntegrationTest {
         assertThat(filmsForA.getBody()).contains("Private film A").doesNotContain("Private film B");
         assertThat(filmsForB.getStatusCode().value()).isEqualTo(200);
         assertThat(filmsForB.getBody()).contains("Private film B").doesNotContain("Private film A");
+        assertCoupleScopedDetail("/api/films/", fixture.filmA(), fixture.filmB(), "Private film A");
         ResponseEntity<String> genreFilmsForA = get("/api/films?genre=Drama&search=private&size=1", USER_A1_AUTH_ID, null);
         ResponseEntity<String> genreFilmsForB = get("/api/films?genre=Drama&search=private&size=1", USER_B_AUTH_ID, null);
         assertThat(genreFilmsForA.getStatusCode().value()).isEqualTo(200);
@@ -280,6 +285,7 @@ class CoupleHttpIsolationIntegrationTest {
         assertThat(calendarForB.getStatusCode().value()).isEqualTo(200);
         assertThat(calendarForB.getBody()).contains("Private anniversary B")
                 .doesNotContain("Private anniversary A", "Synthetic calendar event");
+        assertCoupleScopedOccurrence(fixture);
 
         ResponseEntity<String> spoofedCoupleHeader = get("/api/places", USER_A1_AUTH_ID, COUPLE_B_ID.toString());
         assertThat(spoofedCoupleHeader.getStatusCode().value()).isEqualTo(200);
@@ -490,6 +496,30 @@ class CoupleHttpIsolationIntegrationTest {
         HttpHeaders headers = authHeaders(subject);
         if (spoofedCoupleId != null) headers.set("X-Couple-Id", spoofedCoupleId);
         return http.exchange(url(path), HttpMethod.GET, new HttpEntity<>(headers), String.class);
+    }
+
+    private void assertCoupleScopedDetail(String pathPrefix, Long idA, Long idB, String markerA) {
+        ResponseEntity<String> ownA = get(pathPrefix + idA, USER_A1_AUTH_ID, null);
+        ResponseEntity<String> hiddenFromA = get(pathPrefix + idB, USER_A1_AUTH_ID, null);
+        ResponseEntity<String> ownB = get(pathPrefix + idB, USER_B_AUTH_ID, null);
+        ResponseEntity<String> hiddenFromB = get(pathPrefix + idA, USER_B_AUTH_ID, null);
+        assertThat(ownA.getStatusCode().value()).as(pathPrefix + idA).isEqualTo(200);
+        assertThat(ownA.getBody()).as(pathPrefix + idA).contains(markerA);
+        assertThat(hiddenFromA.getStatusCode().value()).as(pathPrefix + idB + " for A").isEqualTo(404);
+        assertThat(hiddenFromB.getStatusCode().value()).as(pathPrefix + idA + " for B").isEqualTo(404);
+        assertThat(ownB.getStatusCode().value()).as(pathPrefix + idB + " for B").isEqualTo(200);
+    }
+
+    private void assertCoupleScopedOccurrence(Fixture fixture) {
+        String prefix = "/api/when-dates/special-dates/";
+        for (UUID member : List.of(USER_A1_AUTH_ID, USER_B_AUTH_ID)) {
+            Long ownDate = member.equals(USER_A1_AUTH_ID) ? fixture.specialDateA() : fixture.specialDateB();
+            Long otherDate = member.equals(USER_A1_AUTH_ID) ? fixture.specialDateB() : fixture.specialDateA();
+            assertThat(get(prefix + ownDate + "/occurrences/" + fixture.occurrenceDate(), member, null)
+                    .getStatusCode().value()).as("member %s reads own occurrence", member).isEqualTo(200);
+            assertThat(get(prefix + otherDate + "/occurrences/" + fixture.occurrenceDate(), member, null)
+                    .getStatusCode().value()).as("member %s cannot read other occurrence", member).isEqualTo(404);
+        }
     }
 
     private ResponseEntity<String> postOversizedPhoto(Long placeId, UUID subject) throws IOException {
@@ -789,12 +819,15 @@ class CoupleHttpIsolationIntegrationTest {
             privatePhotoPaths.add("/api/why-fun/activity-visit-photos/" + activityVisitPhotoB);
             privatePhotoPaths.add("/api/why-fun/photos/" + activityVenuePhotoB);
             long specialDateB = scalarLong(connection, "select id from special_dates where label = 'Private anniversary B'");
+            long specialDateA = scalarLong(connection, "select id from special_dates where label = 'Private anniversary A'");
             long occurrenceB = insertOccurrence(connection, specialDateB, today, userB, COUPLE_B_ID);
             long occurrencePhotoB = insertGalleryPhoto(connection, "special_date_occurrence_photos", "occurrence_id", occurrenceB, userB, COUPLE_B_ID);
             privatePhotoPaths.add("/api/when-dates/photos/" + occurrencePhotoB);
             insertActivityReview(connection, activityVisitA, userA1, COUPLE_A_ID, 5);
             insertActivityReview(connection, activityVisitB, userB, COUPLE_B_ID, 1);
-            return new Fixture(placeA, placeB, categoryId, activityCategoryId, activitySubcategoryId, List.copyOf(privatePhotoPaths));
+            return new Fixture(placeA, placeB, categoryId, activityCategoryId, activitySubcategoryId,
+                    recipeA, recipeB, cookingA, cookingB, filmA, filmB, activityA, activityB,
+                    activityVisitA, activityVisitB, specialDateA, specialDateB, today, List.copyOf(privatePhotoPaths));
         }
     }
 
@@ -1253,7 +1286,9 @@ class CoupleHttpIsolationIntegrationTest {
     }
 
     private record Fixture(Long placeA, Long placeB, Long categoryId, Long activityCategoryId,
-            Long activitySubcategoryId, List<String> privatePhotoPaths) {}
+            Long activitySubcategoryId, Long recipeA, Long recipeB, Long cookingA, Long cookingB,
+            Long filmA, Long filmB, Long activityA, Long activityB, Long activityVisitA, Long activityVisitB,
+            Long specialDateA, Long specialDateB, LocalDate occurrenceDate, List<String> privatePhotoPaths) {}
     private record InvitationRaceFixture(UUID coupleId, User owner, long invitationId) {}
     private record PendingInvitationFixture(UUID coupleId, long invitationId, String token, User invitee) {}
 }
