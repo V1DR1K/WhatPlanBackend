@@ -356,6 +356,27 @@ class CoupleHttpIsolationIntegrationTest {
                 .isEqualTo(200);
         assertThat(putReview(fixture.placeA(), USER_B_AUTH_ID, "Cross-couple review").getStatusCode().value())
                 .isEqualTo(404);
+        assertProblem(jsonRequest("/api/items/" + fixture.itemB() + "/reviews/me", HttpMethod.PUT, USER_A1_AUTH_ID,
+                "{\"comment\":\"Cross-couple review\",\"taste\":4,\"price\":4}"), 404, "NOT_FOUND");
+        assertProblem(jsonRequest("/api/place-visits/" + fixture.placeVisitB() + "/reviews/me", HttpMethod.PUT, USER_A1_AUTH_ID,
+                "{\"overall\":4,\"comment\":\"Cross-couple review\",\"taste\":4,\"price\":4}"), 404, "NOT_FOUND");
+        assertProblem(jsonRequest("/api/how-cook/cookings/" + fixture.cookingB() + "/reviews/me", HttpMethod.PUT, USER_A1_AUTH_ID,
+                "{\"rating\":4,\"complexity\":3,\"taste\":4,\"comment\":\"Cross-couple review\"}"), 404, "NOT_FOUND");
+        assertProblem(jsonRequest("/api/films/" + fixture.filmB() + "/reviews", HttpMethod.POST, USER_A1_AUTH_ID,
+                "{\"rating\":4,\"comment\":\"Cross-couple review\"}"), 404, "NOT_FOUND");
+        assertProblem(jsonRequest("/api/why-fun/activity-visits/" + fixture.activityVisitB() + "/reviews/me",
+                HttpMethod.PUT, USER_A1_AUTH_ID,
+                "{\"rating\":4,\"comment\":\"Cross-couple review\"}"), 404, "NOT_FOUND");
+        assertThat(get("/api/items?placeId=" + fixture.placeB(), USER_B_AUTH_ID, null).getBody())
+                .doesNotContain("Cross-couple review");
+        assertThat(get("/api/place-visits/" + fixture.placeVisitB(), USER_B_AUTH_ID, null).getBody())
+                .doesNotContain("Cross-couple review");
+        assertThat(get("/api/how-cook/cookings/" + fixture.cookingB(), USER_B_AUTH_ID, null).getBody())
+                .contains("\"rating\":1").doesNotContain("Cross-couple review");
+        assertThat(get("/api/films/" + fixture.filmB(), USER_B_AUTH_ID, null).getBody())
+                .doesNotContain("Cross-couple review");
+        assertThat(get("/api/why-fun/activity-visits/" + fixture.activityVisitB(), USER_B_AUTH_ID, null).getBody())
+                .contains("\"rating\":1").doesNotContain("Cross-couple review");
         assertReviewIsolation(fixture);
 
         assertThat(get("/api/places", ADMIN_AUTH_ID, null).getBody()).doesNotContain("Private place A", "Private place B");
@@ -519,6 +540,12 @@ class CoupleHttpIsolationIntegrationTest {
 
     private ResponseEntity<String> delete(String path, UUID subject) {
         return http.exchange(url(path), HttpMethod.DELETE, new HttpEntity<>(authHeaders(subject)), String.class);
+    }
+
+    private ResponseEntity<String> jsonRequest(String path, HttpMethod method, UUID subject, String body) {
+        HttpHeaders headers = authHeaders(subject);
+        headers.setContentType(MediaType.APPLICATION_JSON);
+        return http.exchange(url(path), method, new HttpEntity<>(body, headers), String.class);
     }
 
     private void assertCrossCoupleDeleteDenied(String deletePath, String ownerReadPath, UUID owner, String marker) throws Exception {
