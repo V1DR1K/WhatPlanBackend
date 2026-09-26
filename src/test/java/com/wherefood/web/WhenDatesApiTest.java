@@ -18,6 +18,7 @@ import java.time.LocalDate;
 import java.util.List;
 import java.util.Optional;
 import org.junit.jupiter.api.Test;
+import org.springframework.web.server.ResponseStatusException;
 
 class WhenDatesApiTest {
  @Test
@@ -51,6 +52,31 @@ class WhenDatesApiTest {
   Slice<WhenDateOccurrenceSummaryDto> result = api(specialDates).list(6L, null, 12);
 
   assertEquals("Fecha única", result.content().getFirst().specialDate().label());
+  assertEquals(null, result.nextCursor());
+ }
+
+ @Test
+ void rejectsSummaryCursorBeyondMaximumOffsetBeforeQueryingDatabase() {
+  SpecialDates specialDates = mock(SpecialDates.class);
+
+  org.junit.jupiter.api.Assertions.assertEquals(400,
+          org.junit.jupiter.api.Assertions.assertThrows(ResponseStatusException.class,
+                  () -> api(specialDates).list(null, 10_001L, 12)).getStatusCode().value());
+
+  org.mockito.Mockito.verifyNoInteractions(specialDates);
+ }
+
+ @Test
+ void stopsSummaryPaginationAtMaximumOffset() {
+  SpecialDates specialDates = mock(SpecialDates.class);
+  WhenDateSummaryProjection first = summary(7L, "Última página", "ONCE", LocalDate.of(2025, 1, 1), 0L, null);
+  WhenDateSummaryProjection extra = summary(8L, "Siguiente", "ONCE", LocalDate.of(2024, 1, 1), 0L, null);
+  when(specialDates.findSummaryPageByCoupleId(isNull(), isNull(), any(), org.mockito.ArgumentMatchers.eq(2), org.mockito.ArgumentMatchers.eq(10_000L)))
+          .thenReturn(List.of(first, extra));
+
+  Slice<WhenDateOccurrenceSummaryDto> result = api(specialDates).list(null, 10_000L, 1);
+
+  assertEquals(1, result.content().size());
   assertEquals(null, result.nextCursor());
  }
 

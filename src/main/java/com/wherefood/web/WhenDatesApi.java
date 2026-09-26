@@ -29,6 +29,7 @@ record WhenDateCommentRequest(@NotBlank @Size(max = 2000) String comment) {}
 @RequestMapping("/api/when-dates")
 public class WhenDatesApi {
  private static final int MAX_PHOTOS = 4;
+ private static final long MAX_SUMMARY_OFFSET = 10_000L;
  private final SpecialDates specialDates;
  private final SpecialDateOccurrences occurrences;
  private final SpecialDateOccurrenceComments comments;
@@ -61,11 +62,13 @@ public class WhenDatesApi {
 
   @GetMapping @Transactional(readOnly = true) Slice<WhenDateOccurrenceSummaryDto> list(@RequestParam(required = false) Long specialDateId, @RequestParam(required = false) Long cursor, @RequestParam(defaultValue = "12") int size) {
    int limit = Math.max(1, Math.min(size, 30)); long offset = cursor == null ? 0L : Math.max(0L, cursor);
+   if (offset > MAX_SUMMARY_OFFSET) throw badRequest("El cursor de fechas supera el máximo permitido");
    List<WhenDateSummaryProjection> page = specialDates.findSummaryPageByCoupleId(CoupleContext.current(), specialDateId, RosarioClock.today(), limit + 1, offset);
    List<WhenDateOccurrenceSummaryDto> content = page.stream().limit(limit).map(value -> new WhenDateOccurrenceSummaryDto(
            new WhenDateLabelDto(value.getSpecialDateId(), value.getLabel(), SpecialDateRecurrence.valueOf(value.getRecurrence())),
            value.getOccurredOn(), Math.toIntExact(value.getExperienceCount()), value.getImageUrl())).toList();
-   return new Slice<>(content, page.size() > limit ? offset + limit : null);
+   Long nextCursor = page.size() > limit && offset + limit <= MAX_SUMMARY_OFFSET ? offset + limit : null;
+   return new Slice<>(content, nextCursor);
   }
 
  @GetMapping("/special-dates/{specialDateId}/occurrences/{occurredOn}") @Transactional(readOnly = true) WhenDateOccurrenceDto occurrence(@PathVariable Long specialDateId, @PathVariable LocalDate occurredOn) {
