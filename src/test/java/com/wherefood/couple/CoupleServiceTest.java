@@ -89,6 +89,8 @@ class CoupleServiceTest {
     @Test
     void createsSingleUseInvitationWithSevenDayExpiry() {
         Couple couple = couple();
+        when(members.findLockedByCoupleIdAndUserIdAndStatus(couple.id, user.id, CoupleMemberStatus.ACTIVE))
+                .thenReturn(Optional.of(activeMember(couple, user)));
         when(members.findActiveCoupleIdByUserId(user.id)).thenReturn(Optional.of(couple.id));
         when(couples.findLockedById(couple.id)).thenReturn(Optional.of(couple));
         when(members.countByCoupleIdAndStatus(couple.id, CoupleMemberStatus.ACTIVE)).thenReturn(1L);
@@ -104,6 +106,8 @@ class CoupleServiceTest {
     @Test
     void boundsInvitationCreationForOneCoupleToTenPerRollingDay() {
         Couple couple = couple();
+        when(members.findLockedByCoupleIdAndUserIdAndStatus(couple.id, user.id, CoupleMemberStatus.ACTIVE))
+                .thenReturn(Optional.of(activeMember(couple, user)));
         when(members.findActiveCoupleIdByUserId(user.id)).thenReturn(Optional.of(couple.id));
         when(couples.findLockedById(couple.id)).thenReturn(Optional.of(couple));
         when(members.countByCoupleIdAndStatus(couple.id, CoupleMemberStatus.ACTIVE)).thenReturn(1L);
@@ -113,6 +117,36 @@ class CoupleServiceTest {
         ResponseStatusException error = assertThrows(ResponseStatusException.class, () -> service.createInvitation(user));
 
         assertEquals(429, error.getStatusCode().value());
+    }
+
+    @Test
+    void refusesInvitationCreationIfMembershipEndedWhileWaitingForCoupleLock() {
+        Couple couple = couple();
+        when(members.findActiveCoupleIdByUserId(user.id)).thenReturn(Optional.of(couple.id));
+        when(couples.findLockedById(couple.id)).thenReturn(Optional.of(couple));
+        when(members.findLockedByCoupleIdAndUserIdAndStatus(couple.id, user.id, CoupleMemberStatus.ACTIVE))
+                .thenReturn(Optional.empty());
+
+        ResponseStatusException error = assertThrows(ResponseStatusException.class,
+                () -> service.createInvitation(user));
+
+        assertEquals(404, error.getStatusCode().value());
+        org.mockito.Mockito.verifyNoInteractions(invitations);
+    }
+
+    @Test
+    void refusesInvitationRevocationIfMembershipEndedWhileWaitingForCoupleLock() {
+        Couple couple = couple();
+        when(members.findActiveCoupleIdByUserId(user.id)).thenReturn(Optional.of(couple.id));
+        when(couples.findLockedById(couple.id)).thenReturn(Optional.of(couple));
+        when(members.findLockedByCoupleIdAndUserIdAndStatus(couple.id, user.id, CoupleMemberStatus.ACTIVE))
+                .thenReturn(Optional.empty());
+
+        ResponseStatusException error = assertThrows(ResponseStatusException.class,
+                () -> service.revoke(12L, user));
+
+        assertEquals(404, error.getStatusCode().value());
+        org.mockito.Mockito.verifyNoInteractions(invitations);
     }
 
     @Test
@@ -157,5 +191,14 @@ class CoupleServiceTest {
         Couple couple = new Couple();
         couple.id = UUID.randomUUID();
         return couple;
+    }
+
+    private static CoupleMember activeMember(Couple couple, User user) {
+        CoupleMember member = new CoupleMember();
+        member.id = 1L;
+        member.couple = couple;
+        member.user = user;
+        member.status = CoupleMemberStatus.ACTIVE;
+        return member;
     }
 }

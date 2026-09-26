@@ -78,6 +78,7 @@ public class CoupleService {
     public InvitationSnapshot createInvitation(User user) {
         UUID coupleId = activeCoupleId(user);
         Couple couple = couples.findLockedById(coupleId).orElseThrow(() -> notFound("Pareja"));
+        requireActiveMembership(coupleId, user.id);
         if (couple.status == CoupleStatus.CLOSED) throw notFound("Pareja");
         if (members.countByCoupleIdAndStatus(coupleId, CoupleMemberStatus.ACTIVE) >= 2) throw conflict("La pareja ya tiene dos integrantes");
         Instant now = Instant.now();
@@ -135,6 +136,7 @@ public class CoupleService {
     public void revoke(Long invitationId, User user) {
         UUID coupleId = activeCoupleId(user);
         couples.findLockedById(coupleId).orElseThrow(() -> notFound("Pareja"));
+        requireActiveMembership(coupleId, user.id);
         CoupleInvitation invitation = invitations.findLockedByIdAndCoupleId(invitationId, coupleId).orElseThrow(() -> notFound("Invitación"));
         if (invitation.status == CoupleInvitationStatus.PENDING) {
             invitation.status = CoupleInvitationStatus.REVOKED;
@@ -177,6 +179,11 @@ public class CoupleService {
 
     private UUID activeCoupleId(User user) {
         return members.findActiveCoupleIdByUserId(user.id).orElseThrow(() -> conflict("Primero creá o aceptá una pareja"));
+    }
+
+    private void requireActiveMembership(UUID coupleId, Long userId) {
+        members.findLockedByCoupleIdAndUserIdAndStatus(coupleId, userId, CoupleMemberStatus.ACTIVE)
+                .orElseThrow(() -> notFound("Integrante"));
     }
 
     private static CoupleSnapshot snapshot(Couple couple, List<CoupleMember> members, CoupleInvitation invitation, User current) {
