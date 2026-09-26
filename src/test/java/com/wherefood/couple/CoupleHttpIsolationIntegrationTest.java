@@ -113,6 +113,15 @@ class CoupleHttpIsolationIntegrationTest {
         assertThat(unauthenticated.getHeaders().getFirst("X-Request-Id"))
                 .isEqualTo(unauthenticatedProblem.path("requestId").asText());
 
+        HttpHeaders loginHeaders = new HttpHeaders();
+        loginHeaders.setContentType(MediaType.APPLICATION_JSON);
+        ResponseEntity<String> rateLimitedLogin = null;
+        for (int attempt = 0; attempt < 11; attempt++) {
+            rateLimitedLogin = http.postForEntity(url("/api/auth/login"),
+                    new HttpEntity<>("{}", loginHeaders), String.class);
+        }
+        assertProblem(rateLimitedLogin, 429, "RATE_LIMITED");
+
         HttpHeaders invalidPlaceHeaders = authHeaders(USER_A1_AUTH_ID);
         invalidPlaceHeaders.setContentType(MediaType.APPLICATION_JSON);
         ResponseEntity<String> invalidPlace = http.postForEntity(url("/api/places"), new HttpEntity<>("""
