@@ -42,6 +42,25 @@ class RuntimePropertiesTest {
         assertThrows(IllegalStateException.class, properties::validate);
     }
 
+    @Test
+    void requiresExactTrustedProxyIpAddresses() {
+        RuntimeProperties properties = validProperties();
+        properties.setTrustedProxyAddresses(" ");
+        assertThrows(IllegalStateException.class, properties::validate);
+
+        properties = validProperties();
+        properties.setTrustedProxyAddresses("proxy.internal");
+        assertThrows(IllegalStateException.class, properties::validate);
+
+        properties = validProperties();
+        properties.setTrustedProxyAddresses("172.23.0.4/24");
+        assertThrows(IllegalStateException.class, properties::validate);
+
+        properties = validProperties();
+        properties.setTrustedProxyAddresses("127.0.0.1, 2001:db8::1");
+        assertDoesNotThrow(properties::validate);
+    }
+
     private static RuntimeProperties validProperties() {
         RuntimeProperties properties = new RuntimeProperties();
         properties.setAuthServiceUrl("http://auth-service:8080");
@@ -52,6 +71,7 @@ class RuntimePropertiesTest {
         properties.setDatabaseMigrationUser("whatplan_migrator");
         properties.setDatabaseMigrationPassword("migration-secret-32-characters-long");
         properties.setRedisPassword("redis-secret-with-at-least-32-chars");
+        properties.setTrustedProxyAddresses("127.0.0.1");
         properties.setAuthCookieSecure(true);
         return properties;
     }

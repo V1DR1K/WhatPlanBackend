@@ -149,6 +149,7 @@ class CoupleHttpIsolationIntegrationTest {
         properties.add("AUTH_JWT_AUDIENCE", () -> AUDIENCE);
         properties.add("AUTH_DEFAULT_ROLE", () -> "USER");
         properties.add("AUTH_COOKIE_ALLOWED_ORIGINS", () -> "https://whatplan.example.test");
+        properties.add("TRUSTED_PROXY_ADDRESSES", () -> "127.0.0.1");
         properties.add("AUTH_COOKIE_SECURE", () -> "true");
         properties.add("AUTH_REFRESH_COOKIE_TTL_SECONDS", () -> "604800");
         properties.add("TMDB_READ_ACCESS_TOKEN", () -> "test-only-tmdb-token");

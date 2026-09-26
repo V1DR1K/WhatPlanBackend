@@ -6,8 +6,6 @@ import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import java.io.IOException;
-import java.net.InetAddress;
-import java.net.UnknownHostException;
 import java.time.Duration;
 import java.util.Arrays;
 import java.util.Set;
@@ -27,7 +25,7 @@ public class RequestRateLimitFilter extends OncePerRequestFilter {
     public RequestRateLimitFilter(SharedRateLimiter limiter, String trustedProxyAddresses) {
         this.limiter = limiter;
         this.trustedProxies = Arrays.stream(trustedProxyAddresses == null ? new String[0] : trustedProxyAddresses.split(","))
-                .map(String::trim).filter(value -> !value.isEmpty()).map(RequestRateLimitFilter::canonicalIp)
+                .map(String::trim).filter(value -> !value.isEmpty()).map(IpAddress::canonicalize)
                 .collect(Collectors.toUnmodifiableSet());
     }
 
@@ -81,40 +79,19 @@ public class RequestRateLimitFilter extends OncePerRequestFilter {
     }
 
     private String clientIp(HttpServletRequest request) {
-        String remote = canonicalIp(request.getRemoteAddr());
+        String remote = IpAddress.canonicalize(request.getRemoteAddr());
         if (remote == null || !trustedProxies.contains(remote)) return remote == null ? "unknown" : remote;
         String forwarded = request.getHeader("X-Forwarded-For");
         if (forwarded == null || forwarded.isBlank() || forwarded.length() > 2048) return remote;
         String[] hops = forwarded.split(",");
         String candidate = remote;
         for (int index = hops.length - 1; index >= 0; index--) {
-            String hop = canonicalIp(hops[index].trim());
+            String hop = IpAddress.canonicalize(hops[index].trim());
             if (hop == null) return remote;
             if (trustedProxies.contains(candidate)) candidate = hop;
             else break;
         }
         return candidate;
-    }
-
-    private static String canonicalIp(String value) {
-        if (value == null || value.isBlank() || value.length() > 45) return null;
-        boolean ipv4 = value.matches("[0-9]{1,3}(\\.[0-9]{1,3}){3}");
-        boolean ipv6 = value.indexOf(':') >= 0 && value.matches("[0-9a-fA-F:.]+");
-        if (!ipv4 && !ipv6) return null;
-        if (ipv4) {
-            for (String octet : value.split("\\.")) {
-                try {
-                    if (Integer.parseInt(octet) > 255) return null;
-                } catch (NumberFormatException exception) {
-                    return null;
-                }
-            }
-        }
-        try {
-            return InetAddress.getByName(value).getHostAddress();
-        } catch (UnknownHostException exception) {
-            return null;
-        }
     }
 
     private static String authenticatedIdentity() {

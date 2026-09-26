@@ -15,6 +15,7 @@ public class RuntimeProperties {
     private String databaseMigrationUser;
     private String databaseMigrationPassword;
     private String redisPassword;
+    private String trustedProxyAddresses;
     private boolean authCookieSecure = true;
 
     public void validate() {
@@ -26,11 +27,23 @@ public class RuntimeProperties {
         requireSecret("DATABASE_RUNTIME_PASSWORD", databaseRuntimePassword, 32);
         requireSecret("DATABASE_MIGRATION_PASSWORD", databaseMigrationPassword, 32);
         requireSecret("REDIS_PASSWORD", redisPassword, 32);
+        validateTrustedProxyAddresses(trustedProxyAddresses);
         if (databaseRuntimePassword.equals(databaseMigrationPassword)) {
             throw new IllegalStateException("DATABASE_RUNTIME_PASSWORD and DATABASE_MIGRATION_PASSWORD must differ");
         }
         if (!authCookieSecure) {
             throw new IllegalStateException("AUTH_COOKIE_SECURE must be true for WhatPlan sessions");
+        }
+    }
+
+    private static void validateTrustedProxyAddresses(String value) {
+        if (value == null || value.isBlank()) {
+            throw new IllegalStateException("TRUSTED_PROXY_ADDRESSES must contain at least one exact proxy IP address");
+        }
+        for (String address : value.split(",", -1)) {
+            if (address.isBlank() || IpAddress.canonicalize(address.trim()) == null) {
+                throw new IllegalStateException("TRUSTED_PROXY_ADDRESSES must contain only exact IPv4/IPv6 addresses, not hostnames or CIDRs");
+            }
         }
     }
 
@@ -98,6 +111,8 @@ public class RuntimeProperties {
     public void setDatabaseMigrationPassword(String databaseMigrationPassword) { this.databaseMigrationPassword = databaseMigrationPassword; }
     public String getRedisPassword() { return redisPassword; }
     public void setRedisPassword(String redisPassword) { this.redisPassword = redisPassword; }
+    public String getTrustedProxyAddresses() { return trustedProxyAddresses; }
+    public void setTrustedProxyAddresses(String trustedProxyAddresses) { this.trustedProxyAddresses = trustedProxyAddresses; }
     public boolean isAuthCookieSecure() { return authCookieSecure; }
     public void setAuthCookieSecure(boolean authCookieSecure) { this.authCookieSecure = authCookieSecure; }
 }
