@@ -1,12 +1,16 @@
 package com.wherefood.web;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
+import com.drew.imaging.ImageMetadataReader;
+import com.drew.metadata.exif.ExifIFD0Directory;
 import com.wherefood.domain.Item;
+import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.awt.image.BufferedImage;
@@ -35,6 +39,21 @@ class PhotoStorageProcessingTest {
         assertEquals(2, photo.height);
         assertTrue(PhotoStorage.isWebp(storage.bytes(photo.imageBase64)));
         assertTrue(PhotoStorage.isWebp(storage.bytes(photo.thumbnailBase64)));
+    }
+
+    @Test
+    void removesExifDescriptionWhenTranscodingImageAndThumbnail() throws Exception {
+        String privateMarker = "PRIVATE_LOCATION_MARKER_55.123_-77.123";
+        byte[] jpegWithExif = jpegWithExifDescription(privateMarker);
+        var sourceMetadata = ImageMetadataReader.readMetadata(new ByteArrayInputStream(jpegWithExif));
+        assertEquals(privateMarker, sourceMetadata.getFirstDirectoryOfType(ExifIFD0Directory.class)
+                .getDescription(ExifIFD0Directory.TAG_IMAGE_DESCRIPTION));
+
+        PhotoStorage storage = storage(1024 * 1024, 1024 * 1024L, 100, 100);
+        var photo = storage.store(new Item(), uploadJpeg(jpegWithExif));
+
+        assertFalse(new String(storage.bytes(photo.imageBase64), StandardCharsets.ISO_8859_1).contains(privateMarker));
+        assertFalse(new String(storage.bytes(photo.thumbnailBase64), StandardCharsets.ISO_8859_1).contains(privateMarker));
     }
 
     @Test
@@ -175,6 +194,56 @@ class PhotoStorageProcessingTest {
 
     private static MultipartFile upload(byte[] bytes) {
         return new MockMultipartFile("file", "photo.webp", "image/webp", bytes);
+    }
+
+    private static MultipartFile uploadJpeg(byte[] bytes) {
+        return new MockMultipartFile("file", "photo.jpg", "image/jpeg", bytes);
+    }
+
+    private static byte[] jpegWithExifDescription(String description) throws IOException {
+        BufferedImage image = new BufferedImage(2, 2, BufferedImage.TYPE_INT_RGB);
+        ByteArrayOutputStream encodedJpeg = new ByteArrayOutputStream();
+        ImageIO.write(image, "jpeg", encodedJpeg);
+
+        byte[] descriptionBytes = description.getBytes(StandardCharsets.US_ASCII);
+        ByteArrayOutputStream tiff = new ByteArrayOutputStream();
+        tiff.writeBytes(new byte[] {'I', 'I', 42, 0, 8, 0, 0, 0});
+        writeLittleEndian16(tiff, 1);
+        writeLittleEndian16(tiff, ExifIFD0Directory.TAG_IMAGE_DESCRIPTION);
+        writeLittleEndian16(tiff, 2); // TIFF ASCII
+        writeLittleEndian32(tiff, descriptionBytes.length + 1);
+        writeLittleEndian32(tiff, 26); // IFD0 header + one entry + next-IFD pointer
+        writeLittleEndian32(tiff, 0); // No next IFD
+        tiff.writeBytes(descriptionBytes);
+        tiff.write(0);
+
+        ByteArrayOutputStream app1 = new ByteArrayOutputStream();
+        app1.writeBytes(new byte[] {'E', 'x', 'i', 'f', 0, 0});
+        app1.writeBytes(tiff.toByteArray());
+        int segmentLength = app1.size() + 2;
+
+        byte[] jpeg = encodedJpeg.toByteArray();
+        ByteArrayOutputStream result = new ByteArrayOutputStream();
+        result.write(jpeg, 0, 2); // SOI
+        result.write(0xff);
+        result.write(0xe1); // APP1
+        result.write((segmentLength >> 8) & 0xff);
+        result.write(segmentLength & 0xff);
+        result.writeBytes(app1.toByteArray());
+        result.write(jpeg, 2, jpeg.length - 2);
+        return result.toByteArray();
+    }
+
+    private static void writeLittleEndian16(ByteArrayOutputStream target, int value) {
+        target.write(value & 0xff);
+        target.write((value >> 8) & 0xff);
+    }
+
+    private static void writeLittleEndian32(ByteArrayOutputStream target, int value) {
+        target.write(value & 0xff);
+        target.write((value >> 8) & 0xff);
+        target.write((value >> 16) & 0xff);
+        target.write((value >> 24) & 0xff);
     }
 
     private static byte[] webp(String chunkName, byte[] payload) {
