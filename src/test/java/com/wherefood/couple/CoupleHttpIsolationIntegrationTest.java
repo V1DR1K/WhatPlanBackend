@@ -21,6 +21,9 @@ import java.util.UUID;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.test.context.TestConfiguration;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Import;
 import org.springframework.boot.test.web.client.TestRestTemplate;
 import org.springframework.boot.test.web.server.LocalServerPort;
 import org.springframework.http.HttpEntity;
@@ -28,6 +31,9 @@ import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.multipart.MaxUploadSizeExceededException;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.testcontainers.containers.GenericContainer;
@@ -39,6 +45,7 @@ import org.testcontainers.utility.DockerImageName;
 /** Exercises the production HTTP security chain, JWT resolution, tenant context and PostgreSQL RLS together. */
 @Testcontainers
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
+@Import(CoupleHttpIsolationIntegrationTest.ErrorTestConfiguration.class)
 class CoupleHttpIsolationIntegrationTest {
     private static final String ISSUER = "whatplan-http-test-issuer";
     private static final String AUDIENCE = "whatplan-http-test";
@@ -73,6 +80,27 @@ class CoupleHttpIsolationIntegrationTest {
 
     @Autowired
     private ObjectMapper objectMapper;
+
+    @TestConfiguration(proxyBeanMethods = false)
+    static class ErrorTestConfiguration {
+        @Bean
+        ErrorTestController errorTestController() {
+            return new ErrorTestController();
+        }
+    }
+
+    @RestController
+    static class ErrorTestController {
+        @GetMapping("/__test/internal-error")
+        String internalError() {
+            throw new IllegalStateException("sensitive test failure detail");
+        }
+
+        @GetMapping("/__test/upload-error")
+        String uploadError() {
+            throw new MaxUploadSizeExceededException(10L);
+        }
+    }
 
     @DynamicPropertySource
     static void runtimeProperties(DynamicPropertyRegistry properties) {
@@ -133,6 +161,10 @@ class CoupleHttpIsolationIntegrationTest {
         assertProblem(get("/api/places?size=not-a-number", USER_A1_AUTH_ID, null), 400, "INVALID_REQUEST");
         assertProblem(get("/api/categories/all", USER_A1_AUTH_ID, null), 403, "FORBIDDEN");
         assertProblem(get("/api/not-a-real-route", USER_A1_AUTH_ID, null), 404, "NOT_FOUND");
+        ResponseEntity<String> internalError = get("/__test/internal-error", USER_A1_AUTH_ID, null);
+        assertProblem(internalError, 500, "INTERNAL_ERROR");
+        assertThat(internalError.getBody()).doesNotContain("sensitive test failure detail");
+        assertProblem(get("/__test/upload-error", USER_A1_AUTH_ID, null), 413, "UPLOAD_TOO_LARGE");
 
         HttpHeaders unacceptableHeaders = authHeaders(USER_A1_AUTH_ID);
         unacceptableHeaders.setAccept(java.util.List.of(MediaType.APPLICATION_XML));
