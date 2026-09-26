@@ -33,7 +33,7 @@ public class PlaceVisitService {
         authorization.requireActiveMember(actor);
         validateDate(request);
         Place place = findActivePlace(placeId);
-        if (visits.findByPlaceIdAndVisitedOn(placeId, request.visitedOn()).isPresent()) {
+        if (visits.findByPlaceIdAndVisitedOnAndCoupleId(placeId, request.visitedOn(), CoupleContext.current()).isPresent()) {
             throw new ResponseStatusException(HttpStatus.CONFLICT,
                     "Ya existe una visita para esa fecha");
         }
@@ -52,7 +52,7 @@ public class PlaceVisitService {
         authorization.requireActiveMember(actor);
         validateDate(request);
         PlaceVisit visit = findActiveVisit(visitId);
-        visits.findByPlaceIdAndVisitedOn(visit.place.id, request.visitedOn())
+        visits.findByPlaceIdAndVisitedOnAndCoupleId(visit.place.id, request.visitedOn(), CoupleContext.current())
                 .filter(other -> !other.id.equals(visit.id))
                 .ifPresent(other -> { throw new ResponseStatusException(HttpStatus.CONFLICT,
                         "Ya existe una visita para esa fecha"); });
@@ -69,7 +69,7 @@ public class PlaceVisitService {
         PlaceVisit visit = findActiveVisit(visitId);
         Place place = visit.place;
         visits.delete(visit);
-        if (!visits.existsByPlaceId(place.id)) place.status = PlaceStatus.PENDING;
+        if (!visits.existsByPlaceIdAndCoupleId(place.id, CoupleContext.current())) place.status = PlaceStatus.PENDING;
         touch(place, actor);
     }
 

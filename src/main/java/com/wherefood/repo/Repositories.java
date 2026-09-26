@@ -309,8 +309,8 @@ public final class Repositories {
         @Query("select v from PlaceVisit v where v.id in :ids and v.place.id = :placeId and v.coupleId = :coupleId")
         List<PlaceVisit> findAllByIdInAndPlaceIdAndCoupleId(@Param("ids") Collection<Long> ids, @Param("placeId") Long placeId, @Param("coupleId") java.util.UUID coupleId);
       @EntityGraph(attributePaths = {"place", "createdBy", "updatedBy"}) List<PlaceVisit> findByCoupleIdAndVisitedOnOrderByVisitedOnDescIdDesc(java.util.UUID coupleId, LocalDate visitedOn);
-       @EntityGraph(attributePaths = {"place", "createdBy", "updatedBy"}) Optional<PlaceVisit> findByPlaceIdAndVisitedOn(Long placeId, LocalDate visitedOn);
-      boolean existsByPlaceId(Long placeId);
+       @EntityGraph(attributePaths = {"place", "createdBy", "updatedBy"}) Optional<PlaceVisit> findByPlaceIdAndVisitedOnAndCoupleId(Long placeId, LocalDate visitedOn, java.util.UUID coupleId);
+      boolean existsByPlaceIdAndCoupleId(Long placeId, java.util.UUID coupleId);
     @EntityGraph(attributePaths = {"place", "createdBy", "updatedBy"}) Optional<PlaceVisit> findDetailedByIdAndCoupleId(Long id, java.util.UUID coupleId);
    }
 

@@ -133,14 +133,36 @@ class ApiVisitTest {
     visit.place = place;
     visit.createdBy = tomas;
     when(visits.findDetailedByIdAndCoupleId(9L, coupleId)).thenReturn(Optional.of(visit));
-    when(visits.existsByPlaceId(4L)).thenReturn(false);
+    when(visits.existsByPlaceIdAndCoupleId(4L, coupleId)).thenReturn(false);
 
     CoupleAuthorizationService authorization = new CoupleAuthorizationService(members);
     apiForVisitMutations(places, visits, authorization).deleteVisit(9L, tomas);
 
     assertEquals(PlaceStatus.PENDING, place.status);
     verify(visits).delete(visit);
+    verify(visits).existsByPlaceIdAndCoupleId(4L, coupleId);
     verify(places).save(place);
+  }
+
+  @Test
+  void scopesDuplicateVisitCheckWhenCreatingVisit() {
+    Places places = mock(Places.class);
+    PlaceVisits visits = mock(PlaceVisits.class);
+    CoupleMembers members = mock(CoupleMembers.class);
+    UUID coupleId = UUID.randomUUID(); CoupleContext.set(coupleId);
+    User tomas = user(7L, "tomas");
+    tomas.role = com.wherefood.domain.Role.USER;
+    when(members.findActiveCoupleIdByUserId(tomas.id)).thenReturn(Optional.of(coupleId));
+    Place place = place(4L, tomas, Instant.now());
+    when(places.findByIdAndCoupleId(4L, coupleId)).thenReturn(Optional.of(place));
+    LocalDate visitedOn = LocalDate.of(2026, 7, 12);
+    when(visits.findByPlaceIdAndVisitedOnAndCoupleId(4L, visitedOn, coupleId)).thenReturn(Optional.empty());
+    when(visits.save(any(PlaceVisit.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+    apiForVisitMutations(places, visits, new CoupleAuthorizationService(members))
+            .addVisit(4L, new VisitRequest(visitedOn), tomas);
+
+    verify(visits).findByPlaceIdAndVisitedOnAndCoupleId(4L, visitedOn, coupleId);
   }
 
   @Test
@@ -172,13 +194,14 @@ class ApiVisitTest {
     Place place = new Place(); place.id = 4L; place.status = PlaceStatus.REVIEWED; place.updatedAt = LocalDate.of(2026, 7, 1).atStartOfDay(java.time.ZoneOffset.UTC).toInstant();
     PlaceVisit visit = visit(9L, place, tomas, LocalDate.of(2026, 7, 10));
     when(visits.findDetailedByIdAndCoupleId(9L, coupleId)).thenReturn(Optional.of(visit));
-    when(visits.findByPlaceIdAndVisitedOn(4L, LocalDate.of(2026, 7, 12))).thenReturn(Optional.empty());
+    when(visits.findByPlaceIdAndVisitedOnAndCoupleId(4L, LocalDate.of(2026, 7, 12), coupleId)).thenReturn(Optional.empty());
     when(visits.save(visit)).thenReturn(visit);
 
     apiForVisitMutations(places, visits, new CoupleAuthorizationService(members)).editVisit(9L, new VisitRequest(LocalDate.of(2026, 7, 12)), tomas);
 
     assertEquals(LocalDate.of(2026, 7, 12), visit.visitedOn);
     assertEquals(tomas, place.updatedBy);
+    verify(visits).findByPlaceIdAndVisitedOnAndCoupleId(4L, LocalDate.of(2026, 7, 12), coupleId);
     verify(places).save(place);
   }
 
