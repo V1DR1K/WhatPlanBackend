@@ -317,6 +317,12 @@ class CoupleHttpIsolationIntegrationTest {
         assertProblem(delete("/api/when-dates/photos/" + fixture.occurrencePhotoB(), USER_A1_AUTH_ID), 404, "NOT_FOUND");
         assertThat(getPrivatePhoto("/api/when-dates/photos/" + fixture.occurrencePhotoB(), USER_B_AUTH_ID)
                 .getStatusCode().value()).isEqualTo(200);
+        assertCrossCouplePhotoDeleteDenied("/api/place-visit-photos/" + fixture.placeVisitPhotoB(),
+                "/api/place-visit-photos/" + fixture.placeVisitPhotoB(), USER_B_AUTH_ID);
+        assertCrossCouplePhotoDeleteDenied("/api/why-fun/activity-visit-photos/" + fixture.activityVisitPhotoB(),
+                "/api/why-fun/activity-visit-photos/" + fixture.activityVisitPhotoB(), USER_B_AUTH_ID);
+        assertCrossCouplePhotoDeleteDenied("/api/why-fun/photos/" + fixture.activityVenuePhotoB(),
+                "/api/why-fun/photos/" + fixture.activityVenuePhotoB(), USER_B_AUTH_ID);
         assertThat(get("/api/places/" + fixture.placeB() + "/visits", USER_A1_AUTH_ID, null)
                 .getStatusCode().value()).isEqualTo(404);
         assertThat(get("/api/places/" + fixture.placeB() + "/item-dates", USER_A1_AUTH_ID, null)
@@ -634,6 +640,13 @@ class CoupleHttpIsolationIntegrationTest {
         assertThat(ownerRead.getStatusCode().value()).as(ownerReadPath).isEqualTo(200);
         assertThat(ownerRead.getBody()).as(ownerReadPath).contains(originalMarker)
                 .doesNotContain("Attempted");
+    }
+
+    private void assertCrossCouplePhotoDeleteDenied(String deletePath, String readPath, UUID owner) throws Exception {
+        assertProblem(delete(deletePath, USER_A1_AUTH_ID), 404, "NOT_FOUND");
+        ResponseEntity<byte[]> ownerRead = getPrivatePhoto(readPath, owner);
+        assertThat(ownerRead.getStatusCode().value()).as(readPath).isEqualTo(200);
+        assertThat(ownerRead.getBody()).as(readPath).isNotEmpty();
     }
 
     private void assertCrossCoupleCreateDenied(String path, UUID attacker, String body) throws Exception {
@@ -1001,7 +1014,7 @@ class CoupleHttpIsolationIntegrationTest {
             return new Fixture(placeA, placeB, categoryId, activityCategoryId, activitySubcategoryId,
                     placeVisitA, placeVisitB, itemB, recipeA, recipeB, cookingA, cookingB, filmA, filmB,
                     activityA, activityB, activityVisitA, activityVisitB, specialDateA, specialDateB,
-                    visitPhotoB, activityVisitPhotoB, occurrenceA, occurrencePhotoB, today,
+                    visitPhotoB, activityVenuePhotoB, activityVisitPhotoB, occurrenceA, occurrencePhotoB, today,
                     List.copyOf(privatePhotoPaths));
         }
     }
@@ -1464,7 +1477,8 @@ class CoupleHttpIsolationIntegrationTest {
             Long activitySubcategoryId, Long placeVisitA, Long placeVisitB, Long itemB,
             Long recipeA, Long recipeB, Long cookingA, Long cookingB, Long filmA, Long filmB,
             Long activityA, Long activityB, Long activityVisitA, Long activityVisitB,
-            Long specialDateA, Long specialDateB, Long placeVisitPhotoB, Long activityVisitPhotoB,
+            Long specialDateA, Long specialDateB, Long placeVisitPhotoB, Long activityVenuePhotoB,
+            Long activityVisitPhotoB,
             Long occurrenceA, Long occurrencePhotoB, LocalDate occurrenceDate,
             List<String> privatePhotoPaths) {}
     private record UploadAttempt(String path, String table) {}
