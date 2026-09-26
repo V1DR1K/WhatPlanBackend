@@ -45,7 +45,7 @@ public class WhyFunApi {
           new WhyFunPlanService(categories, venues, reviews, new CoupleAuthorizationService(null)),
           new WhyFunMediaService(venues, photos, null, null, storage,
                   new CoupleAuthorizationService(null)),
-          new WhyFunCategoryAdminService(categories, venues));
+          new WhyFunCategoryAdminService(categories));
  }
 
  @org.springframework.beans.factory.annotation.Autowired

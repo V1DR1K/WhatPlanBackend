@@ -11,6 +11,7 @@ import com.wherefood.config.CoupleContext;
 import com.wherefood.couple.CoupleAuthorizationService;
 import com.wherefood.domain.Role;
 import com.wherefood.domain.User;
+import com.wherefood.domain.WhyFunCategory;
 import com.wherefood.domain.WhyFunVenue;
 import com.wherefood.domain.WhyFunVenueReview;
 import com.wherefood.repo.Repositories.CoupleMembers;
@@ -75,6 +76,34 @@ class WhyFunPlanServiceTest {
         assertEquals(plan, saved.venue);
         verify(reviews).findByVenueIdAndAuthorIdAndCoupleId(plan.id, secondMember.id, coupleId);
         verify(reviews).save(saved);
+    }
+
+    @Test
+    void update_whenKeepingPreviouslyAssignedInactiveCategories_preservesThem() {
+        User actor = member();
+        WhyFunCategory category = new WhyFunCategory();
+        category.id = 3L;
+        category.active = false;
+        WhyFunCategory subcategory = new WhyFunCategory();
+        subcategory.id = 4L;
+        subcategory.parent = category;
+        subcategory.active = false;
+        WhyFunVenue plan = new WhyFunVenue();
+        plan.id = 66L;
+        plan.category = category;
+        plan.subcategory = subcategory;
+        when(venues.findDetailedByIdAndCoupleId(plan.id, coupleId)).thenReturn(Optional.of(plan));
+        when(categories.findDetailedById(category.id)).thenReturn(Optional.of(category));
+        when(categories.findDetailedById(subcategory.id)).thenReturn(Optional.of(subcategory));
+        when(venues.save(plan)).thenReturn(plan);
+        FunPlanRequest request = new FunPlanRequest("Plan editado", "Dirección", null, category.id,
+                subcategory.id, null);
+
+        WhyFunVenue updated = service.update(plan.id, request, actor);
+
+        assertEquals(category, updated.category);
+        assertEquals(subcategory, updated.subcategory);
+        verify(venues).save(plan);
     }
 
     private static User member() {

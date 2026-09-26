@@ -93,11 +93,15 @@ public class WhyFunPlanService {
     private void apply(WhyFunVenue plan, FunPlanRequest request) {
         WhyFunCategory category = findCategory(request.categoryId());
         WhyFunCategory subcategory = findCategory(request.subcategoryId());
-        if (!category.active || category.parent != null) {
+        boolean preservesInactiveCategory = plan.id != null && plan.category != null
+                && plan.category.id.equals(category.id);
+        boolean preservesInactiveSubcategory = plan.id != null && plan.subcategory != null
+                && plan.subcategory.id.equals(subcategory.id);
+        if ((!category.active && !preservesInactiveCategory) || category.parent != null) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
                     "Elegí una categoría principal activa");
         }
-        if (!subcategory.active || subcategory.parent == null
+        if ((!subcategory.active && !preservesInactiveSubcategory) || subcategory.parent == null
                 || !subcategory.parent.id.equals(category.id)) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
                     "Elegí una subcategoría activa de la categoría seleccionada");

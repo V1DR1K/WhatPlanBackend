@@ -2,7 +2,6 @@ package com.wherefood.web;
 
 import com.wherefood.domain.WhyFunCategory;
 import com.wherefood.repo.Repositories.WhyFunCategories;
-import com.wherefood.repo.Repositories.WhyFunVenues;
 import java.text.Normalizer;
 import java.util.Locale;
 import java.util.Optional;
@@ -17,11 +16,9 @@ import org.springframework.web.server.ResponseStatusException;
 @Transactional(readOnly = true)
 public class WhyFunCategoryAdminService {
     private final WhyFunCategories categories;
-    private final WhyFunVenues venues;
 
-    public WhyFunCategoryAdminService(WhyFunCategories categories, WhyFunVenues venues) {
+    public WhyFunCategoryAdminService(WhyFunCategories categories) {
         this.categories = categories;
-        this.venues = venues;
     }
 
     @Transactional
@@ -38,10 +35,9 @@ public class WhyFunCategoryAdminService {
     public WhyFunCategory update(Long id, FunCategoryRequest request) {
         WhyFunCategory value = find(id);
         Long currentParentId = value.parent == null ? null : value.parent.id;
-        if (!java.util.Objects.equals(currentParentId, request.parentId())
-                && (categories.existsByParentId(id) || venues.countBySubcategoryId(id) > 0)) {
+        if (!java.util.Objects.equals(currentParentId, request.parentId()) && categories.existsByParentId(id)) {
             throw new ResponseStatusException(HttpStatus.CONFLICT,
-                    "No podés cambiar la jerarquía de una categoría que ya tiene subcategorías o planes");
+                    "No podés cambiar la jerarquía de una categoría que tiene subcategorías");
         }
         apply(value, request, value);
         value.updatedAt = java.time.Instant.now();
@@ -52,15 +48,8 @@ public class WhyFunCategoryAdminService {
     @PreAuthorize("hasRole('ADMIN')")
     public void delete(Long id) {
         WhyFunCategory value = find(id);
-        if (categories.existsByParentId(id)) {
-            throw new ResponseStatusException(HttpStatus.CONFLICT,
-                    "No podés borrar una categoría con subcategorías");
-        }
-        if (venues.existsByCategoryIdOrSubcategoryId(id, id)) {
-            throw new ResponseStatusException(HttpStatus.CONFLICT,
-                    "No podés borrar una categoría usada por planes");
-        }
-        categories.delete(value);
+        value.active = false;
+        categories.save(value);
     }
 
     private WhyFunCategory find(Long id) {

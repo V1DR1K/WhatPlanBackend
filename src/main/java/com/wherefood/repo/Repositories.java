@@ -596,8 +596,6 @@ public final class Repositories {
            @Param("coupleId") java.util.UUID coupleId);
    @Query("select v from WhyFunVenue v join fetch v.category join fetch v.subcategory join fetch v.createdBy where v.coupleId = :coupleId and (:categoryId is null or v.category.id = :categoryId) and (:subcategoryId is null or v.subcategory.id = :subcategoryId) and (:cursor is null or v.id < :cursor) order by v.id desc") List<WhyFunVenue> list(@Param("coupleId") java.util.UUID coupleId, @Param("categoryId") Long categoryId, @Param("subcategoryId") Long subcategoryId, @Param("cursor") Long cursor, Pageable pageable);
      @EntityGraph(attributePaths = {"category", "subcategory", "createdBy", "updatedBy", "schedules"}) @Query("select v from WhyFunVenue v where v.id=:id and v.coupleId=:coupleId") Optional<WhyFunVenue> findDetailedByIdAndCoupleId(@Param("id") Long id, @Param("coupleId") java.util.UUID coupleId);
-   long countBySubcategoryId(Long subcategoryId);
-   boolean existsByCategoryIdOrSubcategoryId(Long categoryId, Long subcategoryId);
   }
 
   public interface WhyFunVenuePhotos extends CoupleScopedRepository<WhyFunVenuePhoto> {
