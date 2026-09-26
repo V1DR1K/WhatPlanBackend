@@ -113,6 +113,33 @@ class CoupleHttpIsolationIntegrationTest {
         assertThat(unauthenticated.getHeaders().getFirst("X-Request-Id"))
                 .isEqualTo(unauthenticatedProblem.path("requestId").asText());
 
+        HttpHeaders invalidPlaceHeaders = authHeaders(USER_A1_AUTH_ID);
+        invalidPlaceHeaders.setContentType(MediaType.APPLICATION_JSON);
+        ResponseEntity<String> invalidPlace = http.postForEntity(url("/api/places"), new HttpEntity<>("""
+                {"name":"","address":"","sourceUrl":null,"mapsUrl":null,
+                 "acceptsReservations":false,"categoryId":%d,"tagIds":[]}
+                """.formatted(fixture.categoryId()), invalidPlaceHeaders), String.class);
+        assertProblem(invalidPlace, 400, "VALIDATION_ERROR");
+
+        assertProblem(get("/api/places?size=not-a-number", USER_A1_AUTH_ID, null), 400, "INVALID_REQUEST");
+        assertProblem(get("/api/categories/all", USER_A1_AUTH_ID, null), 403, "FORBIDDEN");
+        assertProblem(get("/api/not-a-real-route", USER_A1_AUTH_ID, null), 404, "NOT_FOUND");
+
+        HttpHeaders unacceptableHeaders = authHeaders(USER_A1_AUTH_ID);
+        unacceptableHeaders.setAccept(java.util.List.of(MediaType.APPLICATION_XML));
+        ResponseEntity<String> unacceptable = http.exchange(url("/api/places"), HttpMethod.GET,
+                new HttpEntity<>(unacceptableHeaders), String.class);
+        assertProblem(unacceptable, 406, "NOT_ACCEPTABLE");
+
+        HttpHeaders unsupportedHeaders = authHeaders(USER_A1_AUTH_ID);
+        unsupportedHeaders.setContentType(MediaType.TEXT_PLAIN);
+        ResponseEntity<String> unsupported = http.exchange(url("/api/places"), HttpMethod.POST,
+                new HttpEntity<>("not-json", unsupportedHeaders), String.class);
+        assertProblem(unsupported, 415, "UNSUPPORTED_MEDIA_TYPE");
+
+        assertProblem(http.exchange(url("/api/places/1/photo"), HttpMethod.PATCH,
+                new HttpEntity<>(authHeaders(USER_A1_AUTH_ID)), String.class), 405, "METHOD_NOT_ALLOWED");
+
         ResponseEntity<String> placesForA = get("/api/places", USER_A1_AUTH_ID, null);
         ResponseEntity<String> placesForB = get("/api/places", USER_B_AUTH_ID, null);
         assertThat(placesForA.getStatusCode().value()).isEqualTo(200);
@@ -181,7 +208,9 @@ class CoupleHttpIsolationIntegrationTest {
         assertThat(spoofedCoupleHeader.getBody()).contains("Private place A").doesNotContain("Private place B");
 
         assertThat(get("/api/places/" + fixture.placeA(), USER_A1_AUTH_ID, null).getStatusCode().value()).isEqualTo(200);
-        assertThat(get("/api/places/" + fixture.placeB(), USER_A1_AUTH_ID, null).getStatusCode().value()).isEqualTo(404);
+        ResponseEntity<String> hiddenPlace = get("/api/places/" + fixture.placeB(), USER_A1_AUTH_ID, null);
+        assertProblem(hiddenPlace, 404, "NOT_FOUND");
+        assertThat(hiddenPlace.getBody()).doesNotContain("Private place B", "coupleId", "couple_id");
         assertThat(get("/api/places/" + fixture.placeA(), USER_B_AUTH_ID, null).getStatusCode().value()).isEqualTo(404);
         assertThat(get("/api/places/" + fixture.placeB() + "/visits", USER_A1_AUTH_ID, null)
                 .getStatusCode().value()).isEqualTo(404);
@@ -231,6 +260,22 @@ class CoupleHttpIsolationIntegrationTest {
         HttpHeaders headers = authHeaders(subject);
         if (spoofedCoupleId != null) headers.set("X-Couple-Id", spoofedCoupleId);
         return http.exchange(url(path), HttpMethod.GET, new HttpEntity<>(headers), String.class);
+    }
+
+    private void assertProblem(ResponseEntity<String> response, int status, String errorCode) throws Exception {
+        assertThat(response.getStatusCode().value()).isEqualTo(status);
+        assertThat(response.getHeaders().getContentType().isCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON)).isTrue();
+        JsonNode problem = objectMapper.readTree(response.getBody());
+        assertThat(problem.path("type").asText()).isEqualTo("about:blank");
+        assertThat(problem.path("status").asInt()).isEqualTo(status);
+        assertThat(problem.path("title").asText()).isNotBlank();
+        assertThat(problem.path("detail").asText()).isNotBlank();
+        assertThat(problem.path("instance").asText()).isNotBlank();
+        assertThat(problem.path("errorCode").asText())
+                .withFailMessage("Expected errorCode %s in RFC 9457 body: %s", errorCode, response.getBody())
+                .isEqualTo(errorCode);
+        assertThat(problem.path("requestId").asText()).isNotBlank();
+        assertThat(response.getHeaders().getFirst("X-Request-Id")).isEqualTo(problem.path("requestId").asText());
     }
 
     private ResponseEntity<String> putPlace(Long placeId, UUID subject, String name, Long categoryId) {

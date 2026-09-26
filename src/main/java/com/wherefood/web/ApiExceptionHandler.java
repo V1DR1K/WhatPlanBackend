@@ -18,14 +18,19 @@ import org.springframework.web.ErrorResponseException;
 import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.web.HttpRequestMethodNotSupportedException;
 import org.springframework.web.HttpMediaTypeNotSupportedException;
+import org.springframework.web.HttpMediaTypeNotAcceptableException;
 import org.springframework.web.servlet.resource.NoResourceFoundException;
 import org.springframework.web.multipart.MaxUploadSizeExceededException;
 import jakarta.validation.ConstraintViolationException;
 import org.springframework.web.servlet.NoHandlerFoundException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.core.Ordered;
+import org.springframework.core.annotation.Order;
+import org.springframework.security.access.AccessDeniedException;
 
 @RestControllerAdvice
+@Order(Ordered.HIGHEST_PRECEDENCE)
 public class ApiExceptionHandler {
     private static final Logger LOG = LoggerFactory.getLogger(ApiExceptionHandler.class);
 
@@ -70,6 +75,12 @@ public class ApiExceptionHandler {
             default -> resolved.is5xxServerError() ? "Ocurrió un error interno." : "No se pudo completar la solicitud.";
         };
         return ProblemDetailsSupport.response(resolved, stableErrorCode(resolved), detail);
+    }
+
+    @ExceptionHandler(AccessDeniedException.class)
+    ResponseEntity<ProblemDetail> accessDenied(AccessDeniedException ignored) {
+        return ProblemDetailsSupport.response(HttpStatus.FORBIDDEN, "FORBIDDEN",
+                "La solicitud no está permitida.");
     }
 
     @ExceptionHandler(ErrorResponseException.class)
@@ -125,6 +136,12 @@ public class ApiExceptionHandler {
     ResponseEntity<ProblemDetail> unsupportedMedia(HttpMediaTypeNotSupportedException ignored) {
         return ProblemDetailsSupport.response(HttpStatus.UNSUPPORTED_MEDIA_TYPE, "UNSUPPORTED_MEDIA_TYPE",
                 "El formato de contenido no está soportado.");
+    }
+
+    @ExceptionHandler(HttpMediaTypeNotAcceptableException.class)
+    ResponseEntity<ProblemDetail> notAcceptable(HttpMediaTypeNotAcceptableException ignored) {
+        return ProblemDetailsSupport.response(HttpStatus.NOT_ACCEPTABLE, "NOT_ACCEPTABLE",
+                "El formato de respuesta solicitado no está disponible.");
     }
 
     @ExceptionHandler(MaxUploadSizeExceededException.class)
