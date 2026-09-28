@@ -12,18 +12,21 @@ import com.wherefood.config.CentralJwt;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.HttpStatus;
+import org.springframework.mock.web.MockHttpServletRequest;
+import org.springframework.mock.web.MockHttpServletResponse;
 import org.springframework.web.server.ResponseStatusException;
 
 class AuthApiTest {
     private final CentralAuthClient central = mock(CentralAuthClient.class);
     private final CentralJwt jwt = mock(CentralJwt.class);
     private final LocalUserProvisioner provisioner = mock(LocalUserProvisioner.class);
-    private final AuthApi api = new AuthApi(central, jwt, provisioner, new AllowedWhatPlanUsers("tomas,avril"));
+    private final AuthApi api = new AuthApi(central, jwt, provisioner, new AllowedWhatPlanUsers("tomas,avril"),
+            "https://whatplan.example.test", 604800);
 
     @Test
     void rejectsAnUnlistedUserBeforeCallingCentralLogin() {
         ResponseStatusException error = assertThrows(ResponseStatusException.class,
-                () -> api.login(new LoginRequest("intruder", "password")));
+                () -> api.login(new LoginRequest("intruder", "password"), new MockHttpServletResponse()));
 
         assertEquals(HttpStatus.FORBIDDEN, error.getStatusCode());
         verify(central, never()).login("intruder", "password");
@@ -38,8 +41,10 @@ class AuthApiTest {
         org.mockito.Mockito.when(central.refresh("refresh-token")).thenReturn(response);
         org.mockito.Mockito.when(jwt.subject("access")).thenReturn(userId);
 
+        MockHttpServletRequest request = new MockHttpServletRequest();
+        request.addHeader("Origin", "https://whatplan.example.test");
         ResponseStatusException error = assertThrows(ResponseStatusException.class,
-                () -> api.refresh(new RefreshRequest("refresh-token")));
+                () -> api.refresh(null, new RefreshRequest("refresh-token"), request, new MockHttpServletResponse()));
 
         assertEquals(HttpStatus.FORBIDDEN, error.getStatusCode());
         verify(provisioner, never()).provision(userId, "intruder");
