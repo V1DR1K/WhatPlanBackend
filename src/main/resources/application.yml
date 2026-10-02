@@ -44,7 +44,7 @@ app.auth-service-url: ${AUTH_SERVICE_URL}
 app.auth-public-key-pem: ${AUTH_PUBLIC_KEY_PEM}
 app.auth-issuer: ${AUTH_JWT_ISSUER}
 app.auth-default-role: ${AUTH_DEFAULT_ROLE}
-app.auth-audience: ${AUTH_JWT_AUDIENCE}
+app.auth-audience: ${AUTH_JWT_AUDIENCE:whatplan}
 app.auth-previous-public-key-pems: ${AUTH_PREVIOUS_PUBLIC_KEY_PEMS:}
 app.auth-max-access-token-ttl-seconds: ${AUTH_MAX_ACCESS_TOKEN_TTL_SECONDS:900}
 app.auth-cookie-allowed-origins: ${AUTH_COOKIE_ALLOWED_ORIGINS}
