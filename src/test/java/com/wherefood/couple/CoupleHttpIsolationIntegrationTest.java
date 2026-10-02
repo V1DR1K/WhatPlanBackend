@@ -1158,7 +1158,7 @@ class CoupleHttpIsolationIntegrationTest {
     private static String placeRequest(String name, Long categoryId) {
         return """
                 {"name":"%s","address":"","sourceUrl":null,"mapsUrl":null,
-                 "acceptsReservations":false,"categoryId":%d,"tagIds":[]}
+                 "acceptsReservations":false,"categoryId":%d,"tagIds":[],"zoneId":1}
                 """.formatted(name, categoryId);
     }
 
