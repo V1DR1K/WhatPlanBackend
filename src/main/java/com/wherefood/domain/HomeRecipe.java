@@ -6,7 +6,7 @@ import java.util.*;
 
 @Entity
 @Table(name = "home_recipes")
-public class HomeRecipe {
+public class HomeRecipe extends CoupleScopedEntity {
  @Id @GeneratedValue(strategy = GenerationType.IDENTITY) public Long id;
  @ManyToOne(fetch = FetchType.LAZY) @JoinColumn(name = "author_id") public User author;
  @Enumerated(EnumType.STRING) @Column(nullable = false) public Home home;

@@ -6,7 +6,7 @@ import java.util.*;
 
 @Entity
 @Table(name = "why_fun_venues")
-public class WhyFunVenue {
+public class WhyFunVenue extends CoupleScopedEntity {
  @Id @GeneratedValue(strategy = GenerationType.IDENTITY) public Long id;
  @Version public long version;
  @Column(nullable = false) public String name;

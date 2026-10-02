@@ -2,55 +2,59 @@ package com.wherefood.auth;
 
 import com.wherefood.domain.Role;
 import com.wherefood.domain.User;
-import com.wherefood.config.AllowedWhatPlanUsers;
 import com.wherefood.repo.Repositories.Users;
 import java.util.UUID;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.server.ResponseStatusException;
 
 @Service
 public class LocalUserProvisioner {
     private final Users users;
     private final Role defaultRole;
-    private final AllowedWhatPlanUsers allowedUsers;
 
     @org.springframework.beans.factory.annotation.Autowired
-    public LocalUserProvisioner(Users users, @Value("${app.auth-default-role}") String defaultRole,
-                                AllowedWhatPlanUsers allowedUsers) {
+    public LocalUserProvisioner(Users users, @Value("${app.auth-default-role}") String defaultRole) {
         this.users = users;
-        this.allowedUsers = allowedUsers;
+        Role configuredRole;
         try {
-            this.defaultRole = Role.valueOf(defaultRole.trim().toUpperCase());
+            configuredRole = Role.valueOf(defaultRole.trim().toUpperCase());
         } catch (Exception ex) {
-            throw new IllegalArgumentException("AUTH_DEFAULT_ROLE must be USER or ADMIN", ex);
+            throw new IllegalArgumentException("AUTH_DEFAULT_ROLE must be USER", ex);
         }
-    }
-
-    public LocalUserProvisioner(Users users, String defaultRole) {
-        this(users, defaultRole, AllowedWhatPlanUsers.defaults());
+        if (configuredRole != Role.USER) {
+            throw new IllegalArgumentException("AUTH_DEFAULT_ROLE must be USER; administrator promotion is an audited operation");
+        }
+        this.defaultRole = configuredRole;
     }
 
     @Transactional
     public User provision(UUID authUserId, String username) {
-        allowedUsers.requireAllowed(username);
         if (authUserId == null || username == null || username.isBlank()) {
             throw new IllegalArgumentException("Central user identity is incomplete");
         }
-        User user = users.findByAuthUserId(authUserId).orElseGet(() -> users.findByUsernameIgnoreCase(username)
-                .map(existing -> bind(existing, authUserId)).orElseGet(() -> create(authUserId, username)));
+        String normalizedUsername = username.trim();
+        User user = users.findByAuthUserId(authUserId).orElse(null);
+        if (user == null) {
+            if (users.findByUsernameIgnoreCase(normalizedUsername).isPresent()) {
+                throw new ResponseStatusException(HttpStatus.CONFLICT,
+                        "La cuenta local requiere una vinculación de identidad verificada");
+            }
+            user = create(authUserId, normalizedUsername);
+        } else {
+            Long localUserId = user.id;
+            if (users.findByUsernameIgnoreCase(normalizedUsername)
+                    .filter(existing -> !existing.id.equals(localUserId)).isPresent()) {
+                throw new ResponseStatusException(HttpStatus.CONFLICT, "El nombre de usuario ya está en uso");
+            }
+        }
         user.authUserId = authUserId;
-        user.username = username.trim();
+        user.username = normalizedUsername;
         if (user.role == null) user.role = defaultRole;
         user.passwordHash = null;
         return users.save(user);
-    }
-
-    private User bind(User user, UUID authUserId) {
-        if (user.authUserId != null && !user.authUserId.equals(authUserId)) {
-            throw new IllegalStateException("Local username is linked to another central user");
-        }
-        return user;
     }
 
     private User create(UUID authUserId, String username) {

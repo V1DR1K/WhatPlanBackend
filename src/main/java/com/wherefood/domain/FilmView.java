@@ -5,7 +5,7 @@ import java.time.*;
 
 @Entity
 @Table(name = "film_views")
-public class FilmView {
+public class FilmView extends CoupleScopedEntity {
  @Id @GeneratedValue(strategy = GenerationType.IDENTITY) public Long id;
  @Version public long version;
  @ManyToOne(fetch = FetchType.LAZY) @JoinColumn(name = "film_id") public Film film;

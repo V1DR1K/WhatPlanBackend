@@ -5,7 +5,7 @@ import java.time.*;
 
 @Entity
 @Table(name = "special_dates")
-public class SpecialDate {
+public class SpecialDate extends CoupleScopedEntity {
  @Id @GeneratedValue(strategy = GenerationType.IDENTITY) public Long id;
  @Version public long version;
  @Column(name = "special_date", nullable = false) public LocalDate date;

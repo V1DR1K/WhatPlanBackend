@@ -5,7 +5,7 @@ import java.time.*;
 
 @Entity
 @Table(name = "why_fun_venue_schedules")
-public class WhyFunVenueSchedule {
+public class WhyFunVenueSchedule extends CoupleScopedEntity {
  @Id @GeneratedValue(strategy = GenerationType.IDENTITY) public Long id;
  @ManyToOne(fetch = FetchType.LAZY) @JoinColumn(name = "venue_id", nullable = false) public WhyFunVenue venue;
  @Enumerated(EnumType.STRING) @Column(name = "day_of_week", nullable = false) public DayOfWeek dayOfWeek;

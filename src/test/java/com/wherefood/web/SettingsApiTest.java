@@ -9,9 +9,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.wherefood.domain.GlobalSettings;
-import com.wherefood.repo.Repositories.Settings;
 import java.lang.reflect.Method;
-import java.util.Optional;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.MediaType;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -21,39 +19,38 @@ import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 class SettingsApiTest {
  @Test
  void returnsAndRecreatesTheDefaultWhenTheSingletonIsMissing() {
-  Settings settings = mock(Settings.class);
-  when(settings.findById(1)).thenReturn(Optional.empty(), Optional.of(settings(5)));
+  GlobalSettingsService service = mock(GlobalSettingsService.class);
+  when(service.get()).thenReturn(settings(5));
 
-  SettingsDto result = new SettingsApi(settings).get();
+  SettingsDto result = new SettingsApi(service).get();
 
   assertEquals(5, result.catalogPageSize());
-  verify(settings).insertDefaultIfMissing();
+  verify(service).get();
  }
 
  @Test
  void readsThePersistedCatalogPageSize() {
-  Settings settings = mock(Settings.class);
-  when(settings.findById(1)).thenReturn(Optional.of(settings(12)));
+  GlobalSettingsService service = mock(GlobalSettingsService.class);
+  when(service.get()).thenReturn(settings(12));
 
-  assertEquals(12, new SettingsApi(settings).get().catalogPageSize());
+  assertEquals(12, new SettingsApi(service).get().catalogPageSize());
  }
 
  @Test
  void updatesThePersistedCatalogPageSize() {
-  Settings settings = mock(Settings.class);
-  GlobalSettings value = settings(5);
-  when(settings.findById(1)).thenReturn(Optional.of(value));
-  when(settings.save(any(GlobalSettings.class))).thenAnswer(invocation -> invocation.getArgument(0));
+  GlobalSettingsService service = mock(GlobalSettingsService.class);
+  GlobalSettings value = settings(20);
+  when(service.update(any(SettingsRequest.class))).thenReturn(value);
 
-  SettingsDto result = new SettingsApi(settings).update(new SettingsRequest(20));
+  SettingsDto result = new SettingsApi(service).update(new SettingsRequest(20));
 
   assertEquals(20, result.catalogPageSize());
-  verify(settings).save(value);
+  verify(service).update(new SettingsRequest(20));
  }
 
  @Test
  void validatesTheCatalogPageSizeRange() throws Exception {
-  MockMvc mvc = MockMvcBuilders.standaloneSetup(new SettingsApi(mock(Settings.class))).build();
+  MockMvc mvc = MockMvcBuilders.standaloneSetup(new SettingsApi(mock(GlobalSettingsService.class))).build();
 
   mvc.perform(put("/api/settings").contentType(MediaType.APPLICATION_JSON).content("{\"catalogPageSize\":0}"))
     .andExpect(status().isBadRequest());

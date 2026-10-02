@@ -11,6 +11,7 @@ import com.wherefood.domain.Item;
 import com.wherefood.domain.ItemPhoto;
 import com.wherefood.domain.Place;
 import com.wherefood.domain.PlaceVisit;
+import com.wherefood.config.CoupleContext;
 import com.wherefood.repo.Repositories.Items;
 import com.wherefood.repo.Repositories.Photos;
 import java.util.Base64;
@@ -19,8 +20,12 @@ import java.awt.image.BufferedImage;
 import java.io.ByteArrayOutputStream;
 import javax.imageio.ImageIO;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.AfterEach;
 
 class ApiMediaTest {
+ @AfterEach
+ void clearCoupleContext() { CoupleContext.clear(); }
+
  @Test
  void identifiesWebpBeforeImageIoDecodesIt() {
   assertTrue(PhotoStorage.isWebp(new byte[] {'R', 'I', 'F', 'F', 0, 0, 0, 0, 'W', 'E', 'B', 'P'}));
@@ -28,7 +33,7 @@ class ApiMediaTest {
  }
 
  @Test
-  void servesTheRequestedItemPhotoVariantAsCacheableWebp() {
+  void servesTheRequestedItemPhotoVariantWithoutCachingIt() {
   Items items = mock(Items.class);
     Photos photos = mock(Photos.class);
     Item item = new Item();
@@ -38,12 +43,14 @@ class ApiMediaTest {
   ItemPhoto photo = new ItemPhoto();
   photo.imageBase64 = Base64.getEncoder().encodeToString(new byte[] {1, 2, 3});
   photo.thumbnailBase64 = Base64.getEncoder().encodeToString(new byte[] {4, 5});
-  when(items.findById(42L)).thenReturn(Optional.of(item));
-  when(photos.findByItemId(42L)).thenReturn(Optional.of(photo));
+  when(items.findByIdAndCoupleId(42L, null)).thenReturn(Optional.of(item));
+  when(photos.findByItemIdAndCoupleId(42L, null)).thenReturn(Optional.of(photo));
 
-   var response = new Api(null, null, null, null, null, items, photos, null, null, null, null, null, new PhotoStorage()).itemPhoto(42L, true);
+  var response = new Api(null, null, null, null, null, items, photos, null, null, null, null, null, new PhotoStorage()).itemPhoto(42L, true);
 
   assertEquals("image/webp", response.getHeaders().getContentType().toString());
+  assertEquals("no-store", response.getHeaders().getCacheControl());
+  assertTrue(response.getHeaders().getVary().containsAll(java.util.List.of("Authorization", "Cookie")));
   assertArrayEquals(new byte[] {4, 5}, response.getBody());
   }
 

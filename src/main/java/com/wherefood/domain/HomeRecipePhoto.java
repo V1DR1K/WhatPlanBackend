@@ -5,7 +5,7 @@ import java.time.*;
 
 @Entity
 @Table(name = "home_recipe_photos")
-public class HomeRecipePhoto {
+public class HomeRecipePhoto extends CoupleScopedEntity {
  @Id @GeneratedValue(strategy = GenerationType.IDENTITY) public Long id;
  @OneToOne(fetch = FetchType.LAZY) @JoinColumn(name = "recipe_id") public HomeRecipe recipe;
  @Column(columnDefinition = "text") public String imageBase64;

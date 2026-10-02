@@ -14,5 +14,8 @@ import java.time.*;
   @Enumerated(EnumType.STRING) public Role role;
  public Instant createdAt;
 
+ public Long getId() { return id; }
+ public String getUsername() { return username; }
+
  @PrePersist void initializeCreatedAt() { if (createdAt == null) createdAt = Instant.now(); }
 }

@@ -11,4 +11,5 @@ public class FilmGenreOption {
  @Column(nullable = false, unique = true, length = 80) public String name;
  @Column(nullable = false, length = 20) public String emoji;
  @Column(nullable = false) public Instant createdAt;
+ @Column(nullable = false) public boolean active = true;
 }

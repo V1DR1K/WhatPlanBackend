@@ -6,7 +6,7 @@ import java.util.*;
 
 @Entity
 @Table(name = "films")
-public class Film {
+public class Film extends CoupleScopedEntity {
  @Id @GeneratedValue(strategy = GenerationType.IDENTITY) public Long id;
  @Version public long version;
  @Column(name = "tmdb_id", unique = true) public Long tmdbId;

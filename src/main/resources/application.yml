@@ -1,8 +1,21 @@
 spring:
+  mvc:
+    problemdetails:
+      enabled: true
+    throw-exception-if-no-handler-found: true
   datasource:
     url: ${DATABASE_URL}
     username: ${DATABASE_USER}
     password: ${DATABASE_PASSWORD}
+  data:
+    redis:
+      host: ${REDIS_HOST:redis}
+      port: ${REDIS_PORT:6379}
+      password: ${REDIS_PASSWORD}
+      timeout: 2s
+  flyway:
+    user: ${DATABASE_MIGRATION_USER:${DATABASE_USER}}
+    password: ${DATABASE_MIGRATION_PASSWORD:${DATABASE_PASSWORD}}
   jpa:
     open-in-view: false
     hibernate.ddl-auto: validate
@@ -11,14 +24,45 @@ spring:
   servlet.multipart.max-file-size: 10MB
   servlet.multipart.max-request-size: 11MB
 management:
-  endpoints.web.base-path: /api/actuator
-  endpoints.web.exposure.include: health
-  endpoint.health.show-details: never
+  endpoints:
+    web:
+      base-path: /api/actuator
+      exposure:
+        include:
+          - health
+          - prometheus
+  endpoint:
+    health:
+      show-details: never
+    prometheus:
+      enabled: true
+  prometheus:
+    metrics:
+      export:
+        enabled: true
 app.auth-service-url: ${AUTH_SERVICE_URL}
 app.auth-public-key-pem: ${AUTH_PUBLIC_KEY_PEM}
 app.auth-issuer: ${AUTH_JWT_ISSUER}
 app.auth-default-role: ${AUTH_DEFAULT_ROLE}
-app.auth.allowed-users: ${WHATPLAN_ALLOWED_USERS:tomas,avril}
+app.auth-audience: ${AUTH_JWT_AUDIENCE}
+app.auth-previous-public-key-pems: ${AUTH_PREVIOUS_PUBLIC_KEY_PEMS:}
+app.auth-max-access-token-ttl-seconds: ${AUTH_MAX_ACCESS_TOKEN_TTL_SECONDS:900}
+app.auth-cookie-allowed-origins: ${AUTH_COOKIE_ALLOWED_ORIGINS}
+app.auth-refresh-cookie-ttl-seconds: ${AUTH_REFRESH_COOKIE_TTL_SECONDS:604800}
+app.auth-service-connect-timeout-seconds: ${AUTH_SERVICE_CONNECT_TIMEOUT_SECONDS:3}
+app.auth-service-read-timeout-seconds: ${AUTH_SERVICE_READ_TIMEOUT_SECONDS:5}
+app.auth-service-max-concurrent-requests: ${AUTH_SERVICE_MAX_CONCURRENT_REQUESTS:32}
+app.rate-limit.trusted-proxy-addresses: ${TRUSTED_PROXY_ADDRESSES:}
+app.runtime.auth-service-url: ${AUTH_SERVICE_URL}
+app.runtime.database-url: ${DATABASE_URL}
+app.runtime.database-admin-user: ${DATABASE_ADMIN_USER}
+app.runtime.database-runtime-user: ${DATABASE_USER}
+app.runtime.database-runtime-password: ${DATABASE_PASSWORD}
+app.runtime.database-migration-user: ${DATABASE_MIGRATION_USER}
+app.runtime.database-migration-password: ${DATABASE_MIGRATION_PASSWORD}
+app.runtime.redis-password: ${REDIS_PASSWORD}
+app.runtime.trusted-proxy-addresses: ${TRUSTED_PROXY_ADDRESSES:}
+app.runtime.auth-cookie-secure: ${AUTH_COOKIE_SECURE:true}
 app.tmdb.read-access-token: ${TMDB_READ_ACCESS_TOKEN}
 app.tmdb.connect-timeout-seconds: ${TMDB_CONNECT_TIMEOUT_SECONDS:5}
 app.tmdb.request-timeout-seconds: ${TMDB_REQUEST_TIMEOUT_SECONDS:8}
@@ -29,3 +73,4 @@ app.images.max-decoded-bytes: ${IMAGE_MAX_DECODED_BYTES:52428800}
 app.images.max-pixels: ${IMAGE_MAX_PIXELS:25000000}
 app.images.max-dimension: ${IMAGE_MAX_DIMENSION:8000}
 app.images.process-timeout-seconds: ${IMAGE_PROCESS_TIMEOUT_SECONDS:10}
+app.images.max-concurrent-processes: ${IMAGE_MAX_CONCURRENT_PROCESSES:2}
