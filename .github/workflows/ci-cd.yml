@@ -38,3 +38,12 @@ jobs:
     steps:
       - uses: appleboy/ssh-action@0ff4204d59e8e51228ff73bce53f80d53301dee2 # v1.2.5
         with: {host: '${{ secrets.VPS_HOST }}', username: '${{ secrets.VPS_USER }}', key: '${{ secrets.VPS_SSH_KEY }}', script: '/opt/infra/bin/deploy-service whatplan api ${{ github.sha }}'}
+      - name: Capture sanitized startup diagnostics
+        if: failure()
+        uses: appleboy/ssh-action@0ff4204d59e8e51228ff73bce53f80d53301dee2 # v1.2.5
+        with:
+          host: '${{ secrets.VPS_HOST }}'
+          username: '${{ secrets.VPS_USER }}'
+          key: '${{ secrets.VPS_SSH_KEY }}'
+          script: |
+            docker logs --tail 250 whatplan-backend-1 2>&1 | grep -E 'APPLICATION FAILED TO START|Application run failed|Could not resolve placeholder|Caused by: .*Exception:|Schema-validation:|FlywayException|IllegalStateException:|password authentication failed|permission denied|Connection refused' | sed -E 's/(password|secret|token|key|url|uri)=([^ ]+)/\1=[redacted]/Ig' | tail -n 25 || true
