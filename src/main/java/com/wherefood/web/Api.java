@@ -22,7 +22,11 @@ record HighlightTagRequest(@NotBlank @Size(max = 60) String name, @NotBlank @Siz
  HighlightTagRequest(String name, String emoji) { this(name, emoji, null); }
 }
 record HighlightTagDto(Long id, String name, String emoji, boolean active) {}
-record PlaceRequest(@NotBlank @Size(max = 120) String name, @Size(max = 300) String address, @Size(max = 1000) @SafeHttpUrl String sourceUrl, @Size(max = 1000) @SafeHttpUrl String mapsUrl, boolean acceptsReservations, @NotNull @Positive Long categoryId, @Size(max = 30) List<@NotNull @Positive Long> tagIds) {}
+record PlaceRequest(@NotBlank @Size(max = 120) String name, @Size(max = 300) String address, @Size(max = 1000) @SafeHttpUrl String sourceUrl, @Size(max = 1000) @SafeHttpUrl String mapsUrl, boolean acceptsReservations, @NotNull @Positive Long categoryId, @Size(max = 30) List<@NotNull @Positive Long> tagIds, @Positive Long zoneId) {
+ PlaceRequest(String name, String address, String sourceUrl, String mapsUrl, boolean acceptsReservations, Long categoryId, List<Long> tagIds) {
+  this(name, address, sourceUrl, mapsUrl, acceptsReservations, categoryId, tagIds, null);
+ }
+}
 record VisitRequest(@NotNull LocalDate visitedOn) {}
 record ItemRequest(@NotBlank @Size(max = 120) String name) {}
 record ItemReviewRequest(@Size(max = 1000) String comment, @Min(1) @Max(5) short taste, @Min(1) @Max(5) short price) {}
@@ -37,7 +41,7 @@ record PlaceVisitPhotoDto(Long id, String url, String thumbnailUrl, int width, i
 record PlaceVisitReviewRequest(@NotNull @Min(1) @Max(5) Short overall, @Size(max = 2000) String comment, @Min(1) @Max(5) Short taste, @Min(1) @Max(5) Short price) {}
 record PlaceVisitReviewDto(Long id, String author, String updatedBy, short overall, String comment, Short taste, Short price, Instant createdAt, Instant updatedAt) {}
 record PlaceVisitDto(Long id, Long placeId, LocalDate visitedOn, String createdBy, List<ItemDto> items, List<PlaceVisitPhotoDto> photos, PlaceVisitPhotoDto coverPhoto, List<PlaceVisitReviewDto> reviews, String updatedBy, Instant createdAt, Instant updatedAt) {}
- record PlaceDto(Long id, String name, String address, String sourceUrl, String mapsUrl, boolean acceptsReservations, PlaceStatus status, CategoryDto category, List<HighlightTagDto> tags, String author, double rating, double tasteAverage, double priceAverage, double venueAverage, long itemCount, String photoUrl, String thumbnailUrl, Integer photoWidth, Integer photoHeight, List<PlaceReviewDto> reviews, Instant createdAt, Instant updatedAt) {}
+ record PlaceDto(Long id, Long zoneId, String name, String address, String sourceUrl, String mapsUrl, boolean acceptsReservations, PlaceStatus status, CategoryDto category, List<HighlightTagDto> tags, String author, double rating, double tasteAverage, double priceAverage, double venueAverage, long itemCount, String photoUrl, String thumbnailUrl, Integer photoWidth, Integer photoHeight, List<PlaceReviewDto> reviews, Instant createdAt, Instant updatedAt) {}
 record Slice<T>(List<T> content, Long nextCursor) {}
 
 @RestController
@@ -101,7 +105,7 @@ public class Api {
  @PutMapping("/highlight-tags/{id}") @PreAuthorize("hasRole('ADMIN')") HighlightTagDto updateTag(@PathVariable Long id, @RequestBody @jakarta.validation.Valid HighlightTagRequest request) { return tag(catalogAdminService.updateTag(id, request)); }
  @DeleteMapping("/highlight-tags/{id}") @PreAuthorize("hasRole('ADMIN')") @ResponseStatus(HttpStatus.NO_CONTENT) void deleteTag(@PathVariable Long id) { catalogAdminService.deleteTag(id); }
 
- @GetMapping("/places") Slice<PlaceDto> list(@RequestParam(required = false) Long categoryId, @RequestParam(required = false) Long highlightTagId, @RequestParam(required = false) PlaceStatus status, @RequestParam(required = false) String search, @RequestParam(required = false) String sort, @RequestParam(required = false) Long cursor, @RequestParam(defaultValue = "12") int size) {
+ @GetMapping("/places") Slice<PlaceDto> list(@RequestParam(required = false) Long zoneId, @RequestParam(required = false) Long categoryId, @RequestParam(required = false) Long highlightTagId, @RequestParam(required = false) PlaceStatus status, @RequestParam(required = false) String search, @RequestParam(required = false) String sort, @RequestParam(required = false) Long cursor, @RequestParam(defaultValue = "12") int size) {
    int limit = Math.max(1, Math.min(size, 30));
    long offset = cursor == null ? 0 : Math.max(0, cursor);
    if (offset > 1_000_000) throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Cursor inválido");
@@ -110,8 +114,11 @@ public class Api {
    if (!Set.of("rating", "rating-desc", "rating-asc", "date", "date-desc", "date-asc").contains(normalizedSort)) {
     throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Orden inválido");
    }
-   List<Long> ids = places.findPageIdsByCoupleId(CoupleContext.current(), categoryId, highlightTagId,
-           status == null ? null : status.name(), normalizedSearch, normalizedSort, limit + 1, offset);
+   List<Long> ids = zoneId == null
+           ? places.findPageIdsByCoupleId(CoupleContext.current(), categoryId, highlightTagId,
+                   status == null ? null : status.name(), normalizedSearch, normalizedSort, limit + 1, offset)
+           : places.findPageIdsByCoupleId(CoupleContext.current(), zoneId, categoryId, highlightTagId,
+                   status == null ? null : status.name(), normalizedSearch, normalizedSort, limit + 1, offset);
    Long next = ids.size() > limit ? offset + limit : null;
    List<Long> pageIds = ids.stream().limit(limit).toList();
    if (pageIds.isEmpty()) return new Slice<>(List.of(), next);
@@ -122,6 +129,10 @@ public class Api {
   return new Slice<>(page.stream().map(place -> place(place, summaries.get(place.id))).toList(), next);
  }
 
+ Slice<PlaceDto> list(Long categoryId, Long highlightTagId, PlaceStatus status, String search, String sort, Long cursor, int size) {
+  return list(null, categoryId, highlightTagId, status, search, sort, cursor, size);
+ }
+
   @PostMapping("/places") PlaceDto addPlace(@RequestBody @jakarta.validation.Valid PlaceRequest request, @AuthenticationPrincipal User owner) {
    return place(placeService.create(request, owner));
   }
@@ -129,13 +140,15 @@ public class Api {
    return place(placeService.update(id, request, owner));
   }
    @DeleteMapping("/places/{id}") @ResponseStatus(HttpStatus.NO_CONTENT) void deletePlace(@PathVariable Long id, @AuthenticationPrincipal User owner) { placeService.archive(id, owner); }
-   @GetMapping("/places/archived") Slice<PlaceDto> archivedPlaces(
+   @GetMapping("/places/archived") Slice<PlaceDto> archivedPlaces(@RequestParam(required = false) Long zoneId,
            @RequestParam(required = false) @jakarta.validation.constraints.PositiveOrZero @Max(1_000_000) Long cursor,
            @RequestParam(defaultValue = "12") @Min(1) @Max(100) int size) {
     int limit = Math.max(1, Math.min(size, 30));
     long offset = cursor == null ? 0 : cursor;
     if (offset < 0 || offset > 1_000_000) throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Cursor inválido");
-    List<Long> ids = places.findArchivedPageIdsByCoupleId(CoupleContext.current(), limit + 1, offset);
+    List<Long> ids = zoneId == null
+            ? places.findArchivedPageIdsByCoupleId(CoupleContext.current(), limit + 1, offset)
+            : places.findArchivedPageIdsByCoupleId(CoupleContext.current(), zoneId, limit + 1, offset);
     Long next = ids.size() > limit ? offset + limit : null;
     List<Long> pageIds = ids.stream().limit(limit).toList();
     if (pageIds.isEmpty()) return new Slice<>(List.of(), next);
@@ -145,6 +158,7 @@ public class Api {
     Map<Long, PlaceSummary> summaries = placeSummaries(page);
     return new Slice<>(page.stream().map(place -> place(place, summaries.get(place.id))).toList(), next);
    }
+   Slice<PlaceDto> archivedPlaces(Long cursor, int size) { return archivedPlaces(null, cursor, size); }
    @PostMapping("/places/{id}/restore") PlaceDto restorePlace(@PathVariable Long id, @AuthenticationPrincipal User owner) { return place(placeService.restore(id, owner)); }
   @GetMapping("/places/{id}") PlaceDto getPlace(@PathVariable Long id) { Place place = active(places.findDetailedByIdAndCoupleId(id, CoupleContext.current()).orElseThrow(() -> notFound("Lugar"))); return place(place, placeSummaries(List.of(place)).get(id)); }
  @GetMapping(value = "/places/{id}/photo", produces = "image/webp") ResponseEntity<byte[]> placePhoto(@PathVariable Long id, @RequestParam(defaultValue = "false") boolean thumbnail) {
@@ -273,7 +287,7 @@ public class Api {
     String thumbnailUrl = profilePhoto != null ? photoUrl(place.id, true, profilePhoto.id) : cover == null ? null : visitPhotoUrl(cover.id, true);
     Integer width = profilePhoto != null ? Integer.valueOf(profilePhoto.width) : cover == null ? null : Integer.valueOf(cover.width);
     Integer height = profilePhoto != null ? Integer.valueOf(profilePhoto.height) : cover == null ? null : Integer.valueOf(cover.height);
-     return new PlaceDto(place.id, place.name, place.address, place.sourceUrl, place.mapsUrl, place.acceptsReservations, place.status, category(place.category), place.highlightTags.stream().sorted(Comparator.comparing(tag -> tag.name)).map(Api::tag).toList(), place.createdBy.username, round(summary.rating()), round(summary.taste()), round(summary.price()), round(summary.venue()), summary.visitCount(), photoUrl, thumbnailUrl, width, height, summary.reviews(), place.createdAt, place.updatedAt);
+     return new PlaceDto(place.id, place.zoneId, place.name, place.address, place.sourceUrl, place.mapsUrl, place.acceptsReservations, place.status, category(place.category), place.highlightTags.stream().sorted(Comparator.comparing(tag -> tag.name)).map(Api::tag).toList(), place.createdBy.username, round(summary.rating()), round(summary.taste()), round(summary.price()), round(summary.venue()), summary.visitCount(), photoUrl, thumbnailUrl, width, height, summary.reviews(), place.createdAt, place.updatedAt);
   }
   private record PlaceSummary(double rating, double taste, double price, double venue, long visitCount, PlaceVisitPhoto cover, PlacePhoto legacyPhoto, List<PlaceReviewDto> reviews) {}
   private static String photoUrl(Long placeId, boolean thumbnail, Long photoId) { return "/places/" + placeId + "/photo?" + (thumbnail ? "thumbnail=true&" : "") + "v=" + photoId; }

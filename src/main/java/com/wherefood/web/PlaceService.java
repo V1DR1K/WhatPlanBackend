@@ -27,13 +27,21 @@ public class PlaceService {
     private final Categories categories;
     private final HighlightTags highlightTags;
     private final CoupleAuthorizationService authorization;
+    private final ZoneSettingsService zoneSettings;
 
     public PlaceService(Places places, Categories categories, HighlightTags highlightTags,
             CoupleAuthorizationService authorization) {
+        this(places, categories, highlightTags, authorization, null);
+    }
+
+    @org.springframework.beans.factory.annotation.Autowired
+    public PlaceService(Places places, Categories categories, HighlightTags highlightTags,
+            CoupleAuthorizationService authorization, ZoneSettingsService zoneSettings) {
         this.places = places;
         this.categories = categories;
         this.highlightTags = highlightTags;
         this.authorization = authorization;
+        this.zoneSettings = zoneSettings;
     }
 
     @Transactional
@@ -99,6 +107,13 @@ public class PlaceService {
     }
 
     private void apply(Place place, PlaceRequest request) {
+        if (request.zoneId() != null) {
+            if (zoneSettings != null) zoneSettings.requireActive(request.zoneId());
+            place.zoneId = request.zoneId();
+        } else if (place.zoneId == null) {
+            if (zoneSettings != null) throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Elegí una Zona para el registro");
+            place.zoneId = 1L;
+        }
         place.name = request.name();
         place.address = request.address();
         place.sourceUrl = request.sourceUrl();

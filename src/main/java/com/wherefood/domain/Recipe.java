@@ -9,6 +9,7 @@ import java.util.*;
 public class Recipe extends CoupleScopedEntity {
  @Id @GeneratedValue(strategy = GenerationType.IDENTITY) public Long id;
  @Version public long version;
+ @Column(name = "zone_id", nullable = false) public Long zoneId;
  @Column(nullable = false) public String name;
  @Column(name = "source_url") public String sourceUrl;
  @ManyToOne(fetch = FetchType.LAZY) @JoinColumn(name = "created_by", nullable = false) public User createdBy;

@@ -9,6 +9,7 @@ import java.util.*;
 public class WhyFunVenue extends CoupleScopedEntity {
  @Id @GeneratedValue(strategy = GenerationType.IDENTITY) public Long id;
  @Version public long version;
+ @Column(name = "zone_id", nullable = false) public Long zoneId;
  @Column(nullable = false) public String name;
  @Column(nullable = false) public String address;
  @ManyToOne(fetch = FetchType.LAZY) @JoinColumn(name = "category_id", nullable = false) public WhyFunCategory category;

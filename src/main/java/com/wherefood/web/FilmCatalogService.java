@@ -27,14 +27,22 @@ public class FilmCatalogService {
     private final WatchPlatforms platforms;
     private final TmdbClient tmdb;
     private final CoupleAuthorizationService authorization;
+    private final ZoneSettingsService zoneSettings;
 
     public FilmCatalogService(Films films, FilmGenreOptions genreOptions, WatchPlatforms platforms,
             TmdbClient tmdb, CoupleAuthorizationService authorization) {
+        this(films, genreOptions, platforms, tmdb, authorization, null);
+    }
+
+    @org.springframework.beans.factory.annotation.Autowired
+    public FilmCatalogService(Films films, FilmGenreOptions genreOptions, WatchPlatforms platforms,
+            TmdbClient tmdb, CoupleAuthorizationService authorization, ZoneSettingsService zoneSettings) {
         this.films = films;
         this.genreOptions = genreOptions;
         this.platforms = platforms;
         this.tmdb = tmdb;
         this.authorization = authorization;
+        this.zoneSettings = zoneSettings;
     }
 
     @Transactional
@@ -82,6 +90,13 @@ public class FilmCatalogService {
     }
 
     private void apply(Film film, FilmRequest request) {
+        if (request.zoneId() != null) {
+            if (zoneSettings != null) zoneSettings.requireActive(request.zoneId());
+            film.zoneId = request.zoneId();
+        } else if (film.zoneId == null) {
+            if (zoneSettings != null) throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Elegí una Zona para el registro");
+            film.zoneId = 1L;
+        }
         if (request.tmdbId() == null) {
             if (request.title() == null || request.title().isBlank()) {
                 throw new ResponseStatusException(HttpStatus.BAD_REQUEST,

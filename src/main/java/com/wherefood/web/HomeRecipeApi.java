@@ -20,11 +20,15 @@ import com.wherefood.config.CoupleContext;
 
 record RecipeIngredientRequest(@NotBlank @Size(max = 160) String name, @DecimalMin(value = "0.0", inclusive = false) BigDecimal quantity, @NotBlank @Size(max = 30) String unit) {}
 record RecipeStepRequest(@NotBlank @Size(max = 2000) String instruction) {}
-record RecipeRequest(@NotBlank @Size(max = 160) String name, @Size(max = 1000) @SafeHttpUrl String sourceUrl, @Size(max = 50) List<@Valid RecipeIngredientRequest> ingredients, @Size(max = 50) List<@Valid RecipeStepRequest> steps) {}
+record RecipeRequest(@NotBlank @Size(max = 160) String name, @Size(max = 1000) @SafeHttpUrl String sourceUrl, @Size(max = 50) List<@Valid RecipeIngredientRequest> ingredients, @Size(max = 50) List<@Valid RecipeStepRequest> steps, @Positive Long zoneId) {
+ RecipeRequest(String name, String sourceUrl, List<RecipeIngredientRequest> ingredients, List<RecipeStepRequest> steps) {
+  this(name, sourceUrl, ingredients, steps, null);
+ }
+}
 record CookingRequest(@NotNull Home home, @Min(1) @Max(100) int servings, @NotNull LocalDate cookedOn, @NotNull MealType mealType) {}
 record RecipeIngredientDto(String name, BigDecimal quantity, String unit) {}
 record RecipeStepDto(String instruction) {}
-record RecipeDto(Long id, String name, String sourceUrl, String photoUrl, String thumbnailUrl, Integer photoWidth, Integer photoHeight, Double rating, Double complexityRating, Double tasteRating, long cookingCount, List<Home> homes, List<RecipeIngredientDto> ingredients, List<RecipeStepDto> steps, String createdBy, String updatedBy, Instant createdAt, Instant updatedAt) {}
+record RecipeDto(Long id, Long zoneId, String name, String sourceUrl, String photoUrl, String thumbnailUrl, Integer photoWidth, Integer photoHeight, Double rating, Double complexityRating, Double tasteRating, long cookingCount, List<Home> homes, List<RecipeIngredientDto> ingredients, List<RecipeStepDto> steps, String createdBy, String updatedBy, Instant createdAt, Instant updatedAt) {}
 record CookingReviewRequest(@Min(1) @Max(5) short rating, @Min(1) @Max(5) short complexity, @Min(1) @Max(5) short taste, @Size(max = 1000) String comment) {}
 record CookingReviewDto(Long id, String author, String updatedBy, short rating, short complexity, short taste, String comment, Instant createdAt, Instant updatedAt) {}
 record CookingDto(Long id, RecipeDto recipe, Home home, int servings, LocalDate cookedOn, MealType mealType, String createdBy, String updatedBy, List<CookingReviewDto> reviews, Instant createdAt, Instant updatedAt) {}
@@ -75,7 +79,7 @@ public class HomeRecipeApi {
   this.cookingService = cookingService; this.mediaService = mediaService;
  }
 
-  @GetMapping("/recipes") @Transactional(readOnly = true) Slice<RecipeDto> listRecipes(@RequestParam(required = false) String search, @RequestParam(required = false) Home home, @RequestParam(required = false) Boolean cooked, @RequestParam(required = false) String sort, @RequestParam(required = false) Long cursor, @RequestParam(defaultValue = "5") int size) {
+  @GetMapping("/recipes") @Transactional(readOnly = true) Slice<RecipeDto> listRecipes(@RequestParam(required = false) Long zoneId, @RequestParam(required = false) String search, @RequestParam(required = false) Home home, @RequestParam(required = false) Boolean cooked, @RequestParam(required = false) String sort, @RequestParam(required = false) Long cursor, @RequestParam(defaultValue = "5") int size) {
    int limit = Math.max(1, Math.min(size, 30));
    long offset = cursor == null ? 0 : Math.max(0, cursor);
    if (offset > 1_000_000) throw badRequest("Cursor inválido");
@@ -84,8 +88,11 @@ public class HomeRecipeApi {
    if (!Set.of("date", "date-desc", "date-asc", "rating", "rating-desc", "rating-asc").contains(normalizedSort)) {
     throw badRequest("Orden inválido");
    }
-   List<Long> ids = recipes.findPageIdsByCoupleId(CoupleContext.current(), normalizedSearch,
-           home == null ? null : home.name(), cooked, normalizedSort, limit + 1, offset);
+   List<Long> ids = zoneId == null
+           ? recipes.findPageIdsByCoupleId(CoupleContext.current(), normalizedSearch,
+                   home == null ? null : home.name(), cooked, normalizedSort, limit + 1, offset)
+           : recipes.findPageIdsByCoupleId(CoupleContext.current(), zoneId, normalizedSearch,
+                   home == null ? null : home.name(), cooked, normalizedSort, limit + 1, offset);
    Long next = ids.size() > limit ? offset + limit : null;
    List<Long> pageIds = ids.stream().limit(limit).toList();
    if (pageIds.isEmpty()) return new Slice<>(List.of(), next);
@@ -96,6 +103,9 @@ public class HomeRecipeApi {
    Map<Long, RecipePhotoMetadata> photosByRecipe = recipePhotos(page);
    return new Slice<>(page.stream().map(recipe -> recipe(recipe, summaries.get(recipe.id), photosByRecipe.get(recipe.id))).toList(), next);
   }
+ Slice<RecipeDto> listRecipes(String search, Home home, Boolean cooked, String sort, Long cursor, int size) {
+  return listRecipes(null, search, home, cooked, sort, cursor, size);
+ }
  @GetMapping("/recipes/{id}") @Transactional(readOnly = true) RecipeDto getRecipe(@PathVariable Long id) { return recipe(findRecipe(id)); }
  @PostMapping("/recipes") @ResponseStatus(HttpStatus.CREATED) RecipeDto addRecipe(@RequestBody @Valid RecipeRequest request, @AuthenticationPrincipal User author) {
   return recipe(recipeService.create(request, author));
@@ -114,13 +124,15 @@ public class HomeRecipeApi {
    return recipe(mediaService.replacePhoto(id, file, author));
   }
 
- @GetMapping("/cookings") @Transactional(readOnly = true) Slice<CookingDto> listCookings(@RequestParam(required = false) Home home, @RequestParam(required = false) Long recipeId,
+ @GetMapping("/cookings") @Transactional(readOnly = true) Slice<CookingDto> listCookings(@RequestParam(required = false) Long zoneId, @RequestParam(required = false) Home home, @RequestParam(required = false) Long recipeId,
          @RequestParam(required = false) Long cursor, @RequestParam(defaultValue = "10") int size) {
   int limit = Math.max(1, Math.min(size, 30));
   long offset = cursor == null ? 0 : Math.max(0, cursor);
   if (offset > 1_000_000) throw badRequest("Cursor inválido");
   UUID coupleId = CoupleContext.current();
-  List<Long> ids = cookings.findPageIdsByCoupleId(coupleId, recipeId, home == null ? null : home.name(), limit + 1, offset);
+  List<Long> ids = zoneId == null
+          ? cookings.findPageIdsByCoupleId(coupleId, recipeId, home == null ? null : home.name(), limit + 1, offset)
+          : cookings.findPageIdsByCoupleId(coupleId, zoneId, recipeId, home == null ? null : home.name(), limit + 1, offset);
   Long next = ids.size() > limit ? offset + limit : null;
   List<Long> pageIds = ids.stream().limit(limit).toList();
   if (pageIds.isEmpty()) return new Slice<>(List.of(), null);
@@ -128,6 +140,9 @@ public class HomeRecipeApi {
           .collect(java.util.stream.Collectors.toMap(value -> value.id, value -> value));
   List<CookingDto> page = pageIds.stream().map(byId::get).filter(Objects::nonNull).map(this::cooking).toList();
   return new Slice<>(page, next);
+ }
+ Slice<CookingDto> listCookings(Home home, Long recipeId, Long cursor, int size) {
+  return listCookings(null, home, recipeId, cursor, size);
  }
   @PostMapping("/recipes/{recipeId}/cookings") @ResponseStatus(HttpStatus.CREATED) CookingDto addCooking(@PathVariable Long recipeId, @RequestBody @Valid CookingRequest request, @AuthenticationPrincipal User author) {
    return cooking(cookingService.create(recipeId, request, author));
@@ -160,7 +175,7 @@ public class HomeRecipeApi {
    return recipe(value, recipeSummaries(List.of(value.id)).get(value.id), recipePhotos(List.of(value)).get(value.id));
   }
   private RecipeDto recipe(Recipe value, RecipeSummary summary, PhotoMetadata photo) {
-   return new RecipeDto(value.id, value.name, value.sourceUrl, photo == null ? null : recipePhotoUrl(value.id, false, photo.getId()), photo == null ? null : recipePhotoUrl(value.id, true, photo.getId()), photo == null ? null : photo.getWidth(), photo == null ? null : photo.getHeight(), summary.rating(), summary.complexityRating(), summary.tasteRating(), summary.cookingCount(), summary.homes(), value.ingredients.stream().map(ingredient -> new RecipeIngredientDto(ingredient.name, ingredient.quantity, ingredient.unit)).toList(), value.steps.stream().map(step -> new RecipeStepDto(step.instruction)).toList(), value.createdBy.username, value.updatedBy.username, value.createdAt, value.updatedAt);
+   return new RecipeDto(value.id, value.zoneId, value.name, value.sourceUrl, photo == null ? null : recipePhotoUrl(value.id, false, photo.getId()), photo == null ? null : recipePhotoUrl(value.id, true, photo.getId()), photo == null ? null : photo.getWidth(), photo == null ? null : photo.getHeight(), summary.rating(), summary.complexityRating(), summary.tasteRating(), summary.cookingCount(), summary.homes(), value.ingredients.stream().map(ingredient -> new RecipeIngredientDto(ingredient.name, ingredient.quantity, ingredient.unit)).toList(), value.steps.stream().map(step -> new RecipeStepDto(step.instruction)).toList(), value.createdBy.username, value.updatedBy.username, value.createdAt, value.updatedAt);
   }
   private Map<Long, RecipeSummary> recipeSummaries(Collection<Long> recipeIds) {
    if (recipeIds.isEmpty()) return Map.of();

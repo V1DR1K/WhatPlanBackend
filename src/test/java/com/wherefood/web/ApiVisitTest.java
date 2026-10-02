@@ -264,6 +264,34 @@ class ApiVisitTest {
     verify(places).findActiveByIdInAndCoupleId(List.of(31L), coupleId);
   }
 
+ @Test
+ void filtersPlacesBySelectedZone() {
+  Places places = mock(Places.class);
+  PlaceVisits visits = mock(PlaceVisits.class);
+  PlaceReviews reviews = mock(PlaceReviews.class);
+  PlacePhotos placePhotos = mock(PlacePhotos.class);
+  UUID coupleId = UUID.randomUUID(); CoupleContext.set(coupleId);
+  User tomas = user(7L, "tomas");
+  Place place = place(33L, tomas, Instant.parse("2026-07-23T00:00:00Z"));
+  place.zoneId = 2L;
+  when(places.findPageIdsByCoupleId(coupleId, 2L, null, null, null, null, "date-desc", 6, 0))
+          .thenReturn(List.of(33L));
+  when(places.findActiveByIdInAndCoupleId(List.of(33L), coupleId)).thenReturn(List.of(place));
+  when(visits.findByPlaceIdInAndCoupleIdOrderByPlaceIdAscVisitedOnDescIdDesc(List.of(33L), coupleId)).thenReturn(List.of());
+  when(reviews.summariesByPlaceIdInAndCoupleId(List.of(33L), coupleId)).thenReturn(List.of());
+  when(placePhotos.findByPlaceIdInAndCoupleId(List.of(33L), coupleId)).thenReturn(List.of());
+
+  Api api = new Api(null, null, null, places, visits, null, null, null,
+          reviews, placePhotos, mock(PlaceVisitPhotos.class),
+          mock(PlaceVisitReviews.class), null);
+
+  Slice<PlaceDto> result = api.list(2L, null, null, null, null, null, null, 5);
+
+  assertEquals(List.of(33L), result.content().stream().map(PlaceDto::id).toList());
+  assertEquals(2L, result.content().getFirst().zoneId());
+  verify(places).findPageIdsByCoupleId(coupleId, 2L, null, null, null, null, "date-desc", 6, 0);
+ }
+
   @Test
   void pagesArchivedPlacesWithinCurrentCoupleAndKeepsStableNextCursor() {
     UUID coupleId = UUID.randomUUID(); CoupleContext.set(coupleId);

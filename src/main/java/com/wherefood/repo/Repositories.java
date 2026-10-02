@@ -33,6 +33,9 @@ public final class Repositories {
    @Query("select u from User u where lower(u.username) = lower(:username)")
    Optional<User> findByUsernameIgnoreCase(@Param("username") String username);
    Optional<User> findByAuthUserId(java.util.UUID authUserId);
+   @Modifying
+   @Query("update User u set u.defaultZoneId = null where u.defaultZoneId = :zoneId")
+   int clearDefaultZone(@Param("zoneId") Long zoneId);
  }
 
  public interface Couples extends JpaRepository<Couple, java.util.UUID> {
@@ -105,18 +108,21 @@ public final class Repositories {
                THEN '/places/' || p.id || '/photo?thumbnail=true' END AS image_url
         FROM place_visits v JOIN places p ON p.id = v.place_id AND p.couple_id = v.couple_id
         WHERE v.couple_id = :coupleId AND v.visited_on <= :today
+          AND (CAST(:zoneId AS bigint) IS NULL OR p.zone_id = CAST(:zoneId AS bigint))
         UNION ALL
         SELECT v.couple_id, v.watched_on, 'FILM', v.id,
           CASE WHEN EXISTS (SELECT 1 FROM film_photos fp WHERE fp.film_id = f.id AND fp.couple_id = v.couple_id)
                THEN '/films/' || f.id || '/photo?thumbnail=true' ELSE f.poster_path END
         FROM film_views v JOIN films f ON f.id = v.film_id AND f.couple_id = v.couple_id
         WHERE v.couple_id = :coupleId AND v.watched_on <= :today
+          AND (CAST(:zoneId AS bigint) IS NULL OR f.zone_id = CAST(:zoneId AS bigint))
         UNION ALL
         SELECT c.couple_id, c.cooked_on, 'COOK', c.id,
           CASE WHEN EXISTS (SELECT 1 FROM recipe_photos rp WHERE rp.recipe_id = r.id AND rp.couple_id = c.couple_id)
                THEN '/how-cook/recipes/' || r.id || '/photo?thumbnail=true' END
         FROM cookings c JOIN recipes r ON r.id = c.recipe_id AND r.couple_id = c.couple_id
         WHERE c.couple_id = :coupleId AND c.cooked_on <= :today
+          AND (CAST(:zoneId AS bigint) IS NULL OR r.zone_id = CAST(:zoneId AS bigint))
         UNION ALL
         SELECT v.couple_id, v.scheduled_at, 'FUN', v.id,
           CASE WHEN v.cover_photo_id IS NOT NULL THEN '/why-fun/activity-visit-photos/' || v.cover_photo_id || '?thumbnail=true'
@@ -124,6 +130,7 @@ public final class Repositories {
                THEN '/why-fun/activities/' || y.id || '/photo?thumbnail=true' END
         FROM why_fun_visits v JOIN why_fun_venues y ON y.id = v.venue_id AND y.couple_id = v.couple_id
         WHERE v.couple_id = :coupleId AND v.scheduled_at <= :today
+          AND (CAST(:zoneId AS bigint) IS NULL OR y.zone_id = CAST(:zoneId AS bigint))
       ), event_rows AS (
         SELECT s.id AS special_date_id, e.occurred_on, e.section, e.experience_id, e.image_url
         FROM experience_events e JOIN special_dates s
@@ -152,6 +159,10 @@ public final class Repositories {
         SELECT o.special_date_id, o.occurred_on FROM special_date_occurrences o
         WHERE o.couple_id = :coupleId AND o.occurred_on <= :today
           AND (CAST(:specialDateId AS bigint) IS NULL OR o.special_date_id = :specialDateId)
+          AND (CAST(:zoneId AS bigint) IS NULL OR EXISTS (
+            SELECT 1 FROM event_summary filtered_event
+            WHERE filtered_event.special_date_id = o.special_date_id
+              AND filtered_event.occurred_on = o.occurred_on))
       )
       SELECT s.id AS special_date_id, s.label AS label, COALESCE(s.recurrence, 'ONCE') AS recurrence,
         k.occurred_on AS occurred_on, COALESCE(es.experience_count, 0) AS experience_count,
@@ -165,8 +176,12 @@ public final class Repositories {
       LIMIT :limit OFFSET :offset
       """, nativeQuery = true)
     List<WhenDateSummaryProjection> findSummaryPageByCoupleId(@Param("coupleId") java.util.UUID coupleId,
-        @Param("specialDateId") Long specialDateId, @Param("today") LocalDate today,
+        @Param("specialDateId") Long specialDateId, @Param("zoneId") Long zoneId, @Param("today") LocalDate today,
         @Param("limit") int limit, @Param("offset") long offset);
+    default List<WhenDateSummaryProjection> findSummaryPageByCoupleId(java.util.UUID coupleId,
+        Long specialDateId, LocalDate today, int limit, long offset) {
+      return findSummaryPageByCoupleId(coupleId, specialDateId, null, today, limit, offset);
+    }
   }
   public interface SpecialDateOccurrences extends CoupleScopedRepository<SpecialDateOccurrence> {
      @EntityGraph(attributePaths = {"specialDate", "createdBy", "updatedBy"}) Optional<SpecialDateOccurrence> findBySpecialDateIdAndOccurredOnAndCoupleId(Long specialDateId, LocalDate occurredOn, java.util.UUID coupleId);
@@ -187,6 +202,12 @@ public final class Repositories {
   }
   public interface Settings extends JpaRepository<GlobalSettings, Integer> {
    @Modifying @Query(value = "insert into global_settings (id, catalog_page_size) values (1, 5) on conflict (id) do nothing", nativeQuery = true) int insertDefaultIfMissing();
+  }
+
+  public interface Zones extends JpaRepository<Zone, Long> {
+   List<Zone> findByActiveTrueOrderByNameAsc();
+   List<Zone> findAllByOrderByNameAsc();
+   Optional<Zone> findByNameIgnoreCase(String name);
   }
 
   public interface Places extends CoupleScopedRepository<Place> {
@@ -229,6 +250,7 @@ public final class Repositories {
           left join categories category on category.id = place.category_id
           join place_ratings rating on rating.id = place.id
           where place.couple_id = :coupleId and place.deactivated_at is null
+            and (cast(:zoneId as bigint) is null or place.zone_id = cast(:zoneId as bigint))
             and (cast(:categoryId as bigint) is null or place.category_id = cast(:categoryId as bigint))
             and (cast(:status as text) is null or place.status = cast(:status as text))
             and (cast(:highlightTagId as bigint) is null
@@ -250,17 +272,27 @@ public final class Repositories {
           limit :limit offset :offset
           """, nativeQuery = true)
   List<Long> findPageIdsByCoupleId(@Param("coupleId") java.util.UUID coupleId,
+          @Param("zoneId") Long zoneId,
           @Param("categoryId") Long categoryId, @Param("highlightTagId") Long highlightTagId,
           @Param("status") String status, @Param("search") String search, @Param("sort") String sort,
           @Param("limit") int limit, @Param("offset") long offset);
   @Query(value = """
           select place.id from places place
           where place.couple_id = :coupleId and place.deactivated_at is not null
+            and (cast(:zoneId as bigint) is null or place.zone_id = cast(:zoneId as bigint))
           order by place.deactivated_at desc, place.id desc
           limit :limit offset :offset
           """, nativeQuery = true)
   List<Long> findArchivedPageIdsByCoupleId(@Param("coupleId") java.util.UUID coupleId,
+          @Param("zoneId") Long zoneId,
           @Param("limit") int limit, @Param("offset") long offset);
+  default List<Long> findArchivedPageIdsByCoupleId(java.util.UUID coupleId, int limit, long offset) {
+    return findArchivedPageIdsByCoupleId(coupleId, null, limit, offset);
+  }
+  default List<Long> findPageIdsByCoupleId(java.util.UUID coupleId, Long categoryId, Long highlightTagId,
+          String status, String search, String sort, int limit, long offset) {
+    return findPageIdsByCoupleId(coupleId, null, categoryId, highlightTagId, status, search, sort, limit, offset);
+  }
   @EntityGraph(attributePaths = {"category", "createdBy", "highlightTags"})
   @Query("select place from Place place where place.id in :ids and place.coupleId = :coupleId and place.deactivatedAt is not null")
   List<Place> findArchivedByIdInAndCoupleId(@Param("ids") Collection<Long> ids,
@@ -403,6 +435,7 @@ public final class Repositories {
           from films film
           left join film_ratings rating on rating.film_id = film.id
           where film.couple_id = :coupleId
+            and (cast(:zoneId as bigint) is null or film.zone_id = cast(:zoneId as bigint))
             and (cast(:genre as text) is null or exists (
                 select 1 from film_genres fg
                 join film_genre_options genre_option on genre_option.id = fg.genre_id
@@ -427,10 +460,15 @@ public final class Repositories {
           limit :limit offset :offset
           """, nativeQuery = true)
   List<Long> findPageIdsByCoupleId(@Param("coupleId") java.util.UUID coupleId,
+          @Param("zoneId") Long zoneId,
           @Param("genre") String genre,
           @Param("platformId") Long platformId, @Param("watched") Boolean watched,
           @Param("search") String search, @Param("sort") String sort,
           @Param("limit") int limit, @Param("offset") long offset);
+  default List<Long> findPageIdsByCoupleId(java.util.UUID coupleId, String genre, Long platformId,
+          Boolean watched, String search, String sort, int limit, long offset) {
+    return findPageIdsByCoupleId(coupleId, null, genre, platformId, watched, search, sort, limit, offset);
+  }
   @EntityGraph(attributePaths = {"platform", "createdBy", "genres"})
   @Query("select film from Film film where film.id in :ids and film.coupleId = :coupleId")
   List<Film> findAllByIdInAndCoupleId(@Param("ids") Collection<Long> ids,
@@ -484,6 +522,7 @@ public final class Repositories {
            select venue.id
            from why_fun_venues venue
            where venue.couple_id = :coupleId
+             and (cast(:zoneId as bigint) is null or venue.zone_id = cast(:zoneId as bigint))
              and (cast(:categoryId as bigint) is null or venue.category_id = cast(:categoryId as bigint))
              and (cast(:subcategoryId as bigint) is null or venue.subcategory_id = cast(:subcategoryId as bigint))
              and (cast(:timeline as text) is null
@@ -499,9 +538,14 @@ public final class Repositories {
            limit :limit offset :offset
            """, nativeQuery = true)
    List<Long> findPlanPageIdsByCoupleId(@Param("coupleId") java.util.UUID coupleId,
+           @Param("zoneId") Long zoneId,
            @Param("categoryId") Long categoryId, @Param("subcategoryId") Long subcategoryId,
            @Param("timeline") String timeline, @Param("today") java.time.LocalDate today,
            @Param("limit") int limit, @Param("offset") long offset);
+   default List<Long> findPlanPageIdsByCoupleId(java.util.UUID coupleId, Long categoryId,
+           Long subcategoryId, String timeline, java.time.LocalDate today, int limit, long offset) {
+     return findPlanPageIdsByCoupleId(coupleId, null, categoryId, subcategoryId, timeline, today, limit, offset);
+   }
    @EntityGraph(attributePaths = {"category", "subcategory", "createdBy", "updatedBy", "schedules"})
    @Query("select venue from WhyFunVenue venue where venue.id in :ids and venue.coupleId = :coupleId")
    List<WhyFunVenue> findPlansByIdInAndCoupleId(@Param("ids") Collection<Long> ids,
@@ -521,6 +565,7 @@ public final class Repositories {
            join why_fun_categories subcategory on subcategory.id = venue.subcategory_id
            left join activity_ratings rating on rating.venue_id = venue.id
            where venue.couple_id = :coupleId
+             and (cast(:zoneId as bigint) is null or venue.zone_id = cast(:zoneId as bigint))
              and (cast(:categoryId as bigint) is null or venue.category_id = cast(:categoryId as bigint))
              and (cast(:subcategoryId as bigint) is null or venue.subcategory_id = cast(:subcategoryId as bigint))
              and (cast(:search as text) is null
@@ -547,9 +592,14 @@ public final class Repositories {
            limit :limit offset :offset
            """, nativeQuery = true)
    List<Long> findPageIdsByCoupleId(@Param("coupleId") java.util.UUID coupleId,
+           @Param("zoneId") Long zoneId,
            @Param("categoryId") Long categoryId, @Param("subcategoryId") Long subcategoryId,
            @Param("search") String search, @Param("visited") Boolean visited, @Param("sort") String sort,
            @Param("limit") int limit, @Param("offset") long offset);
+   default List<Long> findPageIdsByCoupleId(java.util.UUID coupleId, Long categoryId, Long subcategoryId,
+           String search, Boolean visited, String sort, int limit, long offset) {
+     return findPageIdsByCoupleId(coupleId, null, categoryId, subcategoryId, search, visited, sort, limit, offset);
+   }
    @EntityGraph(attributePaths = {"category", "subcategory", "createdBy", "updatedBy", "schedules"})
    @Query("select venue from WhyFunVenue venue where venue.id in :ids and venue.coupleId = :coupleId")
    List<WhyFunVenue> findAllByIdInAndCoupleId(@Param("ids") Collection<Long> ids,
@@ -630,6 +680,7 @@ public final class Repositories {
             from recipes r
             left join recipe_ratings rr on rr.recipe_id = r.id
             where r.couple_id = :coupleId
+              and (cast(:zoneId as bigint) is null or r.zone_id = cast(:zoneId as bigint))
               and (cast(:search as text) is null
                    or position(cast(:search as text) in lower(r.name)) > 0)
               and (cast(:home as text) is null
@@ -653,8 +704,13 @@ public final class Repositories {
             limit :limit offset :offset
             """, nativeQuery = true)
     List<Long> findPageIdsByCoupleId(@Param("coupleId") java.util.UUID coupleId,
+            @Param("zoneId") Long zoneId,
             @Param("search") String search, @Param("home") String home, @Param("cooked") Boolean cooked,
             @Param("sort") String sort, @Param("limit") int limit, @Param("offset") long offset);
+    default List<Long> findPageIdsByCoupleId(java.util.UUID coupleId, String search, String home,
+            Boolean cooked, String sort, int limit, long offset) {
+      return findPageIdsByCoupleId(coupleId, null, search, home, cooked, sort, limit, offset);
+    }
     @EntityGraph(attributePaths = {"createdBy", "updatedBy", "ingredients", "steps"})
     @Query("select r from Recipe r where r.id in :ids and r.coupleId = :coupleId")
     List<Recipe> findAllByIdInAndCoupleId(@Param("ids") Collection<Long> ids,
@@ -677,9 +733,12 @@ public final class Repositories {
     public interface Cookings extends CoupleScopedRepository<Cooking> {
     @EntityGraph(attributePaths = {"recipe", "recipe.ingredients", "recipe.steps", "createdBy", "updatedBy"}) List<Cooking> findAllByCoupleId(java.util.UUID coupleId);
     @EntityGraph(attributePaths = {"recipe", "recipe.ingredients", "recipe.steps", "createdBy", "updatedBy"}) List<Cooking> findByCoupleIdAndHomeOrderByCookedOnDescIdDesc(java.util.UUID coupleId, Home home);
-    @Query(value = "select c.id from cookings c where c.couple_id = :coupleId and (cast(:recipeId as bigint) is null or c.recipe_id = :recipeId) and (cast(:home as text) is null or c.home = :home) order by c.cooked_on desc, c.id desc limit :limit offset :offset", nativeQuery = true)
-    List<Long> findPageIdsByCoupleId(@Param("coupleId") java.util.UUID coupleId, @Param("recipeId") Long recipeId,
+    @Query(value = "select c.id from cookings c join recipes r on r.id=c.recipe_id and r.couple_id=c.couple_id where c.couple_id = :coupleId and (cast(:zoneId as bigint) is null or r.zone_id=cast(:zoneId as bigint)) and (cast(:recipeId as bigint) is null or c.recipe_id = :recipeId) and (cast(:home as text) is null or c.home = :home) order by c.cooked_on desc, c.id desc limit :limit offset :offset", nativeQuery = true)
+    List<Long> findPageIdsByCoupleId(@Param("coupleId") java.util.UUID coupleId, @Param("zoneId") Long zoneId, @Param("recipeId") Long recipeId,
             @Param("home") String home, @Param("limit") int limit, @Param("offset") long offset);
+    default List<Long> findPageIdsByCoupleId(java.util.UUID coupleId, Long recipeId, String home, int limit, long offset) {
+      return findPageIdsByCoupleId(coupleId, null, recipeId, home, limit, offset);
+    }
     @EntityGraph(attributePaths = {"recipe", "recipe.ingredients", "recipe.steps", "createdBy", "updatedBy"})
     @Query("select c from Cooking c where c.id in :ids and c.coupleId = :coupleId")
     List<Cooking> findAllByIdInAndCoupleId(@Param("ids") Collection<Long> ids, @Param("coupleId") java.util.UUID coupleId);

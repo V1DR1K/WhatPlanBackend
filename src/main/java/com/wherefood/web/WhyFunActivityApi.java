@@ -18,9 +18,13 @@ import org.springframework.web.server.ResponseStatusException;
 
 record ActivityScheduleRequest(@NotNull DayOfWeek dayOfWeek, @NotNull LocalTime opensAt, @NotNull LocalTime closesAt) {}
 record ActivityScheduleDto(DayOfWeek dayOfWeek, LocalTime opensAt, LocalTime closesAt) {}
-record ActivityRequest(@NotBlank @Size(max = 160) String name, @NotBlank @Size(max = 250) String address, @NotNull @Positive Long categoryId, @NotNull @Positive Long subcategoryId, @Size(max = 7) List<@Valid ActivityScheduleRequest> schedules) {}
+record ActivityRequest(@NotBlank @Size(max = 160) String name, @NotBlank @Size(max = 250) String address, @NotNull @Positive Long categoryId, @NotNull @Positive Long subcategoryId, @Size(max = 7) List<@Valid ActivityScheduleRequest> schedules, @Positive Long zoneId) {
+ ActivityRequest(String name, String address, Long categoryId, Long subcategoryId, List<ActivityScheduleRequest> schedules) {
+  this(name, address, categoryId, subcategoryId, schedules, null);
+ }
+}
 record ActivityProfilePhotoDto(Long id, String url, String thumbnailUrl, int width, int height, Instant createdAt) {}
-record ActivityDto(Long id, String name, String address, FunCategoryDto category, FunCategoryDto subcategory, List<ActivityScheduleDto> schedules, ActivityProfilePhotoDto profilePhoto, Double rating, long visitCount, String createdBy, String updatedBy, Instant createdAt, Instant updatedAt) {}
+record ActivityDto(Long id, Long zoneId, String name, String address, FunCategoryDto category, FunCategoryDto subcategory, List<ActivityScheduleDto> schedules, ActivityProfilePhotoDto profilePhoto, Double rating, long visitCount, String createdBy, String updatedBy, Instant createdAt, Instant updatedAt) {}
 record ActivityVisitRequest(@NotNull LocalDate scheduledAt) {}
 record ActivityPhotoDto(Long id, String url, String thumbnailUrl, int width, int height, int position, String createdBy, Instant createdAt) {}
 record ActivityReviewRequest(@Min(1) @Max(5) short rating, @Size(max = 1000) String comment) {}
@@ -80,7 +84,7 @@ public class WhyFunActivityApi {
   this.reviewService = reviewService; this.activityService = activityService; this.visitService = visitService; this.mediaService = mediaService;
  }
 
-  @GetMapping("/activities") @Transactional(readOnly = true) Slice<ActivityDto> listActivities(@RequestParam(required = false) Long categoryId, @RequestParam(required = false) Long subcategoryId, @RequestParam(required = false) String search, @RequestParam(required = false) Boolean visited, @RequestParam(required = false) String sort, @RequestParam(required = false) Long cursor, @RequestParam(defaultValue = "5") int size) {
+  @GetMapping("/activities") @Transactional(readOnly = true) Slice<ActivityDto> listActivities(@RequestParam(required = false) Long zoneId, @RequestParam(required = false) Long categoryId, @RequestParam(required = false) Long subcategoryId, @RequestParam(required = false) String search, @RequestParam(required = false) Boolean visited, @RequestParam(required = false) String sort, @RequestParam(required = false) Long cursor, @RequestParam(defaultValue = "5") int size) {
     int limit = Math.max(1, Math.min(size, 30));
     long offset = cursor == null ? 0 : Math.max(0, cursor);
     if (offset > 1_000_000) throw badRequest("Cursor inválido");
@@ -89,8 +93,11 @@ public class WhyFunActivityApi {
     if (!Set.of("name", "date", "date-desc", "date-asc", "rating", "rating-desc", "rating-asc").contains(normalizedSort)) {
      throw badRequest("Orden inválido");
     }
-    List<Long> ids = activities.findPageIdsByCoupleId(CoupleContext.current(), categoryId, subcategoryId,
-            normalizedSearch, visited, normalizedSort, limit + 1, offset);
+    List<Long> ids = zoneId == null
+            ? activities.findPageIdsByCoupleId(CoupleContext.current(), categoryId, subcategoryId,
+                    normalizedSearch, visited, normalizedSort, limit + 1, offset)
+            : activities.findPageIdsByCoupleId(CoupleContext.current(), zoneId, categoryId, subcategoryId,
+                    normalizedSearch, visited, normalizedSort, limit + 1, offset);
     Long next = ids.size() > limit ? offset + limit : null;
     List<Long> pageIds = ids.stream().limit(limit).toList();
     if (pageIds.isEmpty()) return new Slice<>(List.of(), next);
@@ -102,6 +109,9 @@ public class WhyFunActivityApi {
     Map<Long, PhotoMetadata> profilesById = profilePhotos(page);
     return new Slice<>(page.stream().map(value -> activity(value, ratings.get(value.id), visitCounts.getOrDefault(value.id, 0L), value.coverPhotoId == null ? null : profilesById.get(value.coverPhotoId))).toList(), next);
   }
+ Slice<ActivityDto> listActivities(Long categoryId, Long subcategoryId, String search, Boolean visited, String sort, Long cursor, int size) {
+  return listActivities(null, categoryId, subcategoryId, search, visited, sort, cursor, size);
+ }
  @GetMapping("/activities/{id}") @Transactional(readOnly = true) ActivityDto getActivity(@PathVariable Long id) { return activity(findActivity(id)); }
  @PostMapping("/activities") @ResponseStatus(HttpStatus.CREATED) ActivityDto addActivity(@RequestBody @Valid ActivityRequest request, @AuthenticationPrincipal User author) {
   return activity(activityService.create(request, author));
@@ -185,7 +195,7 @@ public class WhyFunActivityApi {
   return new ActivityVisitDto(value.id, activity, value.scheduledAt, value.createdBy.username, value.updatedBy.username, cover, resultPhotos, reviewValues.stream().map(review -> review(review, reviewAuthors.get(review.id))).toList(), value.createdAt, value.updatedAt);
  }
    private ActivityDto activity(WhyFunVenue value) { return activity(value, activityRatings(List.of(value.id)).get(value.id), activityVisitCounts(List.of(value.id)).getOrDefault(value.id, 0L), value.coverPhotoId == null ? null : profilePhotos(List.of(value)).get(value.coverPhotoId)); }
-   private ActivityDto activity(WhyFunVenue value, Double rating, long visitCount, PhotoMetadata profile) { return new ActivityDto(value.id, value.name, value.address, category(value.category), category(value.subcategory), value.schedules.stream().sorted(Comparator.comparing((WhyFunVenueSchedule schedule) -> schedule.dayOfWeek).thenComparing(schedule -> schedule.opensAt)).map(schedule -> new ActivityScheduleDto(schedule.dayOfWeek, schedule.opensAt, schedule.closesAt)).toList(), profile == null ? null : profilePhoto(value.id, profile), rating, visitCount, value.createdBy.username, value.updatedBy.username, value.createdAt, value.updatedAt); }
+   private ActivityDto activity(WhyFunVenue value, Double rating, long visitCount, PhotoMetadata profile) { return new ActivityDto(value.id, value.zoneId, value.name, value.address, category(value.category), category(value.subcategory), value.schedules.stream().sorted(Comparator.comparing((WhyFunVenueSchedule schedule) -> schedule.dayOfWeek).thenComparing(schedule -> schedule.opensAt)).map(schedule -> new ActivityScheduleDto(schedule.dayOfWeek, schedule.opensAt, schedule.closesAt)).toList(), profile == null ? null : profilePhoto(value.id, profile), rating, visitCount, value.createdBy.username, value.updatedBy.username, value.createdAt, value.updatedAt); }
   private Map<Long, Double> activityRatings(Collection<Long> activityIds) { if (activityIds.isEmpty() || reviews == null) return Map.of(); return reviews.ratingsByActivityIdInAndCoupleId(activityIds, CoupleContext.current()).stream().collect(java.util.stream.Collectors.toMap(ActivityRating::getActivityId, ActivityRating::getRating)); }
    private Map<Long, Long> activityVisitCounts(Collection<Long> activityIds) { if (activityIds.isEmpty() || visits == null) return Map.of(); return visits.countsByActivityIdInAndCoupleId(activityIds, CoupleContext.current()).stream().collect(java.util.stream.Collectors.toMap(ActivityVisitCount::getActivityId, ActivityVisitCount::getVisitCount)); }
    private Map<Long, PhotoMetadata> profilePhotos(Collection<WhyFunVenue> values) {

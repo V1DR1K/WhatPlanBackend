@@ -9,6 +9,7 @@ import java.util.*;
 public class Film extends CoupleScopedEntity {
  @Id @GeneratedValue(strategy = GenerationType.IDENTITY) public Long id;
  @Version public long version;
+ @Column(name = "zone_id", nullable = false) public Long zoneId;
  @Column(name = "tmdb_id", unique = true) public Long tmdbId;
  @Column(nullable = false) public String title;
  public String originalTitle;

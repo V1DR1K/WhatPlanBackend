@@ -173,6 +173,31 @@ class CoupleHttpIsolationIntegrationTest {
     }
 
     @Test
+    void migrationSeedsInitialZonesAndAssignsExistingCatalogRowsToRosario() throws Exception {
+        try (Connection connection = adminConnection();
+                PreparedStatement zones = connection.prepareStatement(
+                        "select name from zones where active order by id");
+                ResultSet result = zones.executeQuery()) {
+            assertThat(result.next()).isTrue();
+            assertThat(result.getString(1)).isEqualTo("Rosario");
+            assertThat(result.next()).isTrue();
+            assertThat(result.getString(1)).isEqualTo("Buenos Aires");
+            assertThat(result.next()).isFalse();
+        }
+        try (Connection connection = adminConnection();
+                PreparedStatement rows = connection.prepareStatement("""
+                        select (select count(*) from places where zone_id is null) +
+                               (select count(*) from films where zone_id is null) +
+                               (select count(*) from recipes where zone_id is null) +
+                               (select count(*) from why_fun_venues where zone_id is null)
+                        """);
+                ResultSet result = rows.executeQuery()) {
+            assertThat(result.next()).isTrue();
+            assertThat(result.getLong(1)).isZero();
+        }
+    }
+
+    @Test
     void productionHttpChainKeepsReadsWritesReviewsAndPhotosInsideTheAuthenticatedCouple() throws Exception {
         assertRuntimeDatabaseRoleIsRestricted();
         Fixture fixture = seedFixture();
@@ -1395,11 +1420,12 @@ class CoupleHttpIsolationIntegrationTest {
             }
 
             Query repositoryQuery = Repositories.SpecialDates.class
-                    .getMethod("findSummaryPageByCoupleId", UUID.class, Long.class, LocalDate.class, int.class, long.class)
+                    .getMethod("findSummaryPageByCoupleId", UUID.class, Long.class, Long.class, LocalDate.class, int.class, long.class)
                     .getAnnotation(Query.class);
             String sql = repositoryQuery.value()
                     .replace(":coupleId", "'" + COUPLE_A_ID + "'::uuid")
                     .replace(":specialDateId", "NULL")
+                    .replace(":zoneId", "NULL")
                     .replace(":today", "'" + today + "'::date")
                     .replace(":limit", "31")
                     .replace(":offset", "0");

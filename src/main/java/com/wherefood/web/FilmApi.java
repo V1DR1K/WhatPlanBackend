@@ -20,7 +20,11 @@ import org.springframework.validation.annotation.Validated;
 
 record PlatformRequest(@NotBlank @Size(max = 80) String name, @NotBlank @Size(max = 20) String icon, boolean active) {}
 record PlatformDto(Long id, String name, String icon, boolean active) {}
-record FilmRequest(@Positive Long tmdbId, @Size(max = 200) String title, @Size(max = 200) String originalTitle, @Size(max = 3000) String synopsis, LocalDate releaseDate, @Size(max = 1000) @SafeHttpUrl String posterPath, LocalDate watchedOn, @Size(max = 12) List<@Size(max = 80) String> genres, @Positive Long platformId) {}
+record FilmRequest(@Positive Long tmdbId, @Size(max = 200) String title, @Size(max = 200) String originalTitle, @Size(max = 3000) String synopsis, LocalDate releaseDate, @Size(max = 1000) @SafeHttpUrl String posterPath, LocalDate watchedOn, @Size(max = 12) List<@Size(max = 80) String> genres, @Positive Long platformId, @Positive Long zoneId) {
+ FilmRequest(Long tmdbId, String title, String originalTitle, String synopsis, LocalDate releaseDate, String posterPath, LocalDate watchedOn, List<String> genres, Long platformId) {
+  this(tmdbId, title, originalTitle, synopsis, releaseDate, posterPath, watchedOn, genres, platformId, null);
+ }
+}
 record FilmViewRequest(@NotNull LocalDate watchedOn) {}
 record FilmReviewRequest(@Min(1) @Max(5) short rating, @Size(max = 1000) String comment, LocalDate watchedOn, @Size(max = 300) String favoriteCharacter, @Size(max = 20) Map<@NotBlank @Pattern(regexp = "[a-z_]{1,80}") String, @NotNull @Min(1) @Max(5) Short> metrics) {}
 record FilmGenreOptionRequest(@NotBlank @Size(max = 80) String name, @NotBlank @Size(max = 20) String emoji, Boolean active) {
@@ -29,7 +33,7 @@ record FilmGenreOptionRequest(@NotBlank @Size(max = 80) String name, @NotBlank @
 record FilmGenreOptionDto(Long id, String name, String emoji, boolean active) {}
 record FilmReviewDto(Long id, String author, short rating, String comment, LocalDate watchedOn, String favoriteCharacter, Map<String, Short> metrics) {}
 record FilmViewDto(Long id, LocalDate watchedOn, String createdBy, String updatedBy, List<FilmReviewDto> reviews, Instant createdAt) {}
- record FilmDto(Long id, Long tmdbId, String title, String originalTitle, String synopsis, LocalDate releaseDate, String posterUrl, String thumbnailUrl, Integer posterWidth, Integer posterHeight, List<String> genres, PlatformDto platform, int watchedCount, LocalDate lastWatchedOn, String author, List<FilmReviewDto> reviews, List<FilmViewDto> views, Instant createdAt, Instant updatedAt, TmdbMovieDto tmdb) {}
+ record FilmDto(Long id, Long zoneId, Long tmdbId, String title, String originalTitle, String synopsis, LocalDate releaseDate, String posterUrl, String thumbnailUrl, Integer posterWidth, Integer posterHeight, List<String> genres, PlatformDto platform, int watchedCount, LocalDate lastWatchedOn, String author, List<FilmReviewDto> reviews, List<FilmViewDto> views, Instant createdAt, Instant updatedAt, TmdbMovieDto tmdb) {}
 
 @RestController
 @Validated
@@ -107,7 +111,7 @@ public class FilmApi {
   @PutMapping("/film-genres/{id}") @PreAuthorize("hasRole('ADMIN')") FilmGenreOptionDto updateGenre(@PathVariable Long id, @RequestBody @Valid FilmGenreOptionRequest request) { return genre(catalogAdminService.updateGenre(id, request)); }
   @DeleteMapping("/film-genres/{id}") @PreAuthorize("hasRole('ADMIN')") @ResponseStatus(HttpStatus.NO_CONTENT) void deleteGenre(@PathVariable Long id) { catalogAdminService.deleteGenre(id); }
 
-  @GetMapping("/films") Slice<FilmDto> list(@RequestParam(required = false) String genre, @RequestParam(required = false) Long platformId, @RequestParam(required = false) Boolean watched, @RequestParam(required = false) String search, @RequestParam(required = false) String sort, @RequestParam(required = false) Long cursor, @RequestParam(defaultValue = "5") int size) {
+  @GetMapping("/films") Slice<FilmDto> list(@RequestParam(required = false) Long zoneId, @RequestParam(required = false) String genre, @RequestParam(required = false) Long platformId, @RequestParam(required = false) Boolean watched, @RequestParam(required = false) String search, @RequestParam(required = false) String sort, @RequestParam(required = false) Long cursor, @RequestParam(defaultValue = "5") int size) {
    int limit = Math.max(1, Math.min(size, 30));
    long offset = cursor == null ? 0 : Math.max(0, cursor);
    if (offset > 1_000_000) throw badRequest("Cursor inválido");
@@ -117,8 +121,11 @@ public class FilmApi {
     throw badRequest("Orden inválido");
    }
    String normalizedGenre = genre == null || genre.isBlank() ? null : genre.trim().toLowerCase(Locale.ROOT);
-   List<Long> ids = films.findPageIdsByCoupleId(CoupleContext.current(), normalizedGenre, platformId, watched,
-           normalizedSearch, normalizedSort, limit + 1, offset);
+   List<Long> ids = zoneId == null
+           ? films.findPageIdsByCoupleId(CoupleContext.current(), normalizedGenre, platformId, watched,
+                   normalizedSearch, normalizedSort, limit + 1, offset)
+           : films.findPageIdsByCoupleId(CoupleContext.current(), zoneId, normalizedGenre, platformId, watched,
+                   normalizedSearch, normalizedSort, limit + 1, offset);
    Long next = ids.size() > limit ? offset + limit : null;
    List<Long> pageIds = ids.stream().limit(limit).toList();
    if (pageIds.isEmpty()) return new Slice<>(List.of(), null);
@@ -128,6 +135,10 @@ public class FilmApi {
    Map<Long, FilmPhotoMetadata> photosByFilm = filmPhotos(page);
    return new Slice<>(page.stream().map(film -> film(film, false, photosByFilm.get(film.id))).toList(), next);
    }
+
+  Slice<FilmDto> list(String genre, Long platformId, Boolean watched, String search, String sort, Long cursor, int size) {
+   return list(null, genre, platformId, watched, search, sort, cursor, size);
+  }
 
   @GetMapping("/films/{id}") FilmDto get(@PathVariable Long id) { return film(findFilm(id), true); }
   @GetMapping(value = "/films/{id}/photo", produces = "image/webp") ResponseEntity<byte[]> photo(@PathVariable Long id, @RequestParam(defaultValue = "false") boolean thumbnail) {
@@ -181,7 +192,7 @@ public class FilmApi {
      String thumbnailUrl = photo != null ? photoUrl(film.id, true, photo.getId()) : null;
      Integer posterWidth = photo == null ? null : photo.getWidth();
      Integer posterHeight = photo == null ? null : photo.getHeight();
-      return new FilmDto(film.id, film.tmdbId, film.title, film.originalTitle, film.synopsis, film.releaseDate, posterUrl, thumbnailUrl, posterWidth, posterHeight, film.genres.stream().map(value -> value.name).sorted(String.CASE_INSENSITIVE_ORDER).toList(), film.platform == null ? null : platform(film.platform), film.watchedCount, film.lastWatchedOn, film.createdBy.username, filmReviews, filmViews, film.createdAt, film.updatedAt, catalog);
+      return new FilmDto(film.id, film.zoneId, film.tmdbId, film.title, film.originalTitle, film.synopsis, film.releaseDate, posterUrl, thumbnailUrl, posterWidth, posterHeight, film.genres.stream().map(value -> value.name).sorted(String.CASE_INSENSITIVE_ORDER).toList(), film.platform == null ? null : platform(film.platform), film.watchedCount, film.lastWatchedOn, film.createdBy.username, filmReviews, filmViews, film.createdAt, film.updatedAt, catalog);
   }
    private Map<Long, FilmPhotoMetadata> filmPhotos(Collection<Film> values) {
     if (values.isEmpty() || filmPhotos == null) return Map.of();

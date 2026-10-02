@@ -21,12 +21,20 @@ public class WhyFunActivityService {
     private final WhyFunCategories categories;
     private final WhyFunVenues activities;
     private final CoupleAuthorizationService authorization;
+    private final ZoneSettingsService zoneSettings;
 
     public WhyFunActivityService(WhyFunCategories categories, WhyFunVenues activities,
             CoupleAuthorizationService authorization) {
+        this(categories, activities, authorization, null);
+    }
+
+    @org.springframework.beans.factory.annotation.Autowired
+    public WhyFunActivityService(WhyFunCategories categories, WhyFunVenues activities,
+            CoupleAuthorizationService authorization, ZoneSettingsService zoneSettings) {
         this.categories = categories;
         this.activities = activities;
         this.authorization = authorization;
+        this.zoneSettings = zoneSettings;
     }
 
     @Transactional
@@ -68,6 +76,13 @@ public class WhyFunActivityService {
     }
 
     private void apply(WhyFunVenue activity, ActivityRequest request) {
+        if (request.zoneId() != null) {
+            if (zoneSettings != null) zoneSettings.requireActive(request.zoneId());
+            activity.zoneId = request.zoneId();
+        } else if (activity.zoneId == null) {
+            if (zoneSettings != null) throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Elegí una Zona para el registro");
+            activity.zoneId = 1L;
+        }
         WhyFunCategory category = findCategory(request.categoryId());
         WhyFunCategory subcategory = findCategory(request.subcategoryId());
         boolean preservesInactiveCategory = activity.id != null && activity.category != null

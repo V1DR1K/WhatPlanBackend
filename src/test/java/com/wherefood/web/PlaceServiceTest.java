@@ -16,6 +16,7 @@ import com.wherefood.domain.HighlightTag;
 import com.wherefood.domain.Place;
 import com.wherefood.domain.Role;
 import com.wherefood.domain.User;
+import com.wherefood.domain.Zone;
 import com.wherefood.repo.Repositories.Categories;
 import com.wherefood.repo.Repositories.CoupleMembers;
 import com.wherefood.repo.Repositories.HighlightTags;
@@ -64,6 +65,43 @@ class PlaceServiceTest {
         assertEquals(category, created.category);
         assertNotNull(created.createdAt);
         verify(places).save(created);
+    }
+
+    @Test
+    void create_requiresAnActiveZoneAndAssignsItToTheNewPlace() {
+        User member = user(7L, Role.USER);
+        Category category = new Category();
+        category.id = 3L;
+        category.active = true;
+        ZoneSettingsService zoneSettings = mock(ZoneSettingsService.class);
+        when(categories.findById(3L)).thenReturn(Optional.of(category));
+        when(places.save(any(Place.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        Zone zone = new Zone();
+        zone.id = 2L;
+        when(zoneSettings.requireActive(2L)).thenReturn(zone);
+        PlaceService zonedService = new PlaceService(places, categories, tags,
+                new CoupleAuthorizationService(members), zoneSettings);
+
+        Place created = zonedService.create(new PlaceRequest("Café", "Centro", null, null, false,
+                3L, List.of(), 2L), member);
+
+        assertEquals(2L, created.zoneId);
+        verify(zoneSettings).requireActive(2L);
+    }
+
+    @Test
+    void create_rejectsMissingZoneWhenAllZonesIsSelected() {
+        User member = user(7L, Role.USER);
+        Category category = new Category();
+        category.id = 3L;
+        category.active = true;
+        when(categories.findById(3L)).thenReturn(Optional.of(category));
+        PlaceService zonedService = new PlaceService(places, categories, tags,
+                new CoupleAuthorizationService(members), mock(ZoneSettingsService.class));
+
+        assertEquals(400, assertThrows(ResponseStatusException.class,
+                () -> zonedService.create(request(), member)).getStatusCode().value());
+        verify(places, never()).save(any(Place.class));
     }
 
     @Test

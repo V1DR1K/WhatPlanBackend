@@ -22,11 +22,19 @@ public class RecipeService {
     private final Recipes recipes;
     private final Cookings cookings;
     private final CoupleAuthorizationService authorization;
+    private final ZoneSettingsService zoneSettings;
 
     public RecipeService(Recipes recipes, Cookings cookings, CoupleAuthorizationService authorization) {
+        this(recipes, cookings, authorization, null);
+    }
+
+    @org.springframework.beans.factory.annotation.Autowired
+    public RecipeService(Recipes recipes, Cookings cookings, CoupleAuthorizationService authorization,
+            ZoneSettingsService zoneSettings) {
         this.recipes = recipes;
         this.cookings = cookings;
         this.authorization = authorization;
+        this.zoneSettings = zoneSettings;
     }
 
     @Transactional
@@ -66,7 +74,14 @@ public class RecipeService {
                         "Receta no encontrada"));
     }
 
-    private static void apply(Recipe recipe, RecipeRequest request) {
+    private void apply(Recipe recipe, RecipeRequest request) {
+        if (request.zoneId() != null) {
+            if (zoneSettings != null) zoneSettings.requireActive(request.zoneId());
+            recipe.zoneId = request.zoneId();
+        } else if (recipe.zoneId == null) {
+            if (zoneSettings != null) throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Elegí una Zona para el registro");
+            recipe.zoneId = 1L;
+        }
         recipe.name = request.name().trim();
         recipe.sourceUrl = blankToNull(request.sourceUrl());
         recipe.ingredients.clear();

@@ -21,11 +21,15 @@ import com.wherefood.config.CoupleContext;
 
 record FunCategoryRequest(Long parentId, @NotBlank @Size(max = 80) String name, @NotBlank @Size(max = 20) String icon, boolean active) {}
 record FunCategoryDto(Long id, Long parentId, String name, String slug, String icon, boolean active) {}
-record FunPlanRequest(@NotBlank @Size(max = 160) String name, @NotBlank @Size(max = 250) String address, LocalDate scheduledAt, @NotNull @Positive Long categoryId, @NotNull @Positive Long subcategoryId, @Size(max = 7) List<@Valid ActivityScheduleRequest> schedules) {}
+record FunPlanRequest(@NotBlank @Size(max = 160) String name, @NotBlank @Size(max = 250) String address, LocalDate scheduledAt, @NotNull @Positive Long categoryId, @NotNull @Positive Long subcategoryId, @Size(max = 7) List<@Valid ActivityScheduleRequest> schedules, @Positive Long zoneId) {
+ FunPlanRequest(String name, String address, LocalDate scheduledAt, Long categoryId, Long subcategoryId, List<ActivityScheduleRequest> schedules) {
+  this(name, address, scheduledAt, categoryId, subcategoryId, schedules, null);
+ }
+}
 record FunPhotoDto(Long id, String url, String thumbnailUrl, int width, int height) {}
 record FunReviewRequest(@Min(1) @Max(5) short rating, @Size(max = 1000) String comment) {}
 record FunReviewDto(Long id, String author, short rating, String comment, Instant updatedAt) {}
-record FunPlanDto(Long id, String name, String address, LocalDate scheduledAt, FunCategoryDto category, FunCategoryDto subcategory, String author, double rating, int reviewCount, FunPhotoDto coverPhoto, List<FunPhotoDto> photos, List<FunReviewDto> reviews, List<ActivityScheduleDto> schedules, Instant createdAt, Instant updatedAt) {}
+record FunPlanDto(Long id, Long zoneId, String name, String address, LocalDate scheduledAt, FunCategoryDto category, FunCategoryDto subcategory, String author, double rating, int reviewCount, FunPhotoDto coverPhoto, List<FunPhotoDto> photos, List<FunReviewDto> reviews, List<ActivityScheduleDto> schedules, Instant createdAt, Instant updatedAt) {}
 
 @RestController
 @RequestMapping("/api/why-fun")
@@ -62,13 +66,16 @@ public class WhyFunApi {
  @PutMapping("/categories/{id}") @PreAuthorize("hasRole('ADMIN')") FunCategoryDto updateCategory(@PathVariable Long id, @RequestBody @Valid FunCategoryRequest request) { return category(categoryAdminService.update(id, request)); }
  @DeleteMapping("/categories/{id}") @PreAuthorize("hasRole('ADMIN')") @ResponseStatus(HttpStatus.NO_CONTENT) void deleteCategory(@PathVariable Long id) { categoryAdminService.delete(id); }
 
- @GetMapping("/plans") Slice<FunPlanDto> listPlans(@RequestParam(required = false) Long categoryId, @RequestParam(required = false) Long subcategoryId, @RequestParam(required = false) String timeline, @RequestParam(required = false) Long cursor, @RequestParam(defaultValue = "12") int size) {
+ @GetMapping("/plans") Slice<FunPlanDto> listPlans(@RequestParam(required = false) Long zoneId, @RequestParam(required = false) Long categoryId, @RequestParam(required = false) Long subcategoryId, @RequestParam(required = false) String timeline, @RequestParam(required = false) Long cursor, @RequestParam(defaultValue = "12") int size) {
   int limit = Math.max(1, Math.min(size, 30));
   LocalDate now = RosarioClock.today();
   long offset = cursor == null ? 0 : Math.max(0, cursor);
   if (offset > 1_000_000) throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Cursor inválido");
-  List<Long> ids = venues.findPlanPageIdsByCoupleId(CoupleContext.current(), categoryId, subcategoryId,
-          timeline, now, limit + 1, offset);
+  List<Long> ids = zoneId == null
+          ? venues.findPlanPageIdsByCoupleId(CoupleContext.current(), categoryId, subcategoryId,
+                  timeline, now, limit + 1, offset)
+          : venues.findPlanPageIdsByCoupleId(CoupleContext.current(), zoneId, categoryId, subcategoryId,
+                  timeline, now, limit + 1, offset);
   Long next = ids.size() > limit ? offset + limit : null;
   List<Long> pageIds = ids.stream().limit(limit).toList();
   if (pageIds.isEmpty()) return new Slice<>(List.of(), next);
@@ -78,6 +85,9 @@ public class WhyFunApi {
   Map<Long, List<FunReviewDto>> reviewMap = reviewMap(pageIds);
   Map<Long, FunPhotoDto> coverMap = covers(page);
   return new Slice<>(page.stream().map(value -> plan(value, coverMap.get(value.id), List.of(), reviewMap.getOrDefault(value.id, List.of()))).toList(), next);
+ }
+ Slice<FunPlanDto> listPlans(Long categoryId, Long subcategoryId, String timeline, Long cursor, int size) {
+  return listPlans(null, categoryId, subcategoryId, timeline, cursor, size);
  }
  @GetMapping("/plans/{id}") FunPlanDto getPlan(@PathVariable Long id) { return plan(findPlan(id)); }
   @PostMapping("/plans") @ResponseStatus(HttpStatus.CREATED) FunPlanDto addPlan(@RequestBody @Valid FunPlanRequest request, @AuthenticationPrincipal User author) { return plan(planService.create(request, author)); }
@@ -91,7 +101,7 @@ public class WhyFunApi {
 
  private WhyFunVenue findPlan(Long id) { return venues.findDetailedByIdAndCoupleId(id, CoupleContext.current()).orElseThrow(() -> notFound("Plan")); }
  private FunPlanDto plan(WhyFunVenue value) { List<WhyFunVenuePhoto> planPhotos = photos.findByVenueIdAndCoupleIdOrderByIdAsc(value.id, CoupleContext.current()); List<FunReviewDto> planReviews = reviews.summariesByVenueIdAndCoupleId(value.id, CoupleContext.current()).stream().map(WhyFunApi::review).toList(); return plan(value, cover(value, planPhotos), planPhotos.stream().map(WhyFunApi::photo).toList(), planReviews); }
-  private static FunPlanDto plan(WhyFunVenue value, FunPhotoDto cover, List<FunPhotoDto> planPhotos, List<FunReviewDto> planReviews) { double rating = planReviews.stream().mapToInt(FunReviewDto::rating).average().orElse(0); List<ActivityScheduleDto> schedules = value.schedules.stream().sorted(Comparator.comparing((WhyFunVenueSchedule schedule) -> schedule.dayOfWeek).thenComparing(schedule -> schedule.opensAt)).map(schedule -> new ActivityScheduleDto(schedule.dayOfWeek, schedule.opensAt, schedule.closesAt)).toList(); return new FunPlanDto(value.id, value.name, value.address, value.scheduledAt, categorySummary(value.category), categorySummary(value.subcategory), value.createdBy.username, round(rating), planReviews.size(), cover, planPhotos, planReviews, schedules, value.createdAt, value.updatedAt); }
+  private static FunPlanDto plan(WhyFunVenue value, FunPhotoDto cover, List<FunPhotoDto> planPhotos, List<FunReviewDto> planReviews) { double rating = planReviews.stream().mapToInt(FunReviewDto::rating).average().orElse(0); List<ActivityScheduleDto> schedules = value.schedules.stream().sorted(Comparator.comparing((WhyFunVenueSchedule schedule) -> schedule.dayOfWeek).thenComparing(schedule -> schedule.opensAt)).map(schedule -> new ActivityScheduleDto(schedule.dayOfWeek, schedule.opensAt, schedule.closesAt)).toList(); return new FunPlanDto(value.id, value.zoneId, value.name, value.address, value.scheduledAt, categorySummary(value.category), categorySummary(value.subcategory), value.createdBy.username, round(rating), planReviews.size(), cover, planPhotos, planReviews, schedules, value.createdAt, value.updatedAt); }
  private Map<Long, FunPhotoDto> covers(List<WhyFunVenue> plans) { if (plans.isEmpty()) return Map.of(); Map<Long, List<WhyFunVenuePhoto>> photosByPlan = photos.findByVenueIdInAndCoupleIdOrderByVenueIdAscIdAsc(plans.stream().map(value -> value.id).toList(), CoupleContext.current()).stream().collect(Collectors.groupingBy(value -> value.venue.id)); Map<Long, FunPhotoDto> result = new HashMap<>(); for (WhyFunVenue plan : plans) { FunPhotoDto cover = cover(plan, photosByPlan.getOrDefault(plan.id, List.of())); if (cover != null) result.put(plan.id, cover); } return result; }
  private static FunPhotoDto cover(WhyFunVenue plan, List<WhyFunVenuePhoto> values) { WhyFunVenuePhoto selected = values.stream().filter(value -> value.id.equals(plan.coverPhotoId)).findFirst().orElse(values.isEmpty() ? null : values.getFirst()); return selected == null ? null : photo(selected); }
  private Map<Long, List<FunReviewDto>> reviewMap(List<Long> ids) { if (ids.isEmpty()) return Map.of(); return reviews.summariesByVenueIdInAndCoupleId(ids, CoupleContext.current()).stream().collect(Collectors.groupingBy(WhyFunReviewSummary::getVenueId, Collectors.mapping(WhyFunApi::review, Collectors.toList()))); }

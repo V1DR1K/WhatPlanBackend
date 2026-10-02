@@ -10,6 +10,7 @@ import java.time.*;
    @Version public long version;
   @Column(nullable=false,unique=true,length=80) public String username;
   @Column(name="auth_user_id",unique=true) public java.util.UUID authUserId;
+  @Column(name="default_zone_id") public Long defaultZoneId;
   @Column(name="password_hash") public String passwordHash;
   @Enumerated(EnumType.STRING) public Role role;
  public Instant createdAt;
