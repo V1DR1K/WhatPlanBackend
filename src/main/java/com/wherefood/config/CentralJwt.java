@@ -44,7 +44,6 @@ public class CentralJwt {
                 parsed = Jwts.parser().verifyWith(key)
                         .requireIssuer(issuer)
                         .requireAudience(audience)
-                        .require("token_type", ACCESS_TOKEN_TYPE)
                         .clockSkewSeconds(CLOCK_SKEW_SECONDS)
                         .build().parseSignedClaims(token);
                 break;
@@ -59,11 +58,11 @@ public class CentralJwt {
 
         Claims claims = parsed.getPayload();
         Date issuedAt = claims.getIssuedAt();
-        Date notBefore = claims.getNotBefore();
         Date expiresAt = claims.getExpiration();
-        if (claims.getSubject() == null || issuedAt == null || notBefore == null || expiresAt == null) {
+        if (claims.getSubject() == null || issuedAt == null || expiresAt == null) {
             throw new IllegalArgumentException("Central access JWT is missing a required time or subject claim");
         }
+        validateAccessTokenType(claims);
         Instant now = Instant.now();
         if (issuedAt.toInstant().isAfter(now.plusSeconds(CLOCK_SKEW_SECONDS))
                 || !expiresAt.toInstant().isAfter(issuedAt.toInstant())
@@ -78,6 +77,28 @@ public class CentralJwt {
             return subject;
         } catch (IllegalArgumentException exception) {
             throw new IllegalArgumentException("Central JWT subject must be a UUID", exception);
+        }
+    }
+
+    private static void validateAccessTokenType(Claims claims) {
+        String tokenType = claims.get("token_type", String.class);
+        if (ACCESS_TOKEN_TYPE.equals(tokenType)) {
+            if (claims.getNotBefore() == null) {
+                throw new IllegalArgumentException("Central access JWT is missing not-before claim");
+            }
+            return;
+        }
+        if (tokenType != null) {
+            throw new IllegalArgumentException("Central JWT is not an access token");
+        }
+
+        // The deployed central issuer's access JWTs predate token_type and nbf. Its
+        // refresh tokens are opaque random values, while access tokens carry uid and
+        // username. Accept only that signed legacy access-token shape.
+        String userId = claims.get("uid", String.class);
+        String username = claims.get("username", String.class);
+        if (!claims.getSubject().equals(userId) || username == null || username.isBlank()) {
+            throw new IllegalArgumentException("Central JWT does not match the legacy access-token contract");
         }
     }
 
