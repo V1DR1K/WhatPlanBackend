@@ -1,7 +1,6 @@
 package com.wherefood.couple;
 
 import com.wherefood.config.CoupleContext;
-import com.wherefood.domain.Role;
 import com.wherefood.domain.User;
 import com.wherefood.repo.Repositories.CoupleMembers;
 import java.util.Optional;
@@ -11,7 +10,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
-/** Central policy for access to private couple content. ADMIN grants catalog access only. */
+/** Private content requires membership; catalog administration never bypasses that boundary. */
 @Service
 public class CoupleAuthorizationService {
     private final CoupleMembers members;
@@ -22,7 +21,7 @@ public class CoupleAuthorizationService {
 
     @Transactional(readOnly = true)
     public Optional<UUID> resolvePrivateCouple(User user) {
-        if (user == null || user.role != Role.USER || members == null) return Optional.empty();
+        if (user == null || members == null) return Optional.empty();
         return members.findActiveCoupleIdByUserId(user.id);
     }
 
@@ -36,7 +35,7 @@ public class CoupleAuthorizationService {
     }
 
     public void requireReviewAuthor(Long ownerId, User actor, String resourceName) {
-        if (actor == null || actor.role != Role.USER || ownerId == null) {
+        if (actor == null || ownerId == null) {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, resourceName + " no encontrada");
         }
         requireActiveMember(actor);

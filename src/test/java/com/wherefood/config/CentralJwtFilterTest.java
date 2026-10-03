@@ -3,7 +3,6 @@ package com.wherefood.config;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -76,7 +75,7 @@ class CentralJwtFilterTest {
     }
 
     @Test
-    void adminAuthenticationDoesNotResolveOrReceivePrivateCoupleContext() throws Exception {
+    void adminWithoutMembershipDoesNotReceivePrivateCoupleContext() throws Exception {
         UUID authId = UUID.randomUUID();
         User admin = new User();
         admin.id = 21L;
@@ -86,6 +85,7 @@ class CentralJwtFilterTest {
         CentralJwtFilter adminFilter = new CentralJwtFilter(jwt, users, new CoupleAuthorizationService(members));
         when(jwt.subject("admin-token")).thenReturn(authId);
         when(users.findByAuthUserId(authId)).thenReturn(Optional.of(admin));
+        when(members.findActiveCoupleIdByUserId(admin.id)).thenReturn(Optional.empty());
 
         MockHttpServletRequest request = new MockHttpServletRequest();
         request.addHeader("Authorization", "Bearer admin-token");
@@ -93,7 +93,33 @@ class CentralJwtFilterTest {
             assertNull(CoupleContext.current());
         });
 
-        verify(members, never()).findActiveCoupleIdByUserId(admin.id);
+        verify(members).findActiveCoupleIdByUserId(admin.id);
+    }
+
+    @Test
+    void adminWithMembershipReceivesOwnCoupleContextAndRetainsCatalogAuthority() throws Exception {
+        UUID authId = UUID.randomUUID();
+        UUID coupleId = UUID.randomUUID();
+        User admin = new User();
+        admin.id = 21L;
+        admin.authUserId = authId;
+        admin.role = Role.ADMIN;
+        CoupleMembers members = mock(CoupleMembers.class);
+        CentralJwtFilter adminFilter = new CentralJwtFilter(jwt, users, new CoupleAuthorizationService(members));
+        when(jwt.subject("admin-token")).thenReturn(authId);
+        when(users.findByAuthUserId(authId)).thenReturn(Optional.of(admin));
+        when(members.findActiveCoupleIdByUserId(admin.id)).thenReturn(Optional.of(coupleId));
+
+        MockHttpServletRequest request = new MockHttpServletRequest();
+        request.addHeader("Authorization", "Bearer admin-token");
+        adminFilter.doFilterInternal(request, new MockHttpServletResponse(), (req, res) -> {
+            assertEquals(coupleId, CoupleContext.current());
+            assertEquals("ROLE_ADMIN", SecurityContextHolder.getContext().getAuthentication()
+                    .getAuthorities().iterator().next().getAuthority());
+        });
+
+        assertNull(CoupleContext.current());
+        assertNull(SecurityContextHolder.getContext().getAuthentication());
     }
 
     @Test

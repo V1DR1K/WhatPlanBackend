@@ -2,7 +2,6 @@ package com.wherefood.couple;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
-import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -26,11 +25,44 @@ class CoupleAuthorizationServiceTest {
     }
 
     @Test
-    void resolvePrivateCouple_adminNeverReceivesPrivateTenantContext() {
+    void resolvePrivateCouple_adminWithoutMembershipReceivesNoPrivateTenantContext() {
         User admin = user(1L, Role.ADMIN);
+        when(members.findActiveCoupleIdByUserId(admin.id)).thenReturn(Optional.empty());
 
         assertEquals(Optional.empty(), authorization.resolvePrivateCouple(admin));
-        verify(members, never()).findActiveCoupleIdByUserId(admin.id);
+        verify(members).findActiveCoupleIdByUserId(admin.id);
+    }
+
+    @Test
+    void requireActiveMember_adminWithMatchingMembershipReturnsOwnCouple() {
+        User admin = user(1L, Role.ADMIN);
+        UUID coupleId = UUID.randomUUID();
+        CoupleContext.set(coupleId);
+        when(members.findActiveCoupleIdByUserId(admin.id)).thenReturn(Optional.of(coupleId));
+
+        assertEquals(coupleId, authorization.requireActiveMember(admin));
+    }
+
+    @Test
+    void requireActiveMember_adminCannotUseAnotherCouplesContext() {
+        User admin = user(1L, Role.ADMIN);
+        CoupleContext.set(UUID.randomUUID());
+        when(members.findActiveCoupleIdByUserId(admin.id)).thenReturn(Optional.of(UUID.randomUUID()));
+
+        assertEquals(404, assertThrows(ResponseStatusException.class,
+                () -> authorization.requireActiveMember(admin)).getStatusCode().value());
+    }
+
+    @Test
+    void requireReviewAuthor_adminMemberCanEditOnlyOwnReview() {
+        User admin = user(1L, Role.ADMIN);
+        UUID coupleId = UUID.randomUUID();
+        CoupleContext.set(coupleId);
+        when(members.findActiveCoupleIdByUserId(admin.id)).thenReturn(Optional.of(coupleId));
+
+        authorization.requireReviewAuthor(admin.id, admin, "Reseña");
+        assertEquals(404, assertThrows(ResponseStatusException.class,
+                () -> authorization.requireReviewAuthor(2L, admin, "Reseña")).getStatusCode().value());
     }
 
     @Test

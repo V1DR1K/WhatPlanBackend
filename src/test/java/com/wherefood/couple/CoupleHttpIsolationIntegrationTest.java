@@ -201,6 +201,7 @@ class CoupleHttpIsolationIntegrationTest {
     void productionHttpChainKeepsReadsWritesReviewsAndPhotosInsideTheAuthenticatedCouple() throws Exception {
         assertRuntimeDatabaseRoleIsRestricted();
         Fixture fixture = seedFixture();
+        assertAdminMemberCanReadOwnCityCatalogs(fixture);
         benchmarkCalendarSummaryQuery(fixture);
 
         ResponseEntity<String> unauthenticated = http.getForEntity(url("/api/places"), String.class);
@@ -1300,6 +1301,54 @@ class CoupleHttpIsolationIntegrationTest {
             try (ResultSet result = statement.executeQuery()) {
                 assertThat(result.next()).isTrue();
                 return result.getString(1);
+            }
+        }
+    }
+
+    private void assertAdminMemberCanReadOwnCityCatalogs(Fixture fixture) throws Exception {
+        try (Connection connection = adminConnection(); PreparedStatement role = connection.prepareStatement(
+                "update users set role = 'ADMIN' where auth_user_id = ?")) {
+            role.setObject(1, USER_A1_AUTH_ID);
+            role.executeUpdate();
+        }
+        try {
+            ResponseEntity<String> context = get("/api/location-context", USER_A1_AUTH_ID, null);
+            assertThat(context.getStatusCode().value()).isEqualTo(200);
+            JsonNode location = objectMapper.readTree(context.getBody());
+            assertThat(location.path("coupleId").asText()).isEqualTo(COUPLE_A_ID.toString());
+            assertThat(location.path("originCityId").asLong()).isEqualTo(1);
+            assertThat(context.getBody()).contains("Rosario");
+
+            for (var catalog : java.util.Map.of(
+                    "/api/places", "Private place A",
+                    "/api/films", "Private film A",
+                    "/api/how-cook/recipes", "Torta pareja A",
+                    "/api/why-fun/activities", "Museo pareja A",
+                    "/api/when-dates", "Private anniversary A").entrySet()) {
+                for (String filter : List.of("", "?cityId=1", "?zoneId=1")) {
+                    ResponseEntity<String> result = get(catalog.getKey() + filter, USER_A1_AUTH_ID, null);
+                    assertThat(result.getStatusCode().value()).as(catalog.getKey() + filter).isEqualTo(200);
+                    assertThat(result.getBody()).contains(catalog.getValue())
+                            .doesNotContain("Private place B", "Private film B", "Torta pareja B",
+                                    "Museo pareja B", "Private anniversary B");
+                }
+                ResponseEntity<String> otherCity = get(catalog.getKey() + "?cityId=2", USER_A1_AUTH_ID, null);
+                assertThat(otherCity.getStatusCode().value()).isEqualTo(200);
+                assertThat(otherCity.getBody()).doesNotContain(catalog.getValue());
+            }
+            assertThat(get("/api/places/" + fixture.placeB(), USER_A1_AUTH_ID, null)
+                    .getStatusCode().value()).isEqualTo(404);
+            for (String photoPath : fixture.privatePhotoPaths()) {
+                assertThat(getPrivatePhoto(photoPath, USER_A1_AUTH_ID).getStatusCode().value())
+                        .as(photoPath).isEqualTo(404);
+            }
+            assertThat(get("/api/location-context", ADMIN_AUTH_ID, null).getStatusCode().value()).isEqualTo(403);
+            assertThat(get("/api/categories/all", ADMIN_AUTH_ID, null).getStatusCode().value()).isEqualTo(200);
+        } finally {
+            try (Connection connection = adminConnection(); PreparedStatement role = connection.prepareStatement(
+                    "update users set role = 'USER' where auth_user_id = ?")) {
+                role.setObject(1, USER_A1_AUTH_ID);
+                role.executeUpdate();
             }
         }
     }
