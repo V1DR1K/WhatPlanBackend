@@ -72,12 +72,26 @@ class FilmCatalogServiceTest {
     }
 
     @Test
-    void create_whenAdminAttemptsPrivateWrite_returns404() {
+    void create_whenAdminHasNoMembership_returns404() {
         User admin = user(7L, Role.ADMIN);
+        when(members.findActiveCoupleIdByUserId(admin.id)).thenReturn(Optional.empty());
 
         assertEquals(404, assertThrows(ResponseStatusException.class,
                 () -> service.create(manualFilm("Forbidden"), admin)).getStatusCode().value());
         verify(films, never()).save(any(Film.class));
+    }
+
+    @Test
+    void create_whenAdminIsAnActiveMember_savesOwnFilm() {
+        User admin = user(7L, Role.ADMIN);
+        when(genres.findAllByNameIn(any())).thenReturn(List.of());
+        when(films.save(any(Film.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        Film created = service.create(manualFilm("Arrival"), admin);
+
+        assertEquals("Arrival", created.title);
+        assertEquals(admin, created.createdBy);
+        verify(films).save(created);
     }
 
     @Test
