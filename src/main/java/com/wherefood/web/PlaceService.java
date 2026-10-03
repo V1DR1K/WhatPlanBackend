@@ -28,20 +28,25 @@ public class PlaceService {
     private final HighlightTags highlightTags;
     private final CoupleAuthorizationService authorization;
     private final ZoneSettingsService zoneSettings;
+    private final com.wherefood.journey.JourneyService journey;
 
     public PlaceService(Places places, Categories categories, HighlightTags highlightTags,
             CoupleAuthorizationService authorization) {
         this(places, categories, highlightTags, authorization, null);
     }
 
+    public PlaceService(Places places, Categories categories, HighlightTags highlightTags,
+            CoupleAuthorizationService authorization, ZoneSettingsService zoneSettings) { this(places, categories, highlightTags, authorization, zoneSettings, null); }
+
     @org.springframework.beans.factory.annotation.Autowired
     public PlaceService(Places places, Categories categories, HighlightTags highlightTags,
-            CoupleAuthorizationService authorization, ZoneSettingsService zoneSettings) {
+            CoupleAuthorizationService authorization, ZoneSettingsService zoneSettings, com.wherefood.journey.JourneyService journey) {
         this.places = places;
         this.categories = categories;
         this.highlightTags = highlightTags;
         this.authorization = authorization;
         this.zoneSettings = zoneSettings;
+        this.journey = journey;
     }
 
     @Transactional
@@ -55,7 +60,9 @@ public class PlaceService {
         place.status = PlaceStatus.PENDING;
         place.createdBy = place.updatedBy = actor;
         place.createdAt = place.updatedAt = Instant.now();
-        return places.save(place);
+        Place saved = places.save(place);
+        if (journey != null) journey.pending("FOOD", saved.id, request.stageId());
+        return saved;
     }
 
     @Transactional
@@ -108,6 +115,7 @@ public class PlaceService {
 
     private void apply(Place place, PlaceRequest request) {
         if (request.zoneId() != null) {
+            if (journey != null) journey.validateCatalogCity("FOOD", place.id, request.zoneId());
             if (zoneSettings != null) zoneSettings.requireActive(request.zoneId());
             place.zoneId = request.zoneId();
         } else if (place.zoneId == null) {

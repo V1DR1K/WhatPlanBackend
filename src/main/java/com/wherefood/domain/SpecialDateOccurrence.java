@@ -5,7 +5,7 @@ import java.time.*;
 
 @Entity
 @Table(name = "special_date_occurrences", uniqueConstraints = @UniqueConstraint(columnNames = {"special_date_id", "occurred_on"}))
-public class SpecialDateOccurrence extends CoupleScopedEntity {
+public class SpecialDateOccurrence extends LocatedExperience {
  @Id @GeneratedValue(strategy = GenerationType.IDENTITY) public Long id;
  @Version public long version;
  @ManyToOne(fetch = FetchType.LAZY) @JoinColumn(name = "special_date_id", nullable = false) public SpecialDate specialDate;

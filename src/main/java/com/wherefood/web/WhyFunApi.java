@@ -21,10 +21,11 @@ import com.wherefood.config.CoupleContext;
 
 record FunCategoryRequest(Long parentId, @NotBlank @Size(max = 80) String name, @NotBlank @Size(max = 20) String icon, boolean active) {}
 record FunCategoryDto(Long id, Long parentId, String name, String slug, String icon, boolean active) {}
-record FunPlanRequest(@NotBlank @Size(max = 160) String name, @NotBlank @Size(max = 250) String address, LocalDate scheduledAt, @NotNull @Positive Long categoryId, @NotNull @Positive Long subcategoryId, @Size(max = 7) List<@Valid ActivityScheduleRequest> schedules, @Positive Long zoneId) {
+record FunPlanRequest(@NotBlank @Size(max = 160) String name, @NotBlank @Size(max = 250) String address, LocalDate scheduledAt, @NotNull @Positive Long categoryId, @NotNull @Positive Long subcategoryId, @Size(max = 7) List<@Valid ActivityScheduleRequest> schedules, @Positive Long zoneId, UUID stageId) {
  FunPlanRequest(String name, String address, LocalDate scheduledAt, Long categoryId, Long subcategoryId, List<ActivityScheduleRequest> schedules) {
-  this(name, address, scheduledAt, categoryId, subcategoryId, schedules, null);
+  this(name, address, scheduledAt, categoryId, subcategoryId, schedules, null, null);
  }
+ FunPlanRequest(String name, String address, LocalDate scheduledAt, Long categoryId, Long subcategoryId, List<ActivityScheduleRequest> schedules, Long zoneId) { this(name, address, scheduledAt, categoryId, subcategoryId, schedules, zoneId, null); }
 }
 record FunPhotoDto(Long id, String url, String thumbnailUrl, int width, int height) {}
 record FunReviewRequest(@Min(1) @Max(5) short rating, @Size(max = 1000) String comment) {}

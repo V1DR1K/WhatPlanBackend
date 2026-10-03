@@ -20,12 +20,18 @@ public class WhyFunVisitService {
     private final WhyFunVenues activities;
     private final WhyFunVisits visits;
     private final CoupleAuthorizationService authorization;
+    private final com.wherefood.journey.JourneyService journey;
 
     public WhyFunVisitService(WhyFunVenues activities, WhyFunVisits visits,
-            CoupleAuthorizationService authorization) {
+            CoupleAuthorizationService authorization) { this(activities, visits, authorization, null); }
+
+    @org.springframework.beans.factory.annotation.Autowired
+    public WhyFunVisitService(WhyFunVenues activities, WhyFunVisits visits,
+            CoupleAuthorizationService authorization, com.wherefood.journey.JourneyService journey) {
         this.activities = activities;
         this.visits = visits;
         this.authorization = authorization;
+        this.journey = journey;
     }
 
     @Transactional
@@ -38,7 +44,12 @@ public class WhyFunVisitService {
         visit.createdBy = visit.updatedBy = actor;
         visit.createdAt = visit.updatedAt = Instant.now();
         touch(activity, actor);
-        return visits.save(visit);
+        if (journey != null) journey.locateNew(visit, visit.cityId == null ? visit.venue.zoneId : visit.cityId, request.cityId(), request.stageId() == null && request.cityId() == null ? visit.stageId : request.stageId(), request.scheduledAt()); else if (visit.cityId == null) visit.cityId = visit.venue.zoneId;
+        if (journey != null && !visit.cityId.equals(visit.venue.zoneId)) throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"La experiencia debe estar en la ciudad del lugar");
+        WhyFunVisit saved = visits.save(visit);
+        if (journey != null) journey.bind("FUN", saved.venue.id, saved.id, new com.wherefood.journey.JourneyDtos.BindingRequest(saved.cityId, saved.stageId, request.pointId()));
+        if (journey != null) journey.refreshExperience(saved);
+        return saved;
     }
 
     @Transactional
@@ -49,13 +60,19 @@ public class WhyFunVisitService {
         visit.updatedBy = actor;
         visit.updatedAt = Instant.now();
         touch(visit.venue, actor);
-        return visits.save(visit);
+        if (journey != null) journey.locateNew(visit, visit.cityId == null ? visit.venue.zoneId : visit.cityId, request.cityId(), request.stageId() == null && request.cityId() == null ? visit.stageId : request.stageId(), request.scheduledAt()); else if (visit.cityId == null) visit.cityId = visit.venue.zoneId;
+        if (journey != null && !visit.cityId.equals(visit.venue.zoneId)) throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"La experiencia debe estar en la ciudad del lugar");
+        WhyFunVisit saved = visits.save(visit);
+        if (journey != null) journey.bind("FUN", saved.venue.id, saved.id, new com.wherefood.journey.JourneyDtos.BindingRequest(saved.cityId, saved.stageId, request.pointId()));
+        if (journey != null) journey.refreshExperience(saved);
+        return saved;
     }
 
     @Transactional
     public void delete(Long visitId, User actor) {
         authorization.requireActiveMember(actor);
         WhyFunVisit visit = findVisit(visitId);
+        if (journey != null) journey.beforeExperienceDelete("FUN", visit.id);
         visits.delete(visit);
         touch(visit.venue, actor);
     }

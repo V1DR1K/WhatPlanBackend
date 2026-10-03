@@ -5,7 +5,7 @@ import java.time.*;
 
 @Entity
 @Table(name = "why_fun_visits")
-public class WhyFunVisit extends CoupleScopedEntity {
+public class WhyFunVisit extends LocatedExperience {
  @Id @GeneratedValue(strategy = GenerationType.IDENTITY) public Long id;
  @Version public long version;
  @ManyToOne(fetch = FetchType.LAZY) @JoinColumn(name = "venue_id", nullable = false) public WhyFunVenue venue;

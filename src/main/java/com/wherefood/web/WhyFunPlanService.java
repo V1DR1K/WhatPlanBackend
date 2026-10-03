@@ -25,21 +25,27 @@ public class WhyFunPlanService {
     private final WhyFunVenueReviews reviews;
     private final CoupleAuthorizationService authorization;
     private final ZoneSettingsService zoneSettings;
+    private final com.wherefood.journey.JourneyService journey;
 
     public WhyFunPlanService(WhyFunCategories categories, WhyFunVenues venues,
             WhyFunVenueReviews reviews, CoupleAuthorizationService authorization) {
         this(categories, venues, reviews, authorization, null);
     }
 
+    public WhyFunPlanService(WhyFunCategories categories, WhyFunVenues venues,
+            WhyFunVenueReviews reviews, CoupleAuthorizationService authorization,
+            ZoneSettingsService zoneSettings) { this(categories, venues, reviews, authorization, zoneSettings, null); }
+
     @org.springframework.beans.factory.annotation.Autowired
     public WhyFunPlanService(WhyFunCategories categories, WhyFunVenues venues,
             WhyFunVenueReviews reviews, CoupleAuthorizationService authorization,
-            ZoneSettingsService zoneSettings) {
+            ZoneSettingsService zoneSettings, com.wherefood.journey.JourneyService journey) {
         this.categories = categories;
         this.venues = venues;
         this.reviews = reviews;
         this.authorization = authorization;
         this.zoneSettings = zoneSettings;
+        this.journey = journey;
     }
 
     @Transactional
@@ -49,7 +55,9 @@ public class WhyFunPlanService {
         plan.createdBy = plan.updatedBy = actor;
         plan.createdAt = plan.updatedAt = Instant.now();
         apply(plan, request);
-        return venues.save(plan);
+        WhyFunVenue saved = venues.save(plan);
+        if (journey != null) journey.pending("FUN", saved.id, request.stageId());
+        return saved;
     }
 
     @Transactional

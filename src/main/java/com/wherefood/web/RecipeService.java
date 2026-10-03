@@ -23,18 +23,23 @@ public class RecipeService {
     private final Cookings cookings;
     private final CoupleAuthorizationService authorization;
     private final ZoneSettingsService zoneSettings;
+    private final com.wherefood.journey.JourneyService journey;
 
     public RecipeService(Recipes recipes, Cookings cookings, CoupleAuthorizationService authorization) {
         this(recipes, cookings, authorization, null);
     }
 
+    public RecipeService(Recipes recipes, Cookings cookings, CoupleAuthorizationService authorization,
+            ZoneSettingsService zoneSettings) { this(recipes, cookings, authorization, zoneSettings, null); }
+
     @org.springframework.beans.factory.annotation.Autowired
     public RecipeService(Recipes recipes, Cookings cookings, CoupleAuthorizationService authorization,
-            ZoneSettingsService zoneSettings) {
+            ZoneSettingsService zoneSettings, com.wherefood.journey.JourneyService journey) {
         this.recipes = recipes;
         this.cookings = cookings;
         this.authorization = authorization;
         this.zoneSettings = zoneSettings;
+        this.journey = journey;
     }
 
     @Transactional
@@ -44,7 +49,9 @@ public class RecipeService {
         recipe.createdBy = recipe.updatedBy = actor;
         recipe.createdAt = recipe.updatedAt = Instant.now();
         apply(recipe, request);
-        return recipes.save(recipe);
+        Recipe saved = recipes.save(recipe);
+        if (journey != null) journey.pending("COOK", saved.id, request.stageId());
+        return saved;
     }
 
     @Transactional

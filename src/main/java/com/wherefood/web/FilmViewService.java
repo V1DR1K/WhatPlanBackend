@@ -22,11 +22,16 @@ public class FilmViewService {
     private final Films films;
     private final FilmViews views;
     private final CoupleAuthorizationService authorization;
+    private final com.wherefood.journey.JourneyService journey;
 
-    public FilmViewService(Films films, FilmViews views, CoupleAuthorizationService authorization) {
+    public FilmViewService(Films films, FilmViews views, CoupleAuthorizationService authorization) { this(films, views, authorization, null); }
+
+    @org.springframework.beans.factory.annotation.Autowired
+    public FilmViewService(Films films, FilmViews views, CoupleAuthorizationService authorization, com.wherefood.journey.JourneyService journey) {
         this.films = films;
         this.views = views;
         this.authorization = authorization;
+        this.journey = journey;
     }
 
     @Transactional
@@ -43,8 +48,11 @@ public class FilmViewService {
         view.watchedOn = request.watchedOn();
         view.createdAt = Instant.now();
         film.updatedBy = actor;
+        if (journey != null) journey.locateNew(view, view.cityId == null ? view.film.zoneId : view.cityId, request.cityId(), request.stageId() == null && request.cityId() == null ? view.stageId : request.stageId(), request.watchedOn()); else if (view.cityId == null) view.cityId = view.film.zoneId;
         FilmView saved = views.save(view);
         refreshSummary(film);
+        if (journey != null) journey.bind("FILM", saved.film.id, saved.id, new com.wherefood.journey.JourneyDtos.BindingRequest(saved.cityId, saved.stageId, request.pointId()));
+        if (journey != null) journey.refreshExperience(saved);
         return saved;
     }
 
@@ -59,8 +67,11 @@ public class FilmViewService {
         view.watchedOn = request.watchedOn();
         view.updatedBy = actor;
         view.film.updatedBy = actor;
+        if (journey != null) journey.locateNew(view, view.cityId == null ? view.film.zoneId : view.cityId, request.cityId(), request.stageId() == null && request.cityId() == null ? view.stageId : request.stageId(), request.watchedOn()); else if (view.cityId == null) view.cityId = view.film.zoneId;
         FilmView saved = views.save(view);
         refreshSummary(saved.film);
+        if (journey != null) journey.bind("FILM", saved.film.id, saved.id, new com.wherefood.journey.JourneyDtos.BindingRequest(saved.cityId, saved.stageId, request.pointId()));
+        if (journey != null) journey.refreshExperience(saved);
         return saved;
     }
 
@@ -70,6 +81,7 @@ public class FilmViewService {
         FilmView view = findView(filmId, viewId);
         Film film = view.film;
         film.updatedBy = actor;
+        if (journey != null) journey.beforeExperienceDelete("FILM", view.id);
         views.delete(view);
         views.flush();
         refreshSummary(film);

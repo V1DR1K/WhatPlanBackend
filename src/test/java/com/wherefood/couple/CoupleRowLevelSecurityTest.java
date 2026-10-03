@@ -41,7 +41,7 @@ class CoupleRowLevelSecurityTest {
             "home_recipe_steps", "home_recipe_photos", "home_recipe_reviews", "why_fun_venues",
             "why_fun_venue_schedules", "why_fun_venue_photos", "why_fun_venue_reviews", "why_fun_visits",
             "why_fun_visit_photos", "why_fun_visit_reviews", "special_dates", "special_date_occurrences",
-            "special_date_occurrence_comments", "special_date_occurrence_photos", "film_review_metrics");
+            "special_date_occurrence_comments", "special_date_occurrence_photos", "film_review_metrics", "journeys", "journey_stages", "journey_points", "journey_stays", "journey_files", "journey_movements", "journey_packing_items", "journey_reviews");
 
     @Container
     private static final PostgreSQLContainer<?> POSTGRES = new PostgreSQLContainer<>("postgres:16-alpine");

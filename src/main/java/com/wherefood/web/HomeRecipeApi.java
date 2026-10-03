@@ -20,18 +20,21 @@ import com.wherefood.config.CoupleContext;
 
 record RecipeIngredientRequest(@NotBlank @Size(max = 160) String name, @DecimalMin(value = "0.0", inclusive = false) BigDecimal quantity, @NotBlank @Size(max = 30) String unit) {}
 record RecipeStepRequest(@NotBlank @Size(max = 2000) String instruction) {}
-record RecipeRequest(@NotBlank @Size(max = 160) String name, @Size(max = 1000) @SafeHttpUrl String sourceUrl, @Size(max = 50) List<@Valid RecipeIngredientRequest> ingredients, @Size(max = 50) List<@Valid RecipeStepRequest> steps, @Positive Long zoneId) {
+record RecipeRequest(@NotBlank @Size(max = 160) String name, @Size(max = 1000) @SafeHttpUrl String sourceUrl, @Size(max = 50) List<@Valid RecipeIngredientRequest> ingredients, @Size(max = 50) List<@Valid RecipeStepRequest> steps, @Positive Long zoneId, UUID stageId) {
  RecipeRequest(String name, String sourceUrl, List<RecipeIngredientRequest> ingredients, List<RecipeStepRequest> steps) {
-  this(name, sourceUrl, ingredients, steps, null);
+  this(name, sourceUrl, ingredients, steps, null, null);
  }
+ RecipeRequest(String name, String sourceUrl, List<RecipeIngredientRequest> ingredients, List<RecipeStepRequest> steps, Long zoneId) { this(name, sourceUrl, ingredients, steps, zoneId, null); }
 }
-record CookingRequest(@NotNull Home home, @Min(1) @Max(100) int servings, @NotNull LocalDate cookedOn, @NotNull MealType mealType) {}
+record CookingRequest(@NotNull Home home, @Min(1) @Max(100) int servings, @NotNull LocalDate cookedOn, @NotNull MealType mealType, @Positive Long cityId, UUID stageId, UUID pointId) {
+ CookingRequest(Home home, int servings, LocalDate cookedOn, MealType mealType) { this(home, servings, cookedOn, mealType,null,null,null); }
+}
 record RecipeIngredientDto(String name, BigDecimal quantity, String unit) {}
 record RecipeStepDto(String instruction) {}
 record RecipeDto(Long id, Long zoneId, String name, String sourceUrl, String photoUrl, String thumbnailUrl, Integer photoWidth, Integer photoHeight, Double rating, Double complexityRating, Double tasteRating, long cookingCount, List<Home> homes, List<RecipeIngredientDto> ingredients, List<RecipeStepDto> steps, String createdBy, String updatedBy, Instant createdAt, Instant updatedAt) {}
 record CookingReviewRequest(@Min(1) @Max(5) short rating, @Min(1) @Max(5) short complexity, @Min(1) @Max(5) short taste, @Size(max = 1000) String comment) {}
 record CookingReviewDto(Long id, String author, String updatedBy, short rating, short complexity, short taste, String comment, Instant createdAt, Instant updatedAt) {}
-record CookingDto(Long id, RecipeDto recipe, Home home, int servings, LocalDate cookedOn, MealType mealType, String createdBy, String updatedBy, List<CookingReviewDto> reviews, Instant createdAt, Instant updatedAt) {}
+record CookingDto(Long id, RecipeDto recipe, Home home, int servings, LocalDate cookedOn, MealType mealType, String createdBy, String updatedBy, List<CookingReviewDto> reviews, Instant createdAt, Instant updatedAt, Long cityId, UUID stageId) {}
 
 /**
  * Active WhoCook contract: recipes hold reusable definitions; cookings are
@@ -169,7 +172,7 @@ public class HomeRecipeApi {
   private CookingDto cooking(Cooking value) {
   List<CookingReview> reviewValues = reviews.findByCookingIdAndCoupleIdOrderByAuthorUsername(value.id, CoupleContext.current());
   Map<Long, String> reviewAuthors = reviews.authorsByCookingIdAndCoupleId(value.id, CoupleContext.current()).stream().collect(java.util.stream.Collectors.toMap(ReviewAuthor::getReviewId, ReviewAuthor::getAuthor));
-  return new CookingDto(value.id, recipe(value.recipe), value.home, value.servings, value.cookedOn, value.mealType, value.createdBy.username, value.updatedBy.username, reviewValues.stream().map(review -> review(review, reviewAuthors.get(review.id))).toList(), value.createdAt, value.updatedAt);
+  return new CookingDto(value.id, recipe(value.recipe), value.home, value.servings, value.cookedOn, value.mealType, value.createdBy.username, value.updatedBy.username, reviewValues.stream().map(review -> review(review, reviewAuthors.get(review.id))).toList(), value.createdAt, value.updatedAt, value.cityId, value.stageId);
  }
   private RecipeDto recipe(Recipe value) {
    return recipe(value, recipeSummaries(List.of(value.id)).get(value.id), recipePhotos(List.of(value)).get(value.id));

@@ -28,21 +28,26 @@ public class FilmCatalogService {
     private final TmdbClient tmdb;
     private final CoupleAuthorizationService authorization;
     private final ZoneSettingsService zoneSettings;
+    private final com.wherefood.journey.JourneyService journey;
 
     public FilmCatalogService(Films films, FilmGenreOptions genreOptions, WatchPlatforms platforms,
             TmdbClient tmdb, CoupleAuthorizationService authorization) {
         this(films, genreOptions, platforms, tmdb, authorization, null);
     }
 
+    public FilmCatalogService(Films films, FilmGenreOptions genreOptions, WatchPlatforms platforms,
+            TmdbClient tmdb, CoupleAuthorizationService authorization, ZoneSettingsService zoneSettings) { this(films, genreOptions, platforms, tmdb, authorization, zoneSettings, null); }
+
     @org.springframework.beans.factory.annotation.Autowired
     public FilmCatalogService(Films films, FilmGenreOptions genreOptions, WatchPlatforms platforms,
-            TmdbClient tmdb, CoupleAuthorizationService authorization, ZoneSettingsService zoneSettings) {
+            TmdbClient tmdb, CoupleAuthorizationService authorization, ZoneSettingsService zoneSettings, com.wherefood.journey.JourneyService journey) {
         this.films = films;
         this.genreOptions = genreOptions;
         this.platforms = platforms;
         this.tmdb = tmdb;
         this.authorization = authorization;
         this.zoneSettings = zoneSettings;
+        this.journey = journey;
     }
 
     @Transactional
@@ -53,7 +58,9 @@ public class FilmCatalogService {
         apply(film, request);
         film.createdBy = film.updatedBy = actor;
         film.createdAt = film.updatedAt = Instant.now();
-        return films.save(film);
+        Film saved = films.save(film);
+        if (journey != null) journey.pending("FILM", saved.id, request.stageId());
+        return saved;
     }
 
     @Transactional

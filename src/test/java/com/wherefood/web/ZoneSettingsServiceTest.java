@@ -66,13 +66,13 @@ class ZoneSettingsServiceTest {
 
     @Test
     void normalizesNamesAndRejectsDuplicates() {
-        when(zones.findByNameIgnoreCase("Córdoba Capital")).thenReturn(Optional.empty());
+        when(zones.findByCountryCodeAndNameIgnoreCase("AR","Córdoba Capital")).thenReturn(Optional.empty());
         when(zones.save(any(Zone.class))).thenAnswer(invocation -> invocation.getArgument(0));
 
         Zone created = service.create(new ZoneRequest("  Córdoba   Capital "));
 
         assertEquals("Córdoba Capital", created.name);
-        when(zones.findByNameIgnoreCase("Rosario")).thenReturn(Optional.of(zone(1L, true)));
+        when(zones.findByCountryCodeAndNameIgnoreCase("AR","Rosario")).thenReturn(Optional.of(zone(1L, true)));
         assertEquals(HttpStatus.CONFLICT, assertThrows(ResponseStatusException.class,
                 () -> service.create(new ZoneRequest("Rosario"))).getStatusCode());
     }

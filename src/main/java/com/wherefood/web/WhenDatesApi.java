@@ -22,7 +22,7 @@ record WhenDateEntryDto(String id, String section, Long entityId, Long experienc
 record WhenDateOccurrenceSummaryDto(WhenDateLabelDto specialDate, LocalDate occurredOn, int experienceCount, String imageUrl) {}
 record SpecialDateOccurrencePhotoDto(Long id, String url, String thumbnailUrl, int width, int height, int position, String createdBy, Instant createdAt) {}
 record SpecialDateOccurrenceCommentDto(Long id, String author, String updatedBy, String comment, Instant createdAt, Instant updatedAt) {}
-record WhenDateOccurrenceDto(Long id, WhenDateLabelDto specialDate, LocalDate occurredOn, List<WhenDateEntryDto> entries, List<SpecialDateOccurrencePhotoDto> photos, SpecialDateOccurrencePhotoDto coverPhoto, List<SpecialDateOccurrenceCommentDto> comments, String createdBy, String updatedBy, Instant createdAt, Instant updatedAt) {}
+record WhenDateOccurrenceDto(Long id, WhenDateLabelDto specialDate, LocalDate occurredOn, List<WhenDateEntryDto> entries, List<SpecialDateOccurrencePhotoDto> photos, SpecialDateOccurrencePhotoDto coverPhoto, List<SpecialDateOccurrenceCommentDto> comments, String createdBy, String updatedBy, Instant createdAt, Instant updatedAt, Long cityId, UUID stageId) {}
 record WhenDateCommentRequest(@NotBlank @Size(max = 2000) String comment) {}
 
 @RestController
@@ -94,6 +94,12 @@ public class WhenDatesApi {
   mutationService.deleteComment(specialDateId, occurredOn, author);
  }
 
+ @PutMapping("/special-dates/{specialDateId}/occurrences/{occurredOn}/location")
+ WhenDateOccurrenceDto saveLocation(@PathVariable Long specialDateId, @PathVariable LocalDate occurredOn,
+  @RequestBody com.wherefood.journey.JourneyDtos.BindingRequest request,@AuthenticationPrincipal User author) {
+  SpecialDateOccurrence value = mutationService.saveLocation(specialDateId, occurredOn, request, author);
+  return occurrenceDto(value.specialDate, occurredOn, value, null);
+ }
  @PostMapping(value = "/special-dates/{specialDateId}/occurrences/{occurredOn}/photos", consumes = MediaType.MULTIPART_FORM_DATA_VALUE) WhenDateOccurrenceDto uploadPhoto(@PathVariable Long specialDateId, @PathVariable LocalDate occurredOn, @RequestPart("file") MultipartFile file, @AuthenticationPrincipal User author) throws IOException {
   SpecialDateOccurrence occurrence = mutationService.uploadPhoto(specialDateId, occurredOn, file, author);
   return occurrenceDto(occurrence.specialDate, occurredOn, occurrence);
@@ -120,10 +126,10 @@ public class WhenDatesApi {
   if (from == null || !from.equals(to)) return List.of();
   List<SpecialDate> dates = specialDates.findByIdAndCoupleId(requestedSpecialDateId, CoupleContext.current()).map(List::of).orElseGet(List::of);
   LocalDate today = RosarioClock.today(); List<WhenDateEntryDto> result = new ArrayList<>();
-    for (PlaceVisit visit : placeVisits.findByCoupleIdAndVisitedOnOrderByVisitedOnDescIdDesc(CoupleContext.current(), from)) if (zoneId == null || zoneId.equals(visit.place.zoneId)) add(result, "FOOD", visit.id, visit.place.id, visit.visitedOn, visit.place.name, visit.place.address, placeImage(visit), "/food/places/" + visit.place.id, dates, from, to, today, placeSourcePhotos(visit));
-    for (FilmView view : filmViews.findByCoupleIdAndWatchedOnOrderByWatchedOnDescIdDesc(CoupleContext.current(), from)) if (zoneId == null || zoneId.equals(view.film.zoneId)) add(result, "FILM", view.id, view.film.id, view.watchedOn, view.film.title, view.film.platform == null ? "Película vista" : view.film.platform.icon + " " + view.film.platform.name, filmImage(view.film), "/films/" + view.film.id, dates, from, to, today, filmSourcePhotos(view.film));
-    for (Cooking cooking : cookings.findByCoupleIdAndCookedOnOrderByCookedOnDescIdDesc(CoupleContext.current(), from)) if (zoneId == null || zoneId.equals(cooking.recipe.zoneId)) add(result, "COOK", cooking.id, cooking.recipe.id, cooking.cookedOn, cooking.recipe.name, homeLabel(cooking.home), recipeImage(cooking.recipe), "/how-cook/" + cooking.recipe.id, dates, from, to, today, recipeSourcePhotos(cooking.recipe));
-    for (WhyFunVisit visit : funVisits.findByCoupleIdAndScheduledAtOrderByScheduledAtDescIdDesc(CoupleContext.current(), from)) if (zoneId == null || zoneId.equals(visit.venue.zoneId)) add(result, "FUN", visit.id, visit.venue.id, visit.scheduledAt, visit.venue.name, visit.venue.address, funImage(visit), "/why-fun/" + visit.venue.id, dates, from, to, today, funSourcePhotos(visit));
+    for (PlaceVisit visit : placeVisits.findByCoupleIdAndVisitedOnOrderByVisitedOnDescIdDesc(CoupleContext.current(), from)) if (zoneId == null || zoneId.equals(visit.cityId)) add(result, "FOOD", visit.id, visit.place.id, visit.visitedOn, visit.place.name, visit.place.address, placeImage(visit), "/food/places/" + visit.place.id, dates, from, to, today, placeSourcePhotos(visit));
+    for (FilmView view : filmViews.findByCoupleIdAndWatchedOnOrderByWatchedOnDescIdDesc(CoupleContext.current(), from)) if (zoneId == null || zoneId.equals(view.cityId)) add(result, "FILM", view.id, view.film.id, view.watchedOn, view.film.title, view.film.platform == null ? "Película vista" : view.film.platform.icon + " " + view.film.platform.name, filmImage(view.film), "/films/" + view.film.id, dates, from, to, today, filmSourcePhotos(view.film));
+    for (Cooking cooking : cookings.findByCoupleIdAndCookedOnOrderByCookedOnDescIdDesc(CoupleContext.current(), from)) if (zoneId == null || zoneId.equals(cooking.cityId)) add(result, "COOK", cooking.id, cooking.recipe.id, cooking.cookedOn, cooking.recipe.name, homeLabel(cooking.home), recipeImage(cooking.recipe), "/how-cook/" + cooking.recipe.id, dates, from, to, today, recipeSourcePhotos(cooking.recipe));
+    for (WhyFunVisit visit : funVisits.findByCoupleIdAndScheduledAtOrderByScheduledAtDescIdDesc(CoupleContext.current(), from)) if (zoneId == null || zoneId.equals(visit.cityId)) add(result, "FUN", visit.id, visit.venue.id, visit.scheduledAt, visit.venue.name, visit.venue.address, funImage(visit), "/why-fun/" + visit.venue.id, dates, from, to, today, funSourcePhotos(visit));
     Map<String, String> coverUrls = from == null || to == null ? Map.of() : occurrenceCoverUrls(result, from, to);
     return result.stream().map(entry -> entry(entry, coverUrls)).sorted(Comparator.comparing(WhenDateEntryDto::date).reversed().thenComparing(WhenDateEntryDto::section).thenComparing(WhenDateEntryDto::experienceId)).toList();
   }
@@ -137,10 +143,10 @@ public class WhenDatesApi {
   }
 
   private WhenDateOccurrenceDto occurrenceDto(SpecialDate specialDate, LocalDate occurredOn, SpecialDateOccurrence occurrence, Long zoneId) {
-  if (occurrence == null) return new WhenDateOccurrenceDto(null, label(specialDate), occurredOn, entries(occurredOn, occurredOn, specialDate.id, zoneId), List.of(), null, List.of(), null, null, null, null);
+  if (occurrence == null) return new WhenDateOccurrenceDto(null, label(specialDate), occurredOn, entries(occurredOn, occurredOn, specialDate.id, zoneId), List.of(), null, List.of(), null, null, null, null, null, null);
   List<SpecialDateOccurrencePhotoDto> occurrencePhotos = photos.findByOccurrenceIdAndCoupleIdOrderByPositionAscIdAsc(occurrence.id, CoupleContext.current()).stream().map(WhenDatesApi::photo).toList(); SpecialDateOccurrencePhotoDto cover = occurrencePhotos.stream().filter(value -> value.id().equals(occurrence.coverPhotoId)).findFirst().orElse(null);
   List<SpecialDateOccurrenceCommentDto> occurrenceComments = comments.findByOccurrenceIdAndCoupleIdOrderByAuthorUsername(occurrence.id, CoupleContext.current()).stream().map(WhenDatesApi::comment).toList();
-  return new WhenDateOccurrenceDto(occurrence.id, label(specialDate), occurredOn, entries(occurredOn, occurredOn, specialDate.id, zoneId), occurrencePhotos, cover, occurrenceComments, occurrence.createdBy.username, occurrence.updatedBy.username, occurrence.createdAt, occurrence.updatedAt);
+  return new WhenDateOccurrenceDto(occurrence.id, label(specialDate), occurredOn, entries(occurredOn, occurredOn, specialDate.id, zoneId), occurrencePhotos, cover, occurrenceComments, occurrence.createdBy.username, occurrence.updatedBy.username, occurrence.createdAt, occurrence.updatedAt, occurrence.cityId, occurrence.stageId);
   }
 
   private Map<String, String> occurrenceCoverUrls(List<WhenDateEntryDto> entries, LocalDate from, LocalDate to) {
@@ -158,7 +164,7 @@ public class WhenDatesApi {
    int index = home == Home.TOMAS ? 0 : 1;
    return coupleMembers.findByCoupleIdAndStatusOrderBySlot(coupleId, CoupleMemberStatus.ACTIVE).stream().skip(index).findFirst().map(value -> value.displayName).orElse("Integrante");
   }
- private void validateOccurrence(SpecialDate specialDate, LocalDate occurredOn) { if (occurredOn.isAfter(RosarioClock.today())) throw badRequest("La fecha todavía no ocurrió"); if (!matches(specialDate, occurredOn)) throw badRequest("La fecha no coincide con esta fecha especial"); }
+ private void validateOccurrence(SpecialDate specialDate, LocalDate occurredOn) {  if (!matches(specialDate, occurredOn)) throw badRequest("La fecha no coincide con esta fecha especial"); }
   private static boolean matches(SpecialDate specialDate, LocalDate date) { if (specialDate.date == null) return false; return switch (recurrence(specialDate)) { case ONCE -> specialDate.date.equals(date); case ANNUAL -> specialDate.date.getMonthValue() == date.getMonthValue() && specialDate.date.getDayOfMonth() == date.getDayOfMonth(); case MONTHLY -> specialDate.date.getDayOfMonth() == date.getDayOfMonth(); }; }
    private String placeImage(PlaceVisit visit) { if (visit.coverPhotoId != null) return "/place-visit-photos/" + visit.coverPhotoId + "?thumbnail=true"; return placePhotos.findByPlaceIdAndCoupleId(visit.place.id, CoupleContext.current()).map(photo -> versionedPhotoUrl("/places/" + visit.place.id + "/photo", photo.id, true)).orElse(null); }
    private String filmImage(Film film) { return filmPhotos.findByFilmIdAndCoupleId(film.id, CoupleContext.current()).map(photo -> versionedPhotoUrl("/films/" + film.id + "/photo", photo.id, true)).orElse(film.posterPath); }

@@ -20,11 +20,16 @@ public class CookingService {
     private final Recipes recipes;
     private final Cookings cookings;
     private final CoupleAuthorizationService authorization;
+    private final com.wherefood.journey.JourneyService journey;
 
-    public CookingService(Recipes recipes, Cookings cookings, CoupleAuthorizationService authorization) {
+    public CookingService(Recipes recipes, Cookings cookings, CoupleAuthorizationService authorization) { this(recipes, cookings, authorization, null); }
+
+    @org.springframework.beans.factory.annotation.Autowired
+    public CookingService(Recipes recipes, Cookings cookings, CoupleAuthorizationService authorization, com.wherefood.journey.JourneyService journey) {
         this.recipes = recipes;
         this.cookings = cookings;
         this.authorization = authorization;
+        this.journey = journey;
     }
 
     @Transactional
@@ -38,7 +43,11 @@ public class CookingService {
         cooking.createdAt = cooking.updatedAt = Instant.now();
         apply(cooking, request);
         touch(recipe, actor);
-        return cookings.save(cooking);
+        if (journey != null) journey.locateNew(cooking, cooking.cityId == null ? cooking.recipe.zoneId : cooking.cityId, request.cityId(), request.stageId() == null && request.cityId() == null ? cooking.stageId : request.stageId(), request.cookedOn()); else if (cooking.cityId == null) cooking.cityId = cooking.recipe.zoneId;
+        Cooking saved = cookings.save(cooking);
+        if (journey != null) journey.bind("COOK", saved.recipe.id, saved.id, new com.wherefood.journey.JourneyDtos.BindingRequest(saved.cityId, saved.stageId, request.pointId()));
+        if (journey != null) journey.refreshExperience(saved);
+        return saved;
     }
 
     @Transactional
@@ -50,13 +59,18 @@ public class CookingService {
         cooking.updatedBy = actor;
         cooking.updatedAt = Instant.now();
         touch(cooking.recipe, actor);
-        return cookings.save(cooking);
+        if (journey != null) journey.locateNew(cooking, cooking.cityId == null ? cooking.recipe.zoneId : cooking.cityId, request.cityId(), request.stageId() == null && request.cityId() == null ? cooking.stageId : request.stageId(), request.cookedOn()); else if (cooking.cityId == null) cooking.cityId = cooking.recipe.zoneId;
+        Cooking saved = cookings.save(cooking);
+        if (journey != null) journey.bind("COOK", saved.recipe.id, saved.id, new com.wherefood.journey.JourneyDtos.BindingRequest(saved.cityId, saved.stageId, request.pointId()));
+        if (journey != null) journey.refreshExperience(saved);
+        return saved;
     }
 
     @Transactional
     public void delete(Long cookingId, User actor) {
         authorization.requireActiveMember(actor);
         Cooking cooking = findCooking(cookingId);
+        if (journey != null) journey.beforeExperienceDelete("COOK", cooking.id);
         cookings.delete(cooking);
         touch(cooking.recipe, actor);
     }

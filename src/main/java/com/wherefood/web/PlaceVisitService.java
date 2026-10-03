@@ -21,11 +21,16 @@ public class PlaceVisitService {
     private final Places places;
     private final PlaceVisits visits;
     private final CoupleAuthorizationService authorization;
+    private final com.wherefood.journey.JourneyService journey;
 
-    public PlaceVisitService(Places places, PlaceVisits visits, CoupleAuthorizationService authorization) {
+    public PlaceVisitService(Places places, PlaceVisits visits, CoupleAuthorizationService authorization) { this(places, visits, authorization, null); }
+
+    @org.springframework.beans.factory.annotation.Autowired
+    public PlaceVisitService(Places places, PlaceVisits visits, CoupleAuthorizationService authorization, com.wherefood.journey.JourneyService journey) {
         this.places = places;
         this.visits = visits;
         this.authorization = authorization;
+        this.journey = journey;
     }
 
     @Transactional
@@ -44,7 +49,12 @@ public class PlaceVisitService {
         visit.createdAt = visit.updatedAt = Instant.now();
         place.status = PlaceStatus.REVIEWED;
         touch(place, actor);
-        return visits.save(visit);
+        if (journey != null) journey.locateNew(visit, visit.cityId == null ? visit.place.zoneId : visit.cityId, request.cityId(), request.stageId() == null && request.cityId() == null ? visit.stageId : request.stageId(), request.visitedOn()); else if (visit.cityId == null) visit.cityId = visit.place.zoneId;
+        if (journey != null && !visit.cityId.equals(visit.place.zoneId)) throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"La experiencia debe estar en la ciudad del lugar");
+        PlaceVisit saved = visits.save(visit);
+        if (journey != null) journey.bind("FOOD", saved.place.id, saved.id, new com.wherefood.journey.JourneyDtos.BindingRequest(saved.cityId, saved.stageId, request.pointId()));
+        if (journey != null) journey.refreshExperience(saved);
+        return saved;
     }
 
     @Transactional
@@ -60,7 +70,12 @@ public class PlaceVisitService {
         visit.updatedBy = actor;
         visit.updatedAt = Instant.now();
         touch(visit.place, actor);
-        return visits.save(visit);
+        if (journey != null) journey.locateNew(visit, visit.cityId == null ? visit.place.zoneId : visit.cityId, request.cityId(), request.stageId() == null && request.cityId() == null ? visit.stageId : request.stageId(), request.visitedOn()); else if (visit.cityId == null) visit.cityId = visit.place.zoneId;
+        if (journey != null && !visit.cityId.equals(visit.place.zoneId)) throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"La experiencia debe estar en la ciudad del lugar");
+        PlaceVisit saved = visits.save(visit);
+        if (journey != null) journey.bind("FOOD", saved.place.id, saved.id, new com.wherefood.journey.JourneyDtos.BindingRequest(saved.cityId, saved.stageId, request.pointId()));
+        if (journey != null) journey.refreshExperience(saved);
+        return saved;
     }
 
     @Transactional
@@ -68,6 +83,7 @@ public class PlaceVisitService {
         authorization.requireActiveMember(actor);
         PlaceVisit visit = findActiveVisit(visitId);
         Place place = visit.place;
+        if (journey != null) journey.beforeExperienceDelete("FOOD", visit.id);
         visits.delete(visit);
         if (!visits.existsByPlaceIdAndCoupleId(place.id, CoupleContext.current())) place.status = PlaceStatus.PENDING;
         touch(place, actor);

@@ -18,18 +18,21 @@ import org.springframework.web.server.ResponseStatusException;
 
 record ActivityScheduleRequest(@NotNull DayOfWeek dayOfWeek, @NotNull LocalTime opensAt, @NotNull LocalTime closesAt) {}
 record ActivityScheduleDto(DayOfWeek dayOfWeek, LocalTime opensAt, LocalTime closesAt) {}
-record ActivityRequest(@NotBlank @Size(max = 160) String name, @NotBlank @Size(max = 250) String address, @NotNull @Positive Long categoryId, @NotNull @Positive Long subcategoryId, @Size(max = 7) List<@Valid ActivityScheduleRequest> schedules, @Positive Long zoneId) {
+record ActivityRequest(@NotBlank @Size(max = 160) String name, @NotBlank @Size(max = 250) String address, @NotNull @Positive Long categoryId, @NotNull @Positive Long subcategoryId, @Size(max = 7) List<@Valid ActivityScheduleRequest> schedules, @Positive Long zoneId, UUID stageId) {
  ActivityRequest(String name, String address, Long categoryId, Long subcategoryId, List<ActivityScheduleRequest> schedules) {
-  this(name, address, categoryId, subcategoryId, schedules, null);
+  this(name, address, categoryId, subcategoryId, schedules, null, null);
  }
+ ActivityRequest(String name, String address, Long categoryId, Long subcategoryId, List<ActivityScheduleRequest> schedules, Long zoneId) { this(name, address, categoryId, subcategoryId, schedules, zoneId, null); }
 }
 record ActivityProfilePhotoDto(Long id, String url, String thumbnailUrl, int width, int height, Instant createdAt) {}
 record ActivityDto(Long id, Long zoneId, String name, String address, FunCategoryDto category, FunCategoryDto subcategory, List<ActivityScheduleDto> schedules, ActivityProfilePhotoDto profilePhoto, Double rating, long visitCount, String createdBy, String updatedBy, Instant createdAt, Instant updatedAt) {}
-record ActivityVisitRequest(@NotNull LocalDate scheduledAt) {}
+record ActivityVisitRequest(@NotNull LocalDate scheduledAt, @Positive Long cityId, UUID stageId, UUID pointId) {
+ ActivityVisitRequest(LocalDate scheduledAt) { this(scheduledAt,null,null,null); }
+}
 record ActivityPhotoDto(Long id, String url, String thumbnailUrl, int width, int height, int position, String createdBy, Instant createdAt) {}
 record ActivityReviewRequest(@Min(1) @Max(5) short rating, @Size(max = 1000) String comment) {}
 record ActivityReviewDto(Long id, String author, String updatedBy, short rating, String comment, Instant createdAt, Instant updatedAt) {}
-record ActivityVisitDto(Long id, ActivityDto activity, LocalDate scheduledAt, String createdBy, String updatedBy, ActivityPhotoDto coverPhoto, List<ActivityPhotoDto> photos, List<ActivityReviewDto> reviews, Instant createdAt, Instant updatedAt) {}
+record ActivityVisitDto(Long id, ActivityDto activity, LocalDate scheduledAt, String createdBy, String updatedBy, ActivityPhotoDto coverPhoto, List<ActivityPhotoDto> photos, List<ActivityReviewDto> reviews, Instant createdAt, Instant updatedAt, Long cityId, UUID stageId) {}
 
 /**
  * Active WhyFun contract: /why-fun/activities are reusable venues and
@@ -192,7 +195,7 @@ public class WhyFunActivityApi {
   ActivityPhotoDto cover = resultPhotos.stream().filter(photo -> photo.id().equals(value.coverPhotoId)).findFirst().orElse(resultPhotos.isEmpty() ? null : resultPhotos.getFirst());
   List<WhyFunVisitReview> reviewValues = reviews.findByVisitIdAndCoupleIdOrderByAuthorUsername(value.id, CoupleContext.current());
   Map<Long, String> reviewAuthors = reviews.authorsByVisitIdAndCoupleId(value.id, CoupleContext.current()).stream().collect(java.util.stream.Collectors.toMap(ReviewAuthor::getReviewId, ReviewAuthor::getAuthor));
-  return new ActivityVisitDto(value.id, activity, value.scheduledAt, value.createdBy.username, value.updatedBy.username, cover, resultPhotos, reviewValues.stream().map(review -> review(review, reviewAuthors.get(review.id))).toList(), value.createdAt, value.updatedAt);
+  return new ActivityVisitDto(value.id, activity, value.scheduledAt, value.createdBy.username, value.updatedBy.username, cover, resultPhotos, reviewValues.stream().map(review -> review(review, reviewAuthors.get(review.id))).toList(), value.createdAt, value.updatedAt, value.cityId, value.stageId);
  }
    private ActivityDto activity(WhyFunVenue value) { return activity(value, activityRatings(List.of(value.id)).get(value.id), activityVisitCounts(List.of(value.id)).getOrDefault(value.id, 0L), value.coverPhotoId == null ? null : profilePhotos(List.of(value)).get(value.coverPhotoId)); }
    private ActivityDto activity(WhyFunVenue value, Double rating, long visitCount, PhotoMetadata profile) { return new ActivityDto(value.id, value.zoneId, value.name, value.address, category(value.category), category(value.subcategory), value.schedules.stream().sorted(Comparator.comparing((WhyFunVenueSchedule schedule) -> schedule.dayOfWeek).thenComparing(schedule -> schedule.opensAt)).map(schedule -> new ActivityScheduleDto(schedule.dayOfWeek, schedule.opensAt, schedule.closesAt)).toList(), profile == null ? null : profilePhoto(value.id, profile), rating, visitCount, value.createdBy.username, value.updatedBy.username, value.createdAt, value.updatedAt); }

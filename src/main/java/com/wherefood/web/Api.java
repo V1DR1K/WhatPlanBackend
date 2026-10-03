@@ -22,12 +22,15 @@ record HighlightTagRequest(@NotBlank @Size(max = 60) String name, @NotBlank @Siz
  HighlightTagRequest(String name, String emoji) { this(name, emoji, null); }
 }
 record HighlightTagDto(Long id, String name, String emoji, boolean active) {}
-record PlaceRequest(@NotBlank @Size(max = 120) String name, @Size(max = 300) String address, @Size(max = 1000) @SafeHttpUrl String sourceUrl, @Size(max = 1000) @SafeHttpUrl String mapsUrl, boolean acceptsReservations, @NotNull @Positive Long categoryId, @Size(max = 30) List<@NotNull @Positive Long> tagIds, @Positive Long zoneId) {
+record PlaceRequest(@NotBlank @Size(max = 120) String name, @Size(max = 300) String address, @Size(max = 1000) @SafeHttpUrl String sourceUrl, @Size(max = 1000) @SafeHttpUrl String mapsUrl, boolean acceptsReservations, @NotNull @Positive Long categoryId, @Size(max = 30) List<@NotNull @Positive Long> tagIds, @Positive Long zoneId, UUID stageId) {
  PlaceRequest(String name, String address, String sourceUrl, String mapsUrl, boolean acceptsReservations, Long categoryId, List<Long> tagIds) {
-  this(name, address, sourceUrl, mapsUrl, acceptsReservations, categoryId, tagIds, null);
+  this(name, address, sourceUrl, mapsUrl, acceptsReservations, categoryId, tagIds, null, null);
  }
+ PlaceRequest(String name, String address, String sourceUrl, String mapsUrl, boolean acceptsReservations, Long categoryId, List<Long> tagIds, Long zoneId) { this(name, address, sourceUrl, mapsUrl, acceptsReservations, categoryId, tagIds, zoneId, null); }
 }
-record VisitRequest(@NotNull LocalDate visitedOn) {}
+record VisitRequest(@NotNull LocalDate visitedOn, @Positive Long cityId, UUID stageId, UUID pointId) {
+ VisitRequest(LocalDate visitedOn) { this(visitedOn,null,null,null); }
+}
 record ItemRequest(@NotBlank @Size(max = 120) String name) {}
 record ItemReviewRequest(@Size(max = 1000) String comment, @Min(1) @Max(5) short taste, @Min(1) @Max(5) short price) {}
 record CreateItemRequest(@NotBlank @Size(max = 120) String name) {}
@@ -36,11 +39,11 @@ record PlaceReviewDto(String author, String comment, Short location, Short heati
 record ItemReviewDto(String author, String comment, short taste, short price, Instant createdAt, Instant updatedAt) {}
 record ItemDto(Long id, String name, String createdBy, String photoUrl, String thumbnailUrl, Integer photoWidth, Integer photoHeight, List<ItemReviewDto> reviews, Instant createdAt) {}
 record ItemCatalogDto(Long id, String name, String comment, short taste, short price, String author, String photoUrl, String thumbnailUrl, Integer photoWidth, Integer photoHeight, LocalDate visitDate, Instant createdAt, List<ItemReviewDto> reviews) {}
-record PlaceVisitSummaryDto(Long id, LocalDate visitedOn, String createdBy, Instant createdAt) {}
+record PlaceVisitSummaryDto(Long id, LocalDate visitedOn, String createdBy, Instant createdAt, Long cityId, UUID stageId) {}
 record PlaceVisitPhotoDto(Long id, String url, String thumbnailUrl, int width, int height, int position, String createdBy, Instant createdAt) {}
 record PlaceVisitReviewRequest(@NotNull @Min(1) @Max(5) Short overall, @Size(max = 2000) String comment, @Min(1) @Max(5) Short taste, @Min(1) @Max(5) Short price) {}
 record PlaceVisitReviewDto(Long id, String author, String updatedBy, short overall, String comment, Short taste, Short price, Instant createdAt, Instant updatedAt) {}
-record PlaceVisitDto(Long id, Long placeId, LocalDate visitedOn, String createdBy, List<ItemDto> items, List<PlaceVisitPhotoDto> photos, PlaceVisitPhotoDto coverPhoto, List<PlaceVisitReviewDto> reviews, String updatedBy, Instant createdAt, Instant updatedAt) {}
+record PlaceVisitDto(Long id, Long placeId, LocalDate visitedOn, String createdBy, List<ItemDto> items, List<PlaceVisitPhotoDto> photos, PlaceVisitPhotoDto coverPhoto, List<PlaceVisitReviewDto> reviews, String updatedBy, Instant createdAt, Instant updatedAt, Long cityId, UUID stageId) {}
  record PlaceDto(Long id, Long zoneId, String name, String address, String sourceUrl, String mapsUrl, boolean acceptsReservations, PlaceStatus status, CategoryDto category, List<HighlightTagDto> tags, String author, double rating, double tasteAverage, double priceAverage, double venueAverage, long itemCount, String photoUrl, String thumbnailUrl, Integer photoWidth, Integer photoHeight, List<PlaceReviewDto> reviews, Instant createdAt, Instant updatedAt) {}
 record Slice<T>(List<T> content, Long nextCursor) {}
 
@@ -304,7 +307,7 @@ public class Api {
    List<PlaceVisitReview> reviewValues = visitReviews.findByVisitIdAndCoupleIdOrderByAuthorUsername(visit.id, CoupleContext.current());
    Map<Long, String> reviewAuthors = visitReviews.authorsByVisitIdInAndCoupleId(List.of(visit.id), CoupleContext.current()).stream().collect(java.util.stream.Collectors.toMap(ReviewAuthor::getReviewId, ReviewAuthor::getAuthor));
    List<PlaceVisitReviewDto> currentReviews = reviewValues.stream().map(review -> visitReview(review, reviewAuthors.get(review.id))).toList();
-    return new PlaceVisitDto(visit.id, visit.place.id, visit.visitedOn, visit.createdBy.username, visitItems.stream().map(item -> item(item, photoMap.get(item.id), itemReviewAuthors)).toList(), resultPhotos, cover, currentReviews, visit.updatedBy.username, visit.createdAt, visit.updatedAt);
+    return new PlaceVisitDto(visit.id, visit.place.id, visit.visitedOn, visit.createdBy.username, visitItems.stream().map(item -> item(item, photoMap.get(item.id), itemReviewAuthors)).toList(), resultPhotos, cover, currentReviews, visit.updatedBy.username, visit.createdAt, visit.updatedAt, visit.cityId, visit.stageId);
   }
   private ItemDto item(Item item) { return item(item, photos.findByItemIdAndCoupleId(item.id, CoupleContext.current()).orElse(null)); }
   private ItemDto item(Item item, ItemPhoto photo) { return item(item, photo, itemReviews.authorsByItemIdInAndCoupleId(List.of(item.id), CoupleContext.current()).stream().collect(java.util.stream.Collectors.toMap(ReviewAuthor::getReviewId, ReviewAuthor::getAuthor))); }
@@ -315,7 +318,7 @@ public class Api {
   }
  private ItemDto item(Item item, ItemPhoto photo, Map<Long, String> reviewAuthors) { return new ItemDto(item.id, item.name, item.createdBy.username, photo == null ? null : itemPhotoUrl(item.id, false, photo.id), photo == null ? null : itemPhotoUrl(item.id, true, photo.id), photo == null ? null : Integer.valueOf(photo.width), photo == null ? null : Integer.valueOf(photo.height), item.reviews.stream().sorted(Comparator.comparing(review -> reviewAuthors.get(review.id), Comparator.nullsLast(String.CASE_INSENSITIVE_ORDER))).map(review -> itemReview(review, reviewAuthors.get(review.id))).toList(), item.createdAt); }
   private static String itemPhotoUrl(Long itemId, boolean thumbnail, Long photoId) { return "/items/" + itemId + "/photo?" + (thumbnail ? "thumbnail=true&" : "") + "v=" + photoId; }
-  private static PlaceVisitSummaryDto visitSummary(PlaceVisit visit) { return new PlaceVisitSummaryDto(visit.id, visit.visitedOn, visit.createdBy.username, visit.createdAt); }
+  private static PlaceVisitSummaryDto visitSummary(PlaceVisit visit) { return new PlaceVisitSummaryDto(visit.id, visit.visitedOn, visit.createdBy.username, visit.createdAt, visit.cityId, visit.stageId); }
   private static ItemReviewDto itemReview(ItemReview review) { return itemReview(review, review.author.username); }
   private static ItemReviewDto itemReview(ItemReview review, String author) { return new ItemReviewDto(author, review.comment, review.taste, review.price, review.createdAt, review.updatedAt); }
   private static PlaceVisitPhotoDto visitPhoto(PlaceVisitPhoto photo) { return new PlaceVisitPhotoDto(photo.id, "/place-visit-photos/" + photo.id, "/place-visit-photos/" + photo.id + "?thumbnail=true", photo.width, photo.height, photo.position, photo.createdBy.username, photo.createdAt); }

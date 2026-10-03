@@ -33,16 +33,23 @@ public class WhenDateMutationService {
     private final SpecialDateOccurrencePhotos photos;
     private final PhotoStorage storage;
     private final CoupleAuthorizationService authorization;
+    private final com.wherefood.journey.JourneyService journey;
 
     public WhenDateMutationService(SpecialDates specialDates, SpecialDateOccurrences occurrences,
             SpecialDateOccurrenceComments comments, SpecialDateOccurrencePhotos photos,
-            PhotoStorage storage, CoupleAuthorizationService authorization) {
+            PhotoStorage storage, CoupleAuthorizationService authorization) { this(specialDates, occurrences, comments, photos, storage, authorization, null); }
+
+    @org.springframework.beans.factory.annotation.Autowired
+    public WhenDateMutationService(SpecialDates specialDates, SpecialDateOccurrences occurrences,
+            SpecialDateOccurrenceComments comments, SpecialDateOccurrencePhotos photos,
+            PhotoStorage storage, CoupleAuthorizationService authorization, com.wherefood.journey.JourneyService journey) {
         this.specialDates = specialDates;
         this.occurrences = occurrences;
         this.comments = comments;
         this.photos = photos;
         this.storage = storage;
         this.authorization = authorization;
+        this.journey = journey;
     }
 
     @Transactional
@@ -123,19 +130,32 @@ public class WhenDateMutationService {
         touch(occurrence, actor);
     }
 
-    private SpecialDateOccurrence ensureOccurrence(SpecialDate date, LocalDate occurredOn, User actor) {
+    private SpecialDateOccurrence ensureOccurrence(SpecialDate date, LocalDate occurredOn, User actor) {return ensureOccurrence(date,occurredOn,actor,false);}
+
+    private SpecialDateOccurrence ensureOccurrence(SpecialDate date, LocalDate occurredOn, User actor, boolean allowFuture) {
         SpecialDate lockedDate = specialDates.findLockedByIdAndCoupleId(date.id, CoupleContext.current())
                 .orElseThrow(() -> notFound("Fecha especial"));
-        validateOccurrence(lockedDate, occurredOn);
+        validateOccurrence(lockedDate, occurredOn, allowFuture);
         return occurrences.findDetailedBySpecialDateIdAndOccurredOnAndCoupleId(lockedDate.id, occurredOn, CoupleContext.current())
                 .orElseGet(() -> {
                     SpecialDateOccurrence value = new SpecialDateOccurrence();
                     value.specialDate = lockedDate;
                     value.occurredOn = occurredOn;
+                    value.cityId = 1L;
+                    if (journey != null) journey.locateNew(value, null, null, null, occurredOn);
                     value.createdBy = value.updatedBy = actor;
                     value.createdAt = value.updatedAt = Instant.now();
                     return occurrences.save(value);
                 });
+    }
+
+    @Transactional
+    public SpecialDateOccurrence saveLocation(Long specialDateId, LocalDate date, com.wherefood.journey.JourneyDtos.BindingRequest request, User actor) {
+        requireMember(actor);
+        SpecialDateOccurrence occurrence = ensureOccurrence(findDate(specialDateId), date, actor, true);
+        if (journey != null) journey.locateNew(occurrence, occurrence.cityId, request.cityId(), request.stageId(), date);
+        touch(occurrence, actor);
+        return occurrence;
     }
 
     private SpecialDate findDate(Long id) {
@@ -156,8 +176,8 @@ public class WhenDateMutationService {
         occurrences.save(occurrence);
     }
 
-    private static void validateOccurrence(SpecialDate date, LocalDate occurredOn) {
-        if (occurredOn.isAfter(RosarioClock.today())) throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+    private static void validateOccurrence(SpecialDate date, LocalDate occurredOn, boolean allowFuture) {
+        if (!allowFuture && occurredOn.isAfter(RosarioClock.today())) throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
                 "La fecha todavía no ocurrió");
         boolean matches = switch (date.recurrence == null ? com.wherefood.domain.SpecialDateRecurrence.ONCE : date.recurrence) {
             case ONCE -> date.date.equals(occurredOn);

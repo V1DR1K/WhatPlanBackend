@@ -21,6 +21,8 @@ public class Couple {
     @Column(nullable = false, updatable = false)
     public UUID id;
 
+    @Column(name="origin_city_id",nullable=false) public Long originCityId = 1L;
+
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 16)
     public CoupleStatus status = CoupleStatus.PENDING;

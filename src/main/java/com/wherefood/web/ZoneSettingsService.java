@@ -16,10 +16,15 @@ import org.springframework.web.server.ResponseStatusException;
 public class ZoneSettingsService {
     private final Zones zones;
     private final Users users;
+    private final com.wherefood.journey.LocationService locations;
 
-    public ZoneSettingsService(Zones zones, Users users) {
+    public ZoneSettingsService(Zones zones, Users users) { this(zones, users, null); }
+
+    @org.springframework.beans.factory.annotation.Autowired
+    public ZoneSettingsService(Zones zones, Users users, com.wherefood.journey.LocationService locations) {
         this.zones = zones;
         this.users = users;
+        this.locations = locations;
     }
 
     public List<Zone> activeZones() {
@@ -33,7 +38,7 @@ public class ZoneSettingsService {
     @Transactional
     public Zone create(ZoneRequest request) {
         String name = normalize(request.name());
-        if (zones.findByNameIgnoreCase(name).isPresent()) {
+        if (zones.findByCountryCodeAndNameIgnoreCase("AR",name).isPresent()) {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "Ya existe una Zona con ese nombre");
         }
         Zone zone = new Zone();
@@ -47,7 +52,7 @@ public class ZoneSettingsService {
     public Zone update(Long id, ZoneRequest request) {
         Zone zone = zones.findById(id).orElseThrow(() -> notFound());
         String name = normalize(request.name());
-        zones.findByNameIgnoreCase(name).filter(other -> !other.id.equals(id)).ifPresent(other -> {
+        zones.findByCountryCodeAndNameIgnoreCase(zone.countryCode,name).filter(other -> !other.id.equals(id)).ifPresent(other -> {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "Ya existe una Zona con ese nombre");
         });
         zone.name = name;
@@ -57,6 +62,7 @@ public class ZoneSettingsService {
 
     @Transactional
     public void deactivate(Long id) {
+        if (locations != null) throw new ResponseStatusException(HttpStatus.CONFLICT,"Las ciudades se conservan para las ubicaciones históricas");
         Zone zone = zones.findById(id).orElseThrow(() -> notFound());
         zone.active = false;
         zone.updatedAt = Instant.now();
@@ -66,12 +72,17 @@ public class ZoneSettingsService {
 
     @Transactional
     public UserPreferenceDto preference(User principal) {
+        if (locations != null) return new UserPreferenceDto(locations.origin());
         User user = currentUser(principal);
         return new UserPreferenceDto(user.defaultZoneId);
     }
 
     @Transactional
     public UserPreferenceDto updatePreference(User principal, ZonePreferenceRequest request) {
+        if (locations != null) {
+            if (request.zoneId() == null) throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"Elegí una ciudad de origen");
+            return new UserPreferenceDto(locations.saveOrigin(request.zoneId()).originCityId());
+        }
         User user = currentUser(principal);
         if (request.zoneId() != null) activeZone(request.zoneId());
         user.defaultZoneId = request.zoneId();

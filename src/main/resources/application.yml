@@ -75,3 +75,5 @@ app.images.max-pixels: ${IMAGE_MAX_PIXELS:25000000}
 app.images.max-dimension: ${IMAGE_MAX_DIMENSION:8000}
 app.images.process-timeout-seconds: ${IMAGE_PROCESS_TIMEOUT_SECONDS:10}
 app.images.max-concurrent-processes: ${IMAGE_MAX_CONCURRENT_PROCESSES:2}
+
+app.journey.max-upload-bytes: ${JOURNEY_MAX_UPLOAD_BYTES:10485760}

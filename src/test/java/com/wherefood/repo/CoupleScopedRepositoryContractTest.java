@@ -7,6 +7,7 @@ import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 class CoupleScopedRepositoryContractTest {
@@ -51,8 +52,19 @@ class CoupleScopedRepositoryContractTest {
     }
 
     @Test
+    void journeyRepositoriesDoNotExposeUnscopedReads() {
+        List.of(JourneyRepositories.Journeys.class,JourneyRepositories.Stages.class,JourneyRepositories.Points.class,JourneyRepositories.Files.class,JourneyRepositories.Stays.class,JourneyRepositories.Movements.class,JourneyRepositories.PackingItems.class,JourneyRepositories.Reviews.class).forEach(repository->{
+            assertDoesNotThrow(()->repository.getMethod("findByIdAndCoupleId",java.util.UUID.class,java.util.UUID.class));
+            assertThrows(NoSuchMethodException.class,()->repository.getMethod("findAll"));
+            assertThrows(NoSuchMethodException.class,()->repository.getMethod("findById",Object.class));
+        });
+    }
+    @Test
     void everyPrivateJpaEntityMapsTheTenantKeyFromItsTable() {
-        PRIVATE_ENTITIES.forEach(entity -> assertEquals(CoupleScopedEntity.class, entity.getSuperclass(),
-                () -> entity.getSimpleName() + " must inherit couple_id mapping"));
+        PRIVATE_ENTITIES.forEach(entity -> assertThat(CoupleScopedEntity.class.isAssignableFrom(entity)).as(entity.getSimpleName()+" tenant mapping").isTrue());
+        List.of(Journey.class,JourneyStage.class,JourneyPoint.class,JourneyFile.class,JourneyStay.class,JourneyMovement.class,JourneyPackingItem.class,JourneyReview.class).forEach(entity->{
+            assertThat(CoupleScopedEntity.class.isAssignableFrom(entity)).isTrue();
+            assertDoesNotThrow(()->assertEquals("couple_id",entity.getField("coupleId").getAnnotation(jakarta.persistence.Column.class).name()));
+        });
     }
 }

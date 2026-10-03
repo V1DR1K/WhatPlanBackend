@@ -20,19 +20,22 @@ import org.springframework.validation.annotation.Validated;
 
 record PlatformRequest(@NotBlank @Size(max = 80) String name, @NotBlank @Size(max = 20) String icon, boolean active) {}
 record PlatformDto(Long id, String name, String icon, boolean active) {}
-record FilmRequest(@Positive Long tmdbId, @Size(max = 200) String title, @Size(max = 200) String originalTitle, @Size(max = 3000) String synopsis, LocalDate releaseDate, @Size(max = 1000) @SafeHttpUrl String posterPath, LocalDate watchedOn, @Size(max = 12) List<@Size(max = 80) String> genres, @Positive Long platformId, @Positive Long zoneId) {
+record FilmRequest(@Positive Long tmdbId, @Size(max = 200) String title, @Size(max = 200) String originalTitle, @Size(max = 3000) String synopsis, LocalDate releaseDate, @Size(max = 1000) @SafeHttpUrl String posterPath, LocalDate watchedOn, @Size(max = 12) List<@Size(max = 80) String> genres, @Positive Long platformId, @Positive Long zoneId, UUID stageId) {
  FilmRequest(Long tmdbId, String title, String originalTitle, String synopsis, LocalDate releaseDate, String posterPath, LocalDate watchedOn, List<String> genres, Long platformId) {
-  this(tmdbId, title, originalTitle, synopsis, releaseDate, posterPath, watchedOn, genres, platformId, null);
+  this(tmdbId, title, originalTitle, synopsis, releaseDate, posterPath, watchedOn, genres, platformId, null, null);
  }
+ FilmRequest(Long tmdbId, String title, String originalTitle, String synopsis, LocalDate releaseDate, String posterPath, LocalDate watchedOn, List<String> genres, Long platformId, Long zoneId) { this(tmdbId, title, originalTitle, synopsis, releaseDate, posterPath, watchedOn, genres, platformId, zoneId, null); }
 }
-record FilmViewRequest(@NotNull LocalDate watchedOn) {}
+record FilmViewRequest(@NotNull LocalDate watchedOn, @Positive Long cityId, UUID stageId, UUID pointId) {
+ FilmViewRequest(LocalDate watchedOn) { this(watchedOn,null,null,null); }
+}
 record FilmReviewRequest(@Min(1) @Max(5) short rating, @Size(max = 1000) String comment, LocalDate watchedOn, @Size(max = 300) String favoriteCharacter, @Size(max = 20) Map<@NotBlank @Pattern(regexp = "[a-z_]{1,80}") String, @NotNull @Min(1) @Max(5) Short> metrics) {}
 record FilmGenreOptionRequest(@NotBlank @Size(max = 80) String name, @NotBlank @Size(max = 20) String emoji, Boolean active) {
  FilmGenreOptionRequest(String name, String emoji) { this(name, emoji, null); }
 }
 record FilmGenreOptionDto(Long id, String name, String emoji, boolean active) {}
 record FilmReviewDto(Long id, String author, short rating, String comment, LocalDate watchedOn, String favoriteCharacter, Map<String, Short> metrics) {}
-record FilmViewDto(Long id, LocalDate watchedOn, String createdBy, String updatedBy, List<FilmReviewDto> reviews, Instant createdAt) {}
+record FilmViewDto(Long id, LocalDate watchedOn, String createdBy, String updatedBy, List<FilmReviewDto> reviews, Instant createdAt, Long cityId, UUID stageId) {}
  record FilmDto(Long id, Long zoneId, Long tmdbId, String title, String originalTitle, String synopsis, LocalDate releaseDate, String posterUrl, String thumbnailUrl, Integer posterWidth, Integer posterHeight, List<String> genres, PlatformDto platform, int watchedCount, LocalDate lastWatchedOn, String author, List<FilmReviewDto> reviews, List<FilmViewDto> views, Instant createdAt, Instant updatedAt, TmdbMovieDto tmdb) {}
 
 @RestController
@@ -207,7 +210,7 @@ public class FilmApi {
     private static String photoUrl(Long filmId, boolean thumbnail, Long photoId) { return "/films/" + filmId + "/photo?" + (thumbnail ? "thumbnail=true&" : "") + "v=" + photoId; }
   private static PlatformDto platform(WatchPlatform value) { return new PlatformDto(value.id, value.name, value.icon, value.active); }
   private static FilmGenreOptionDto genre(FilmGenreOption value) { return new FilmGenreOptionDto(value.id, value.name, value.emoji, value.active); }
-   private static FilmViewDto view(FilmView value, List<FilmReviewDto> reviews) { return new FilmViewDto(value.id, value.watchedOn, value.createdBy.username, value.updatedBy == null ? value.createdBy.username : value.updatedBy.username, reviews, value.createdAt); }
+   private static FilmViewDto view(FilmView value, List<FilmReviewDto> reviews) { return new FilmViewDto(value.id, value.watchedOn, value.createdBy.username, value.updatedBy == null ? value.createdBy.username : value.updatedBy.username, reviews, value.createdAt, value.cityId, value.stageId); }
    private static FilmReviewDto review(FilmReview value) { return review(value, value.author.username); }
    private static FilmReviewDto review(FilmReview value, String author) { return new FilmReviewDto(value.id, author, value.rating, value.comment, value.view.watchedOn, value.favoriteCharacter, Map.copyOf(value.metrics)); }
   private static ResponseStatusException notFound(String type) { return new ResponseStatusException(HttpStatus.NOT_FOUND, type + " no encontrada"); }

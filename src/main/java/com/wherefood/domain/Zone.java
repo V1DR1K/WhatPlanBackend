@@ -17,8 +17,9 @@ public class Zone {
     public Long id;
     @Version
     public long version;
-    @Column(nullable = false, unique = true, length = 80)
+    @Column(nullable = false, length = 80)
     public String name;
+    @Column(name="country_code",nullable=false,length=2) public String countryCode="AR";
     @Column(nullable = false)
     public boolean active = true;
     @Column(nullable = false)

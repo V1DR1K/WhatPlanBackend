@@ -22,19 +22,24 @@ public class WhyFunActivityService {
     private final WhyFunVenues activities;
     private final CoupleAuthorizationService authorization;
     private final ZoneSettingsService zoneSettings;
+    private final com.wherefood.journey.JourneyService journey;
 
     public WhyFunActivityService(WhyFunCategories categories, WhyFunVenues activities,
             CoupleAuthorizationService authorization) {
         this(categories, activities, authorization, null);
     }
 
+    public WhyFunActivityService(WhyFunCategories categories, WhyFunVenues activities,
+            CoupleAuthorizationService authorization, ZoneSettingsService zoneSettings) { this(categories, activities, authorization, zoneSettings, null); }
+
     @org.springframework.beans.factory.annotation.Autowired
     public WhyFunActivityService(WhyFunCategories categories, WhyFunVenues activities,
-            CoupleAuthorizationService authorization, ZoneSettingsService zoneSettings) {
+            CoupleAuthorizationService authorization, ZoneSettingsService zoneSettings, com.wherefood.journey.JourneyService journey) {
         this.categories = categories;
         this.activities = activities;
         this.authorization = authorization;
         this.zoneSettings = zoneSettings;
+        this.journey = journey;
     }
 
     @Transactional
@@ -44,7 +49,9 @@ public class WhyFunActivityService {
         activity.createdBy = activity.updatedBy = actor;
         activity.createdAt = activity.updatedAt = Instant.now();
         apply(activity, request);
-        return activities.save(activity);
+        WhyFunVenue saved = activities.save(activity);
+        if (journey != null) journey.pending("FUN", saved.id, request.stageId());
+        return saved;
     }
 
     @Transactional
@@ -77,6 +84,7 @@ public class WhyFunActivityService {
 
     private void apply(WhyFunVenue activity, ActivityRequest request) {
         if (request.zoneId() != null) {
+            if (journey != null) journey.validateCatalogCity("FUN", activity.id, request.zoneId());
             if (zoneSettings != null) zoneSettings.requireActive(request.zoneId());
             activity.zoneId = request.zoneId();
         } else if (activity.zoneId == null) {
