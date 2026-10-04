@@ -169,8 +169,16 @@ public final class JourneyDtos {
             @Min(1) @Max(999) int quantity,
             boolean packed) {}
 
+    public record PackingBothRequest(
+            @NotBlank @Size(max = 160) String description,
+            @Min(1) @Max(999) int quantity) {}
+
+    public record PackingOrderRequest(
+            @NotNull @Positive Long userId,
+            @NotNull @Size(max = 1000) List<@NotNull UUID> itemIds) {}
+
     public record PackingDto(
-            UUID id, Long userId, String description, int quantity, boolean packed) {}
+            UUID id, Long userId, String description, int quantity, boolean packed, int position) {}
 
     public record MemberDto(Long id, String username) {}
 

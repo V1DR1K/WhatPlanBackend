@@ -164,6 +164,20 @@ public class JourneyApi {
         return service.savePacking(id, null, request);
     }
 
+    @PostMapping("/{id}/packing/both")
+    @ResponseStatus(HttpStatus.CREATED)
+    public List<PackingDto> addPackingForBoth(
+            @PathVariable UUID id, @Valid @RequestBody PackingBothRequest request) {
+        return service.savePackingForBoth(id, request);
+    }
+
+    @PutMapping("/{id}/packing/order")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void reorderPacking(
+            @PathVariable UUID id, @Valid @RequestBody PackingOrderRequest request) {
+        service.reorderPacking(id, request);
+    }
+
     @PutMapping("/{id}/packing/{itemId}")
     public PackingDto updatePacking(
             @PathVariable UUID id,

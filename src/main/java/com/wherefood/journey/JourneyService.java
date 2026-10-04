@@ -296,6 +296,10 @@ public class JourneyService {
                         .toList(),
                 stays.findByJourneyIdAndCoupleId(id, couple()).stream().map(this::stayDto).toList(),
                 packing.findByJourneyIdAndCoupleId(id, couple()).stream()
+                        .sorted(
+                                Comparator.comparing((JourneyPackingItem p) -> p.userId)
+                                        .thenComparingInt(p -> p.position)
+                                        .thenComparing(p -> p.id))
                         .map(
                                 v ->
                                         new PackingDto(
@@ -303,7 +307,8 @@ public class JourneyService {
                                                 v.userId,
                                                 v.description,
                                                 v.quantity,
-                                                v.packed))
+                                                v.packed,
+                                                v.position))
                         .toList(),
                 ms.stream().map(this::movementDto).toList(),
                 balances(ms),
@@ -598,14 +603,56 @@ public class JourneyService {
             throw bad("Elegí un integrante de la pareja");
         JourneyPackingItem p = id == null ? new JourneyPackingItem() : owned(packing, id);
         if (id != null && !p.journeyId.equals(tripId)) throw bad("Valija de otro viaje");
+        Long previousUserId = p.userId;
+        boolean wasPacked = p.packed;
         p.journeyId = tripId;
         p.userId = r.userId();
         p.memberId = sources.memberId(r.userId());
         p.description = r.description().trim();
         p.quantity = r.quantity();
         p.packed = r.packed();
+        if (id == null || !Objects.equals(previousUserId, p.userId) || (!wasPacked && p.packed))
+            p.position = nextPackingPosition(tripId, p.userId);
         packing.save(p);
-        return new PackingDto(p.id, p.userId, p.description, p.quantity, p.packed);
+        return packingDto(p);
+    }
+
+    @Transactional
+    public List<PackingDto> savePackingForBoth(UUID tripId, PackingBothRequest request) {
+        trip(tripId, true);
+        List<MemberDto> members = sources.members();
+        if (members.size() != 2) throw bad("Se necesitan ambos integrantes de la pareja");
+        return members.stream()
+                .map(
+                        member ->
+                                savePacking(
+                                        tripId,
+                                        null,
+                                        new PackingRequest(
+                                                member.id(),
+                                                request.description(),
+                                                request.quantity(),
+                                                false)))
+                .toList();
+    }
+
+    @Transactional
+    public void reorderPacking(UUID tripId, PackingOrderRequest request) {
+        trip(tripId, true);
+        List<JourneyPackingItem> items =
+                packing.findByJourneyIdAndCoupleIdAndUserIdOrderByPositionAscIdAsc(
+                        tripId, couple(), request.userId());
+        List<UUID> existingIds = items.stream().map(item -> item.id).toList();
+        if (existingIds.size() != request.itemIds().size()
+                || new HashSet<>(request.itemIds()).size() != request.itemIds().size()
+                || !new HashSet<>(existingIds).equals(new HashSet<>(request.itemIds())))
+            throw bad("El orden debe incluir todos los elementos de esta valija");
+
+        Map<UUID, JourneyPackingItem> byId = new HashMap<>();
+        items.forEach(item -> byId.put(item.id, item));
+        for (int index = 0; index < request.itemIds().size(); index++)
+            byId.get(request.itemIds().get(index)).position = index;
+        packing.saveAll(items);
     }
 
     @Transactional
@@ -626,6 +673,26 @@ public class JourneyService {
                 m.amount,
                 m.currency,
                 m.occurredOn);
+    }
+
+    private int nextPackingPosition(UUID tripId, Long userId) {
+        return packing.findByJourneyIdAndCoupleIdAndUserIdOrderByPositionAscIdAsc(
+                                tripId, couple(), userId)
+                        .stream()
+                        .mapToInt(item -> item.position)
+                        .max()
+                        .orElse(-1)
+                + 1;
+    }
+
+    private PackingDto packingDto(JourneyPackingItem item) {
+        return new PackingDto(
+                item.id,
+                item.userId,
+                item.description,
+                item.quantity,
+                item.packed,
+                item.position);
     }
 
     private void currency(String code) {

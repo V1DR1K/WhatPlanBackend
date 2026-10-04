@@ -14,6 +14,14 @@ import java.util.*;
 @Order(50)
 public class CityFilterAlias extends OncePerRequestFilter {
     @Override
+    protected boolean shouldNotFilter(HttpServletRequest request) {
+        String contentType = request.getContentType();
+        boolean multipart = contentType != null
+                && contentType.toLowerCase(Locale.ROOT).startsWith("multipart/form-data");
+        return multipart || !request.getRequestURI().startsWith("/api/");
+    }
+
+    @Override
     protected void doFilterInternal(
             HttpServletRequest request, HttpServletResponse response, FilterChain chain)
             throws ServletException, IOException {

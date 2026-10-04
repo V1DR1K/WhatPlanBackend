@@ -11,4 +11,5 @@ public class JourneyPackingItem extends JourneyEntity {
     public String description;
     public int quantity = 1;
     public boolean packed;
+    public int position;
 }

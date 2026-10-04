@@ -453,6 +453,56 @@ public class JourneyPersistenceIntegrationTest {
     }
 
     @Test
+    void bothPackingCreatesOneItemPerPartnerAndCheckedItemsMoveToTheEnd() {
+        TripDto t = trip();
+        List<PackingDto> created =
+                service.savePackingForBoth(t.id(), new PackingBothRequest("Cargador", 2));
+
+        assertThat(created).hasSize(2);
+        assertThat(created).extracting(PackingDto::userId).doesNotHaveDuplicates();
+        assertThat(created).extracting(PackingDto::position).containsOnly(0);
+
+        Long firstMember = created.getFirst().userId();
+        PackingDto second =
+                service.savePacking(
+                        t.id(), null, new PackingRequest(firstMember, "Pasaporte", 1, false));
+        PackingDto packed =
+                service.savePacking(
+                        t.id(),
+                        created.getFirst().id(),
+                        new PackingRequest(firstMember, "Cargador", 2, true));
+
+        assertThat(packed.position()).isGreaterThan(second.position());
+        assertThat(service.detail(t.id()).packing())
+                .filteredOn(item -> item.userId().equals(firstMember))
+                .extracting(PackingDto::description)
+                .containsExactly("Pasaporte", "Cargador");
+    }
+
+    @Test
+    void packingCanBeReorderedOnlyWithinItsOwnersList() {
+        TripDto t = trip();
+        List<PackingDto> created =
+                service.savePackingForBoth(t.id(), new PackingBothRequest("Llaves", 1));
+        Long member = created.getFirst().userId();
+        PackingDto second =
+                service.savePacking(t.id(), null, new PackingRequest(member, "Documento", 1, false));
+
+        service.reorderPacking(
+                t.id(), new PackingOrderRequest(member, List.of(second.id(), created.getFirst().id())));
+
+        assertThat(service.detail(t.id()).packing())
+                .filteredOn(item -> item.userId().equals(member))
+                .sorted(Comparator.comparingInt(PackingDto::position))
+                .extracting(PackingDto::description)
+                .containsExactly("Documento", "Llaves");
+        assertThatThrownBy(
+                        () -> service.reorderPacking(t.id(), new PackingOrderRequest(member, List.of(second.id()))))
+                .isInstanceOf(ResponseStatusException.class)
+                .hasMessageContaining("todos los elementos");
+    }
+
+    @Test
     void databaseForeignKeysRejectReferencesAcrossCouplesEvenIfBothIdentifiersAreKnown() {
         TripDto trip = trip();
         UUID stage = trip.stages().getFirst().id();

@@ -38,6 +38,23 @@ class JourneyRulesTest {
     }
 
     @Test
+    void cityAliasDoesNotParseMultipartRequestsBeforeTheMvcResolver() throws Exception {
+        CityFilterAlias filter = new CityFilterAlias();
+        MockHttpServletRequest request = new MockHttpServletRequest("POST", "/api/whither-journey/1/photos") {
+            @Override
+            public String getParameter(String name) {
+                throw new AssertionError("multipart parameters must be left to Spring MVC");
+            }
+        };
+        request.setContentType("multipart/form-data; boundary=photo-boundary");
+        MockHttpServletResponse response = new MockHttpServletResponse();
+
+        filter.doFilter(request, response, (req, res) -> assertThat(req).isSameAs(request));
+
+        assertThat(response.getStatus()).isEqualTo(200);
+    }
+
+    @Test
     void fileTypesUseContentSignatureAndRejectHtmlDisguisedAsPdf() {
         assertThat(JourneyService.fileType("%PDF-1.7".getBytes(StandardCharsets.US_ASCII)))
                 .isEqualTo("application/pdf");

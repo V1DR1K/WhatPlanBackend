@@ -57,6 +57,9 @@ public final class JourneyRepositories {
     public interface PackingItems extends Scoped<JourneyPackingItem> {
         List<JourneyPackingItem> findByJourneyIdAndCoupleId(UUID journeyId, UUID coupleId);
 
+        List<JourneyPackingItem> findByJourneyIdAndCoupleIdAndUserIdOrderByPositionAscIdAsc(
+                UUID journeyId, UUID coupleId, Long userId);
+
         boolean existsByJourneyIdAndCoupleId(UUID journeyId, UUID coupleId);
     }
 
