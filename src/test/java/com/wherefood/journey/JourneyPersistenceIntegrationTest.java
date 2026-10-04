@@ -6,6 +6,7 @@ import static org.assertj.core.api.Assertions.*;
 
 import com.wherefood.config.*;
 import com.wherefood.domain.*;
+import com.wherefood.web.PhotoStorage;
 
 import org.junit.jupiter.api.*;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -16,6 +17,7 @@ import org.springframework.boot.test.autoconfigure.orm.jpa.DataJpaTest;
 import org.springframework.context.annotation.Import;
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
 import org.springframework.mock.web.MockMultipartFile;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.web.server.ResponseStatusException;
@@ -118,6 +120,7 @@ public class JourneyPersistenceIntegrationTest {
     @Autowired JourneyService service;
     @Autowired LocationService locations;
     @Autowired NamedParameterJdbcTemplate jdbc;
+    @MockitoBean PhotoStorage photoStorage;
 
     @BeforeEach
     void context() {

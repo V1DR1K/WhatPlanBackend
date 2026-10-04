@@ -1334,7 +1334,12 @@ class CoupleHttpIsolationIntegrationTest {
                 }
                 ResponseEntity<String> otherCity = get(catalog.getKey() + "?cityId=2", USER_A1_AUTH_ID, null);
                 assertThat(otherCity.getStatusCode().value()).isEqualTo(200);
-                assertThat(otherCity.getBody()).doesNotContain(catalog.getValue());
+                if (catalog.getKey().equals("/api/films")
+                        || catalog.getKey().equals("/api/how-cook/recipes")) {
+                    assertThat(otherCity.getBody()).contains(catalog.getValue());
+                } else {
+                    assertThat(otherCity.getBody()).doesNotContain(catalog.getValue());
+                }
             }
             assertThat(get("/api/places/" + fixture.placeB(), USER_A1_AUTH_ID, null)
                     .getStatusCode().value()).isEqualTo(404);

@@ -10,6 +10,7 @@ import com.wherefood.domain.User;
 import com.wherefood.journey.*;
 import com.wherefood.journey.JourneyPersistenceIntegrationTest.TestDatabase;
 import com.wherefood.repo.Repositories.Users;
+import com.wherefood.web.PhotoStorage;
 
 import org.junit.jupiter.api.*;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -21,6 +22,7 @@ import org.springframework.context.annotation.Import;
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.transaction.annotation.*;
 import org.springframework.web.server.ResponseStatusException;
 import org.testcontainers.junit.jupiter.*;
@@ -64,6 +66,7 @@ class JourneyNativeExperienceIntegrationTest {
     @Autowired FilmViewService views;
     @Autowired NamedParameterJdbcTemplate jdbc;
     @Autowired Users users;
+    @MockitoBean PhotoStorage photoStorage;
     final LocalDate day = LocalDate.of(2026, 8, 10);
 
     @BeforeEach
