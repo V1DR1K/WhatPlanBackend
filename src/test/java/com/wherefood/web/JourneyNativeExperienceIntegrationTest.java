@@ -36,6 +36,7 @@ import java.util.*;
 @AutoConfigureTestDatabase(replace = AutoConfigureTestDatabase.Replace.NONE)
 @Import({
     JourneyService.class,
+    JourneyPointTypeService.class,
     LocationService.class,
     JourneySourceRepository.class,
     TenantDataSourcePostProcessor.class,
