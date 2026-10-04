@@ -85,18 +85,7 @@ public class JourneySourceRepository {
         params.put("couple", CoupleContext.current());
         params.put("city", cityId);
         params.put("search", search == null ? "" : search.toLowerCase(Locale.ROOT));
-        String location = "zone_id=:city";
-        if (s == Section.FILM || s == Section.COOK)
-            location +=
-                    " or exists(select 1 from "
-                            + s.experiences
-                            + " e where e."
-                            + s.parent
-                            + "=c.id and e.couple_id=c.couple_id and e.city_id=:city) or"
-                            + " exists(select 1 from journey_points p join journey_stages st on"
-                            + " st.id=p.stage_id and st.couple_id=p.couple_id where p."
-                            + (s == Section.FILM ? "film_id" : "recipe_id")
-                            + "=c.id and p.couple_id=c.couple_id and st.city_id=:city)";
+        String location = s == Section.FOOD || s == Section.FUN ? "zone_id=:city" : "true";
         String active = s == Section.FOOD ? " and deactivated_at is null" : "";
         return jdbc.query(
                 "select id,"
@@ -120,6 +109,95 @@ public class JourneySourceRepository {
                                 rs.getString("title"),
                                 rs.getLong("zone_id"),
                                 s.href + rs.getLong("id")));
+    }
+
+    public List<JourneyDayEntryDto> journeyDayEntries(UUID journeyId, java.time.LocalDate day) {
+        List<JourneyDayEntryDto> result = new ArrayList<>();
+        for (Section section : Section.values()) {
+            String linkedColumn = switch (section) {
+                case FOOD -> "place_visit_id";
+                case FILM -> "film_view_id";
+                case COOK -> "cooking_id";
+                case FUN -> "fun_visit_id";
+            };
+            String detail = switch (section) {
+                case FOOD, FUN -> "coalesce(c.address, '')";
+                case FILM -> "'Película vista'";
+                case COOK -> "'Preparación en casa'";
+            };
+            Map<String, Object> params = Map.of(
+                    "journey", journeyId, "day", day, "couple", CoupleContext.current());
+            String sql = "select distinct e.id, c." + section.title + " as title, " + detail
+                    + " as detail, s.id as stage_id from " + section.experiences + " e join "
+                    + section.catalog + " c on c.id=e." + section.parent
+                    + " and c.couple_id=e.couple_id join journey_stages s on s.journey_id=:journey"
+                    + " and s.couple_id=:couple and :day between s.starts_on and s.ends_on"
+                    + " and (e.stage_id=s.id or e.stage_id is null) where e.couple_id=:couple"
+                    + " and e." + section.date + "=:day"
+                    + ((section == Section.FOOD || section == Section.FUN)
+                            ? " and e.city_id=s.city_id" : "")
+                    + " and not exists(select 1 from journey_points p where p." + linkedColumn
+                    + "=e.id and p.couple_id=e.couple_id and p.journey_id<>:journey)"
+                    + " and (not exists(select 1 from journey_points p where p." + linkedColumn
+                    + "=e.id and p.couple_id=e.couple_id) or exists(select 1 from journey_points p"
+                    + " where p." + linkedColumn + "=e.id and p.couple_id=e.couple_id"
+                    + " and p.journey_id=:journey and p.stage_id=s.id))"
+                    + " order by c." + section.title + ",e.id";
+            List<ExperienceRow> rows = jdbc.query(sql, params, (rs, n) -> new ExperienceRow(
+                    rs.getLong("id"), rs.getString("title"), rs.getString("detail")));
+            for (ExperienceRow row : rows) {
+                List<JourneySourcePhotoDto> photos = daySourcePhotos(section, row.id());
+                result.add(new JourneyDayEntryDto(
+                        section.name() + ":" + row.id(), section.name(), day, row.title(),
+                        row.detail(), section.href + row.id(), photos));
+            }
+        }
+        return result.stream()
+                .sorted(Comparator.comparing(JourneyDayEntryDto::section)
+                        .thenComparing(JourneyDayEntryDto::title, String.CASE_INSENSITIVE_ORDER)
+                        .thenComparing(JourneyDayEntryDto::id))
+                .toList();
+    }
+
+    private record ExperienceRow(Long id, String title, String detail) {}
+
+    private List<JourneySourcePhotoDto> daySourcePhotos(Section section, Long experienceId) {
+        UUID couple = CoupleContext.current();
+        String sql;
+        if (section == Section.FOOD) {
+            sql = "select 'FOOD:'||p.id as id, '/place-visit-photos/'||p.id as url, "
+                    + "'/place-visit-photos/'||p.id||'?thumbnail=true' as thumb, p.width,p.height "
+                    + "from place_visit_photos p where p.visit_id=:id and p.couple_id=:couple "
+                    + "union all select 'FOOD:PLACE:'||p.id, '/places/'||p.place_id||'/photo?v='||p.id, "
+                    + "'/places/'||p.place_id||'/photo?thumbnail=true&v='||p.id,p.width,p.height "
+                    + "from place_photos p join place_visits v on v.place_id=p.place_id "
+                    + "and v.couple_id=p.couple_id where v.id=:id and v.cover_photo_id is null "
+                    + "and v.couple_id=:couple and not exists(select 1 from place_visit_photos x "
+                    + "where x.visit_id=v.id and x.couple_id=v.couple_id)";
+        } else if (section == Section.FILM) {
+            sql = "select 'FILM:'||p.id, '/films/'||p.film_id||'/photo?v='||p.id, "
+                    + "'/films/'||p.film_id||'/photo?thumbnail=true&v='||p.id,p.width,p.height "
+                    + "from film_photos p join film_views v on v.film_id=p.film_id "
+                    + "and v.couple_id=p.couple_id where v.id=:id and v.couple_id=:couple";
+        } else if (section == Section.COOK) {
+            sql = "select 'COOK:'||p.id, '/how-cook/recipes/'||p.recipe_id||'/photo?v='||p.id, "
+                    + "'/how-cook/recipes/'||p.recipe_id||'/photo?thumbnail=true&v='||p.id,p.width,p.height "
+                    + "from recipe_photos p join cookings v on v.recipe_id=p.recipe_id "
+                    + "and v.couple_id=p.couple_id where v.id=:id and v.couple_id=:couple";
+        } else {
+            sql = "select 'FUN:VISIT:'||p.id, '/why-fun/activity-visit-photos/'||p.id, "
+                    + "'/why-fun/activity-visit-photos/'||p.id||'?thumbnail=true',p.width,p.height "
+                    + "from why_fun_visit_photos p where p.visit_id=:id and p.couple_id=:couple "
+                    + "union all select 'FUN:VENUE:'||p.id, '/why-fun/photos/'||p.id, "
+                    + "'/why-fun/photos/'||p.id||'?thumbnail=true',p.width,p.height "
+                    + "from why_fun_venue_photos p join why_fun_visits v on v.venue_id=p.venue_id "
+                    + "and v.couple_id=p.couple_id where v.id=:id and v.couple_id=:couple "
+                    + "and not exists(select 1 from why_fun_visit_photos x where x.visit_id=v.id "
+                    + "and x.couple_id=v.couple_id)";
+        }
+        return jdbc.query(sql, Map.of("id", experienceId, "couple", couple), (rs, n) ->
+                new JourneySourcePhotoDto(rs.getString("id"), rs.getString("url"),
+                        rs.getString("thumb"), rs.getInt("width"), rs.getInt("height")));
     }
 
     public List<ExperienceDto> experiences(

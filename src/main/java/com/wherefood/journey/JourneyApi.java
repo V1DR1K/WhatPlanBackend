@@ -19,9 +19,11 @@ import java.util.*;
 @PreAuthorize("isAuthenticated()")
 public class JourneyApi {
     private final JourneyService service;
+    private final JourneyDayService dayService;
 
-    public JourneyApi(JourneyService service) {
+    public JourneyApi(JourneyService service, JourneyDayService dayService) {
         this.service = service;
+        this.dayService = dayService;
     }
 
     @GetMapping
@@ -40,6 +42,51 @@ public class JourneyApi {
     @GetMapping("/{id}")
     public DetailDto detail(@PathVariable UUID id) {
         return service.detail(id);
+    }
+
+    @GetMapping("/{id}/days")
+    public List<JourneyDayIndexDto> days(@PathVariable UUID id) {
+        return dayService.days(id);
+    }
+
+    @GetMapping("/{id}/days/{day}")
+    public JourneyDayDto day(@PathVariable UUID id, @PathVariable java.time.LocalDate day) {
+        return dayService.day(id, day);
+    }
+
+    @PutMapping("/{id}/days/{day}/story")
+    public JourneyDayDto saveStory(@PathVariable UUID id, @PathVariable java.time.LocalDate day,
+            @RequestBody @Valid JourneyDayStoryRequest request) {
+        return dayService.saveStory(id, day, request);
+    }
+
+    @PutMapping("/{id}/days/{day}/reviews/me")
+    public JourneyDayReviewDto saveDayReview(@PathVariable UUID id,
+            @PathVariable java.time.LocalDate day,
+            @RequestBody @Valid JourneyDayReviewRequest request,
+            @AuthenticationPrincipal User actor) {
+        return dayService.saveReview(id, day, request, actor);
+    }
+
+    @DeleteMapping("/{id}/days/{day}/reviews/me")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void deleteDayReview(@PathVariable UUID id, @PathVariable java.time.LocalDate day,
+            @AuthenticationPrincipal User actor) {
+        dayService.deleteReview(id, day, actor);
+    }
+
+    @PostMapping(value = "/{id}/photos", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public JourneyPhotoDto uploadPhoto(@PathVariable UUID id,
+            @RequestParam(defaultValue = "TRIP") String purpose,
+            @RequestParam(required = false) java.time.LocalDate day,
+            @RequestPart("file") MultipartFile file) throws java.io.IOException {
+        return dayService.uploadPhoto(id, purpose, day, file);
+    }
+
+    @PutMapping("/{id}/cover/{fileId}")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void setCover(@PathVariable UUID id, @PathVariable UUID fileId) {
+        dayService.setCover(id, fileId);
     }
 
     @PutMapping("/{id}")
@@ -174,8 +221,13 @@ public class JourneyApi {
 
     @GetMapping("/files/{id}/content")
     public ResponseEntity<byte[]> content(
-            @PathVariable UUID id, @RequestParam(defaultValue = "false") boolean download) {
+            @PathVariable UUID id, @RequestParam(defaultValue = "false") boolean download,
+            @RequestParam(defaultValue = "false") boolean thumbnail) {
         var f = service.file(id);
+        boolean photo = "TRIP".equals(f.purpose) || "DAY".equals(f.purpose);
+        boolean thumbnailResponse = thumbnail && f.thumbnailContent != null;
+        byte[] bytes = photo ? dayService.photoBytes(id, thumbnail)
+                : thumbnailResponse ? f.thumbnailContent : f.content;
         return ResponseEntity.ok()
                 .cacheControl(CacheControl.noStore())
                 .varyBy("Authorization", "Cookie")
@@ -186,8 +238,9 @@ public class JourneyApi {
                                 .filename(f.name, java.nio.charset.StandardCharsets.UTF_8)
                                 .build()
                                 .toString())
-                .contentType(MediaType.parseMediaType(f.contentType))
-                .body(f.content);
+                .contentType(MediaType.parseMediaType(
+                        photo || thumbnailResponse ? "image/webp" : f.contentType))
+                .body(bytes);
     }
 
     @PutMapping("/files/{id}/links")

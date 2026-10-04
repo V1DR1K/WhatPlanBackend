@@ -101,8 +101,7 @@ public class FilmCatalogService {
             if (zoneSettings != null) zoneSettings.requireActive(request.zoneId());
             film.zoneId = request.zoneId();
         } else if (film.zoneId == null) {
-            if (zoneSettings != null) throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Elegí una Zona para el registro");
-            film.zoneId = 1L;
+            film.zoneId = zoneSettings == null ? 1L : zoneSettings.defaultCityId();
         }
         if (request.tmdbId() == null) {
             if (request.title() == null || request.title().isBlank()) {

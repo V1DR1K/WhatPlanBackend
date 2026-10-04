@@ -4,6 +4,7 @@ import static com.wherefood.journey.JourneyDtos.*;
 
 import com.wherefood.domain.*;
 import com.wherefood.repo.JourneyRepositories.*;
+import com.wherefood.web.PhotoStorage;
 
 import jakarta.persistence.EntityManager;
 
@@ -30,11 +31,14 @@ public class JourneyService {
     private final Movements movements;
     private final Files files;
     private final Reviews reviews;
+    private final Days journeyDays;
+    private final DayReviews journeyDayReviews;
     private final com.wherefood.repo.Repositories.SpecialDates dateTemplates;
     private final com.wherefood.repo.Repositories.SpecialDateOccurrences dateOccurrences;
     private final LocationService locations;
     private final JourneySourceRepository sources;
     private final EntityManager em;
+    private final PhotoStorage photoStorage;
     private final long maxFileBytes;
 
     public JourneyService(
@@ -46,9 +50,12 @@ public class JourneyService {
             Movements movements,
             Files files,
             Reviews reviews,
+            Days journeyDays,
+            DayReviews journeyDayReviews,
             LocationService locations,
             JourneySourceRepository sources,
             EntityManager em,
+            PhotoStorage photoStorage,
             com.wherefood.repo.Repositories.SpecialDates dateTemplates,
             com.wherefood.repo.Repositories.SpecialDateOccurrences dateOccurrences,
             @Value("${app.journey.max-upload-bytes:10485760}") long maxFileBytes) {
@@ -60,11 +67,14 @@ public class JourneyService {
         this.movements = movements;
         this.files = files;
         this.reviews = reviews;
+        this.journeyDays = journeyDays;
+        this.journeyDayReviews = journeyDayReviews;
         this.dateTemplates = dateTemplates;
         this.dateOccurrences = dateOccurrences;
         this.locations = locations;
         this.sources = sources;
         this.em = em;
+        this.photoStorage = photoStorage;
         this.maxFileBytes = maxFileBytes;
     }
 
@@ -119,6 +129,13 @@ public class JourneyService {
     }
 
     private TripDto dto(Journey t) {
+        UUID coverId = t.coverFileId;
+        if (coverId == null) {
+            coverId = files.findByJourneyIdAndCoupleIdAndPurposeOrderByCreatedAtAscIdAsc(
+                    t.id, couple(), "TRIP").stream().findFirst().map(f -> f.id).orElseGet(() ->
+                    files.findByJourneyIdAndCoupleIdAndPurposeOrderByCreatedAtAscIdAsc(
+                            t.id, couple(), "DAY").stream().findFirst().map(f -> f.id).orElse(null));
+        }
         return new TripDto(
                 t.id,
                 t.name,
@@ -139,17 +156,38 @@ public class JourneyService {
                                             s.endsOn,
                                             s.position);
                                 })
-                        .toList());
+                        .toList(),
+                coverId,
+                coverId == null ? null : "/whither-journey/files/" + coverId + "/content?thumbnail=true",
+                t.maxTripPhotos <= 0 ? 20 : t.maxTripPhotos,
+                t.maxDayPhotos <= 0 ? 10 : t.maxDayPhotos);
     }
 
     @Transactional
     public TripDto saveTrip(UUID id, TripRequest request) {
         if (request.endsOn().isBefore(request.startsOn()))
             throw bad("La fecha de fin debe ser igual o posterior al inicio");
+        LocalDate nextStageDate = request.startsOn();
+        for (StageRequest stage : request.stages()) {
+            if (!stage.startsOn().equals(nextStageDate))
+                throw bad("Los destinos deben cubrir los días del viaje en bloques consecutivos");
+            dates(stage.startsOn(), stage.endsOn(), request.startsOn(), request.endsOn());
+            nextStageDate = stage.endsOn().plusDays(1);
+        }
+        if (!nextStageDate.equals(request.endsOn().plusDays(1)))
+            throw bad("Los destinos deben cubrir todos los días del viaje");
         Journey t = id == null ? new Journey() : trip(id, true);
+        if (id != null && journeyDays.findByJourneyIdAndCoupleIdOrderByDay(id, couple()).stream()
+                .anyMatch(day -> day.day.isBefore(request.startsOn())
+                        || day.day.isAfter(request.endsOn())))
+            throw conflict("Hay relatos, fotos o reseñas diarias fuera del nuevo período");
         t.name = request.name().trim();
         t.startsOn = request.startsOn();
         t.endsOn = request.endsOn();
+        t.maxTripPhotos = request.maxTripPhotos() == null
+                ? (id == null ? 20 : t.maxTripPhotos) : request.maxTripPhotos();
+        t.maxDayPhotos = request.maxDayPhotos() == null
+                ? (id == null ? 10 : t.maxDayPhotos) : request.maxDayPhotos();
         if (id == null) t.createdAt = Instant.now();
         trips.saveAndFlush(t);
         List<JourneyStage> existing = stages.findByJourneyIdAndCoupleId(t.id, couple());
@@ -229,6 +267,8 @@ public class JourneyService {
                 || movements.existsByJourneyIdAndCoupleId(id, couple())
                 || files.existsByJourneyIdAndCoupleId(id, couple())
                 || reviews.existsByJourneyIdAndCoupleId(id, couple())
+                || journeyDays.existsByJourneyIdAndCoupleId(id, couple())
+                || journeyDayReviews.existsByJourneyIdAndCoupleId(id, couple())
                 || stages.findByJourneyIdAndCoupleId(id, couple()).stream()
                         .anyMatch(s -> sources.stageHasExperiences(s.id)))
             throw conflict("Solo podés borrar viajes sin contenido; podés archivar este viaje");
@@ -685,7 +725,10 @@ public class JourneyService {
                 f.pointId,
                 f.stayId,
                 f.movementId,
-                "/whither-journey/files/" + f.id + "/content");
+                "/whither-journey/files/" + f.id + "/content",
+                f.purpose == null ? "ATTACHMENT" : f.purpose, f.day, f.width, f.height,
+                f.thumbnailContent == null ? null
+                        : "/whither-journey/files/" + f.id + "/content?thumbnail=true");
     }
 
     private FileDto fileDto(FileSummary f) {
@@ -698,7 +741,12 @@ public class JourneyService {
                 f.getPointId(),
                 f.getStayId(),
                 f.getMovementId(),
-                "/whither-journey/files/" + f.getId() + "/content");
+                "/whither-journey/files/" + f.getId() + "/content",
+                f.getPurpose() == null ? "ATTACHMENT" : f.getPurpose(), f.getDay(),
+                f.getWidth(), f.getHeight(),
+                "TRIP".equals(f.getPurpose()) || "DAY".equals(f.getPurpose())
+                        ? "/whither-journey/files/" + f.getId() + "/content?thumbnail=true"
+                        : null);
     }
 
     public JourneyFile file(UUID id) {
@@ -751,6 +799,7 @@ public class JourneyService {
         f.pointId = pointId;
         f.stayId = stayId;
         f.movementId = movementId;
+        f.purpose = "ATTACHMENT";
         String name = upload.getOriginalFilename();
         String safeName = name == null ? "archivo" : name.replace('\\', '/');
         safeName =
@@ -764,6 +813,12 @@ public class JourneyService {
         f.contentType = type;
         f.content = bytes;
         f.byteSize = bytes.length;
+        if (type.startsWith("image/")) {
+            PhotoStorage.ImageData image = photoStorage.processJourneyPhoto(upload);
+            f.thumbnailContent = Base64.getDecoder().decode(image.thumbnail());
+            f.width = image.width();
+            f.height = image.height();
+        }
         f.createdAt = Instant.now();
         files.saveAndFlush(f);
         if (hotelPhoto) {
@@ -777,7 +832,11 @@ public class JourneyService {
     @Transactional
     public void deleteFile(UUID id) {
         JourneyFile f = owned(files, id);
-        trip(f.journeyId, true);
+        Journey journey = trip(f.journeyId, true);
+        if (id.equals(journey.coverFileId)) {
+            journey.coverFileId = null;
+            trips.saveAndFlush(journey);
+        }
         for (JourneyStay s : stays.findByJourneyIdAndCoupleId(f.journeyId, couple()))
             if (id.equals(s.photoId)) {
                 s.photoId = null;
@@ -785,6 +844,15 @@ public class JourneyService {
             }
         em.flush();
         files.delete(f);
+        if ("DAY".equals(f.purpose) && f.day != null) {
+            journeyDays.findByJourneyIdAndCoupleIdAndDay(f.journeyId, couple(), f.day)
+                    .filter(day -> day.story == null
+                            && files.countByJourneyIdAndCoupleIdAndPurposeAndDay(
+                                    f.journeyId, couple(), "DAY", f.day) == 0
+                            && journeyDayReviews.findByJourneyIdAndCoupleIdAndDayOrderByUpdatedAtAsc(
+                                    f.journeyId, couple(), f.day).isEmpty())
+                    .ifPresent(journeyDays::delete);
+        }
     }
 
     public List<SourceDto> catalog(String section, Long city, String search) {
@@ -830,7 +898,9 @@ public class JourneyService {
         JourneyStage st = r.stageId() == null ? null : owned(stages, r.stageId());
         if (st != null) {
             trip(st.journeyId, true);
-            if (r.cityId() != null && !r.cityId().equals(st.cityId))
+            if ((section.equals("FOOD") || section.equals("FUN"))
+                    && r.cityId() != null
+                    && !r.cityId().equals(st.cityId))
                 throw bad("La ciudad no coincide con la etapa");
             city = st.cityId;
             dates(exp.date(), exp.date(), st.startsOn, st.endsOn);

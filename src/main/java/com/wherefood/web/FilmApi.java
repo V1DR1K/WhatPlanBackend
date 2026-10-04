@@ -124,11 +124,8 @@ public class FilmApi {
     throw badRequest("Orden inválido");
    }
    String normalizedGenre = genre == null || genre.isBlank() ? null : genre.trim().toLowerCase(Locale.ROOT);
-   List<Long> ids = zoneId == null
-           ? films.findPageIdsByCoupleId(CoupleContext.current(), normalizedGenre, platformId, watched,
-                   normalizedSearch, normalizedSort, limit + 1, offset)
-           : films.findPageIdsByCoupleId(CoupleContext.current(), zoneId, normalizedGenre, platformId, watched,
-                   normalizedSearch, normalizedSort, limit + 1, offset);
+   List<Long> ids = films.findPageIdsByCoupleId(CoupleContext.current(), normalizedGenre, platformId,
+           watched, normalizedSearch, normalizedSort, limit + 1, offset);
    Long next = ids.size() > limit ? offset + limit : null;
    List<Long> pageIds = ids.stream().limit(limit).toList();
    if (pageIds.isEmpty()) return new Slice<>(List.of(), null);

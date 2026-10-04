@@ -80,10 +80,42 @@ public final class JourneyRepositories {
         UUID getStayId();
 
         UUID getMovementId();
+
+        String getPurpose();
+
+        java.time.LocalDate getDay();
+
+        Integer getWidth();
+
+        Integer getHeight();
     }
 
     public interface Files extends Scoped<JourneyFile> {
         List<FileSummary> findSummariesByJourneyIdAndCoupleId(UUID journeyId, UUID coupleId);
+
+        boolean existsByJourneyIdAndCoupleId(UUID journeyId, UUID coupleId);
+
+        long countByJourneyIdAndCoupleIdAndPurpose(UUID journeyId, UUID coupleId, String purpose);
+
+        long countByJourneyIdAndCoupleIdAndPurposeAndDay(UUID journeyId, UUID coupleId, String purpose, java.time.LocalDate day);
+
+        List<JourneyFile> findByJourneyIdAndCoupleIdAndPurposeAndDayOrderByCreatedAtAscIdAsc(UUID journeyId, UUID coupleId, String purpose, java.time.LocalDate day);
+
+        List<JourneyFile> findByJourneyIdAndCoupleIdAndPurposeOrderByCreatedAtAscIdAsc(UUID journeyId, UUID coupleId, String purpose);
+    }
+
+    public interface Days extends Scoped<JourneyDay> {
+        Optional<JourneyDay> findByJourneyIdAndCoupleIdAndDay(UUID journeyId, UUID coupleId, java.time.LocalDate day);
+
+        List<JourneyDay> findByJourneyIdAndCoupleIdOrderByDay(UUID journeyId, UUID coupleId);
+
+        boolean existsByJourneyIdAndCoupleId(UUID journeyId, UUID coupleId);
+    }
+
+    public interface DayReviews extends Scoped<JourneyDayReview> {
+        List<JourneyDayReview> findByJourneyIdAndCoupleIdAndDayOrderByUpdatedAtAsc(UUID journeyId, UUID coupleId, java.time.LocalDate day);
+
+        Optional<JourneyDayReview> findByJourneyIdAndCoupleIdAndDayAndUserId(UUID journeyId, UUID coupleId, java.time.LocalDate day, Long userId);
 
         boolean existsByJourneyIdAndCoupleId(UUID journeyId, UUID coupleId);
     }

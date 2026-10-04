@@ -403,5 +403,9 @@ public class PhotoStorage {
    try { return Base64.getDecoder().decode(base64); }
    catch (IllegalArgumentException ex) { throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "La imagen almacenada no es válida"); }
   }
- private record ImageData(String image,String thumbnail,int width,int height) {}
+ public record ImageData(String image, String thumbnail, int width, int height) {}
+
+ public ImageData processJourneyPhoto(MultipartFile upload) throws IOException {
+  return imageData(upload);
+ }
 }

@@ -86,8 +86,7 @@ public class RecipeService {
             if (zoneSettings != null) zoneSettings.requireActive(request.zoneId());
             recipe.zoneId = request.zoneId();
         } else if (recipe.zoneId == null) {
-            if (zoneSettings != null) throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Elegí una Zona para el registro");
-            recipe.zoneId = 1L;
+            recipe.zoneId = zoneSettings == null ? 1L : zoneSettings.defaultCityId();
         }
         recipe.name = request.name().trim();
         recipe.sourceUrl = blankToNull(request.sourceUrl());

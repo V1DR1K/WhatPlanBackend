@@ -10,4 +10,7 @@ public class Journey extends JourneyEntity {
     public java.time.LocalDate endsOn;
     public boolean archived;
     public java.time.Instant createdAt;
+    public java.util.UUID coverFileId;
+    public int maxTripPhotos = 20;
+    public int maxDayPhotos = 10;
 }

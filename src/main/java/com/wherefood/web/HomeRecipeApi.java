@@ -91,11 +91,8 @@ public class HomeRecipeApi {
    if (!Set.of("date", "date-desc", "date-asc", "rating", "rating-desc", "rating-asc").contains(normalizedSort)) {
     throw badRequest("Orden inválido");
    }
-   List<Long> ids = zoneId == null
-           ? recipes.findPageIdsByCoupleId(CoupleContext.current(), normalizedSearch,
-                   home == null ? null : home.name(), cooked, normalizedSort, limit + 1, offset)
-           : recipes.findPageIdsByCoupleId(CoupleContext.current(), zoneId, normalizedSearch,
-                   home == null ? null : home.name(), cooked, normalizedSort, limit + 1, offset);
+   List<Long> ids = recipes.findPageIdsByCoupleId(CoupleContext.current(), normalizedSearch,
+           home == null ? null : home.name(), cooked, normalizedSort, limit + 1, offset);
    Long next = ids.size() > limit ? offset + limit : null;
    List<Long> pageIds = ids.stream().limit(limit).toList();
    if (pageIds.isEmpty()) return new Slice<>(List.of(), next);
@@ -133,9 +130,8 @@ public class HomeRecipeApi {
   long offset = cursor == null ? 0 : Math.max(0, cursor);
   if (offset > 1_000_000) throw badRequest("Cursor inválido");
   UUID coupleId = CoupleContext.current();
-  List<Long> ids = zoneId == null
-          ? cookings.findPageIdsByCoupleId(coupleId, recipeId, home == null ? null : home.name(), limit + 1, offset)
-          : cookings.findPageIdsByCoupleId(coupleId, zoneId, recipeId, home == null ? null : home.name(), limit + 1, offset);
+  List<Long> ids = cookings.findPageIdsByCoupleId(coupleId, recipeId,
+          home == null ? null : home.name(), limit + 1, offset);
   Long next = ids.size() > limit ? offset + limit : null;
   List<Long> pageIds = ids.stream().limit(limit).toList();
   if (pageIds.isEmpty()) return new Slice<>(List.of(), null);

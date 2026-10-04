@@ -94,6 +94,12 @@ public class ZoneSettingsService {
         return activeZone(id);
     }
 
+    public Long defaultCityId() {
+        if (locations != null) return locations.origin();
+        return zones.findByActiveTrueOrderByNameAsc().stream().findFirst()
+                .map(zone -> zone.id).orElse(1L);
+    }
+
     private User currentUser(User principal) {
         return users.findById(principal.id).orElseThrow(() ->
                 new ResponseStatusException(HttpStatus.UNAUTHORIZED, "La sesión de usuario ya no está disponible"));

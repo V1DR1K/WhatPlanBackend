@@ -39,7 +39,14 @@ public final class JourneyDtos {
             @NotBlank @Size(max = 160) String name,
             @NotNull LocalDate startsOn,
             @NotNull LocalDate endsOn,
-            @NotEmpty @Size(max = 100) List<@Valid StageRequest> stages) {}
+            @NotEmpty @Size(max = 100) List<@Valid StageRequest> stages,
+            @Min(1) @Max(100) Integer maxTripPhotos,
+            @Min(1) @Max(100) Integer maxDayPhotos) {
+        public TripRequest(String name, LocalDate startsOn, LocalDate endsOn,
+                List<StageRequest> stages) {
+            this(name, startsOn, endsOn, stages, 20, 10);
+        }
+    }
 
     public record StageDto(
             UUID id,
@@ -56,7 +63,11 @@ public final class JourneyDtos {
             LocalDate startsOn,
             LocalDate endsOn,
             boolean archived,
-            List<StageDto> stages) {}
+            List<StageDto> stages,
+            UUID coverPhotoId,
+            String coverPhotoUrl,
+            int maxTripPhotos,
+            int maxDayPhotos) {}
 
     public record SourceRef(
             @NotBlank @Pattern(regexp = "FOOD|FILM|COOK|FUN") String section,
@@ -174,7 +185,12 @@ public final class JourneyDtos {
             UUID pointId,
             UUID stayId,
             UUID movementId,
-            String url) {}
+            String url,
+            String purpose,
+            LocalDate day,
+            Integer width,
+            Integer height,
+            String thumbnailUrl) {}
 
     public record SourceDto(
             String section, Long entityId, String title, Long cityId, String href) {}
@@ -201,6 +217,34 @@ public final class JourneyDtos {
             List<MemberDto> members,
             List<LinkedDateDto> dates,
             List<StageBalanceDto> stageBalances) {}
+
+    public record JourneyPhotoDto(
+            UUID id, String name, String url, String thumbnailUrl, int width, int height,
+            String purpose, LocalDate day) {}
+
+    public record JourneyDayIndexDto(LocalDate date, List<String> destinations) {}
+
+    public record JourneyDayEntryDto(
+            String id, String section, LocalDate date, String title, String detail,
+            String href, List<JourneySourcePhotoDto> photos) {}
+
+    public record JourneySourcePhotoDto(
+            String id, String url, String thumbnailUrl, int width, int height) {}
+
+    public record JourneySpecialDateDto(Long id, String label, String recurrence, String href) {}
+
+    public record JourneyDayReviewDto(
+            UUID id, Long userId, String author, Short rating, String comment) {}
+
+    public record JourneyDayDto(
+            LocalDate date, String story, List<JourneyDayEntryDto> entries,
+            List<JourneySpecialDateDto> specialDates, List<JourneyPhotoDto> photos,
+            List<JourneyDayReviewDto> reviews) {}
+
+    public record JourneyDayStoryRequest(@Size(max = 4000) String story) {}
+
+    public record JourneyDayReviewRequest(
+            @Min(1) @Max(5) Short rating, @Size(max = 2000) String comment) {}
 
     public record BindingRequest(Long cityId, UUID stageId, UUID pointId) {}
 
