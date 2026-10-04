@@ -491,10 +491,11 @@ public class JourneyPersistenceIntegrationTest {
         service.reorderPacking(
                 t.id(), new PackingOrderRequest(member, List.of(second.id(), created.getFirst().id())));
 
-        assertThat(service.detail(t.id()).packing())
-                .filteredOn(item -> item.userId().equals(member))
-                .sorted(Comparator.comparingInt(PackingDto::position))
-                .extracting(PackingDto::description)
+        assertThat(service.detail(t.id()).packing().stream()
+                        .filter(item -> item.userId().equals(member))
+                        .sorted(Comparator.comparingInt(PackingDto::position))
+                        .map(PackingDto::description)
+                        .toList())
                 .containsExactly("Documento", "Llaves");
         assertThatThrownBy(
                         () -> service.reorderPacking(t.id(), new PackingOrderRequest(member, List.of(second.id()))))
