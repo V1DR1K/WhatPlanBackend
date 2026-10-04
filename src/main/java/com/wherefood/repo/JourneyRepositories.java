@@ -55,6 +55,8 @@ public final class JourneyRepositories {
     }
 
     public interface PackingItems extends Scoped<JourneyPackingItem> {
+        <S extends JourneyPackingItem> List<S> saveAll(Iterable<S> entities);
+
         List<JourneyPackingItem> findByJourneyIdAndCoupleId(UUID journeyId, UUID coupleId);
 
         List<JourneyPackingItem> findByJourneyIdAndCoupleIdAndUserIdOrderByPositionAscIdAsc(
