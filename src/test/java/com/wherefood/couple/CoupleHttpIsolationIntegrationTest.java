@@ -59,8 +59,11 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.core.io.ByteArrayResource;
 import org.springframework.util.LinkedMultiValueMap;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestPart;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MaxUploadSizeExceededException;
+import org.springframework.web.multipart.MultipartFile;
 import org.springframework.web.server.ResponseStatusException;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
@@ -144,6 +147,11 @@ class CoupleHttpIsolationIntegrationTest {
         String uploadError() {
             throw new MaxUploadSizeExceededException(10L);
         }
+
+        @PostMapping(value = "/__test/multipart", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+        long multipart(@RequestPart("file") MultipartFile file) {
+            return file.getSize();
+        }
     }
 
     @DynamicPropertySource
@@ -195,6 +203,15 @@ class CoupleHttpIsolationIntegrationTest {
             assertThat(result.next()).isTrue();
             assertThat(result.getLong(1)).isZero();
         }
+    }
+
+    @Test
+    void tomcatAcceptsMultipartPhotoLargerThanItsDefaultFormPostLimit() throws Exception {
+        int photoBytes = 3 * 1024 * 1024;
+        ResponseEntity<String> response = postMultipart("/__test/multipart", USER_A1_AUTH_ID, photoBytes);
+
+        assertThat(response.getStatusCode().value()).isEqualTo(200);
+        assertThat(response.getBody()).isEqualTo(Integer.toString(photoBytes));
     }
 
     @Test
@@ -1077,6 +1094,37 @@ class CoupleHttpIsolationIntegrationTest {
                     .getStatusCode().value()).as("member %s reads own occurrence", member).isEqualTo(200);
             assertThat(get(prefix + otherDate + "/occurrences/" + fixture.occurrenceDate(), member, null)
                     .getStatusCode().value()).as("member %s cannot read other occurrence", member).isEqualTo(404);
+        }
+    }
+
+    private ResponseEntity<String> postMultipart(String path, UUID subject, int fileBytes) throws IOException {
+        String boundary = "----WhatPlanMultipartLimitBoundary";
+        ByteArrayOutputStream body = new ByteArrayOutputStream();
+        body.write(("--" + boundary + "\r\n"
+                + "Content-Disposition: form-data; name=\"file\"; filename=\"photo.jpg\"\r\n"
+                + "Content-Type: image/jpeg\r\n\r\n").getBytes(StandardCharsets.US_ASCII));
+        body.write(new byte[fileBytes]);
+        body.write(("\r\n--" + boundary + "--\r\n").getBytes(StandardCharsets.US_ASCII));
+
+        HttpURLConnection connection = (HttpURLConnection) new URL(url(path)).openConnection();
+        connection.setRequestMethod("POST");
+        connection.setDoOutput(true);
+        connection.setRequestProperty("Authorization", "Bearer " + accessToken(subject));
+        connection.setRequestProperty("Content-Type", "multipart/form-data; boundary=" + boundary);
+        connection.setFixedLengthStreamingMode(body.size());
+        try {
+            connection.getOutputStream().write(body.toByteArray());
+            int status = connection.getResponseCode();
+            HttpHeaders headers = new HttpHeaders();
+            String contentType = connection.getHeaderField("Content-Type");
+            if (contentType != null) headers.setContentType(MediaType.parseMediaType(contentType));
+            String requestId = connection.getHeaderField("X-Request-Id");
+            if (requestId != null) headers.set("X-Request-Id", requestId);
+            InputStream responseBody = status >= 400 ? connection.getErrorStream() : connection.getInputStream();
+            String responseText = responseBody == null ? "" : new String(responseBody.readAllBytes(), StandardCharsets.UTF_8);
+            return new ResponseEntity<>(responseText, headers, org.springframework.http.HttpStatusCode.valueOf(status));
+        } finally {
+            connection.disconnect();
         }
     }
 

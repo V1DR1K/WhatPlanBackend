@@ -5,6 +5,8 @@ import jakarta.servlet.MultipartConfigElement;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnWebApplication;
 import org.springframework.boot.autoconfigure.web.servlet.MultipartProperties;
+import org.springframework.boot.web.embedded.tomcat.TomcatServletWebServerFactory;
+import org.springframework.boot.web.server.WebServerFactoryCustomizer;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
@@ -27,5 +29,15 @@ public class JourneyMultipartConfiguration {
                         : Math.max(original.getMaxRequestSize(), Math.addExact(fileBytes, 1048576));
         return new MultipartConfigElement(
                 original.getLocation(), fileBytes, requestBytes, original.getFileSizeThreshold());
+    }
+
+    @Bean
+    WebServerFactoryCustomizer<TomcatServletWebServerFactory> multipartRequestLimitCustomizer(
+            MultipartConfigElement multipartConfig) {
+        long maxRequestSize = multipartConfig.getMaxRequestSize();
+        int maxPostSize = maxRequestSize < 0
+                ? -1
+                : (int) Math.min(maxRequestSize, Integer.MAX_VALUE);
+        return factory -> factory.addConnectorCustomizers(connector -> connector.setMaxPostSize(maxPostSize));
     }
 }
