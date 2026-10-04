@@ -37,6 +37,7 @@ public class JourneyService {
     private final com.wherefood.repo.Repositories.SpecialDateOccurrences dateOccurrences;
     private final LocationService locations;
     private final JourneySourceRepository sources;
+    private final JourneyPointTypeService pointTypes;
     private final EntityManager em;
     private final PhotoStorage photoStorage;
     private final long maxFileBytes;
@@ -54,6 +55,7 @@ public class JourneyService {
             DayReviews journeyDayReviews,
             LocationService locations,
             JourneySourceRepository sources,
+            JourneyPointTypeService pointTypes,
             EntityManager em,
             PhotoStorage photoStorage,
             com.wherefood.repo.Repositories.SpecialDates dateTemplates,
@@ -73,6 +75,7 @@ public class JourneyService {
         this.dateOccurrences = dateOccurrences;
         this.locations = locations;
         this.sources = sources;
+        this.pointTypes = pointTypes;
         this.em = em;
         this.photoStorage = photoStorage;
         this.maxFileBytes = maxFileBytes;
@@ -377,7 +380,10 @@ public class JourneyService {
                 p.position,
                 p.status,
                 ref(p),
-                p.category);
+                p.category,
+                p.extraActions == null ? List.of() : p.extraActions.stream()
+                        .map(action -> new PointActionDto(action.label(), action.icon(), action.url()))
+                        .toList());
     }
 
     @Transactional
@@ -409,10 +415,16 @@ public class JourneyService {
         p.mapsUrl = r.mapsUrl();
         p.position = r.position();
         p.status = r.status();
-        p.category =
-                r.source() != null
-                        ? r.source().section()
-                        : r.category() == null ? "GENERAL" : r.category();
+        p.category = pointTypes.requireCategory(
+                r.category() != null ? r.category()
+                        : r.source() != null ? r.source().section() : "GENERAL");
+        if (r.extraActions() != null) {
+            p.extraActions = r.extraActions().stream()
+                    .map(action -> new JourneyPointAction(action.label().trim(), action.icon(), action.url().trim()))
+                    .toList();
+        } else if (p.extraActions == null) {
+            p.extraActions = new ArrayList<>();
+        }
         p.placeId =
                 p.filmId =
                         p.recipeId =

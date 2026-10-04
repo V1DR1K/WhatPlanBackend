@@ -36,6 +36,7 @@ import java.util.*;
 @AutoConfigureTestDatabase(replace = AutoConfigureTestDatabase.Replace.NONE)
 @Import({
     JourneyService.class,
+    JourneyPointTypeService.class,
     LocationService.class,
     JourneySourceRepository.class,
     TenantDataSourcePostProcessor.class
@@ -118,6 +119,7 @@ public class JourneyPersistenceIntegrationTest {
     }
 
     @Autowired JourneyService service;
+    @Autowired JourneyPointTypeService pointTypes;
     @Autowired LocationService locations;
     @Autowired NamedParameterJdbcTemplate jdbc;
     @MockitoBean PhotoStorage photoStorage;
@@ -159,15 +161,15 @@ public class JourneyPersistenceIntegrationTest {
     }
 
     @Test
-    void agendaCategoryPersistsAndLinkedSourcesKeepTheirSectionCategory() {
+    void agendaTypesAndCustomActionsPersistIndependentOfLinkedSource() {
         TripDto t = trip();
         UUID stage = t.stages().getFirst().id();
-        PointRequest transfer =
-                new PointRequest(stage, "Subte a Retiro", DAY, null, null, null, 0, "PENDING", null, "TRANSFER");
-
-        PointDto saved = service.savePoint(t.id(), null, transfer);
+        PointDto saved = service.savePoint(t.id(), null, new PointRequest(
+                stage, "Subte a Retiro", DAY, null, null, null, 0, "PENDING", null,
+                "TRANSFER", List.of(new PointActionRequest("Horarios", "WEB", "https://example.com/horarios"))));
 
         assertThat(saved.category()).isEqualTo("TRANSFER");
+        assertThat(saved.extraActions()).containsExactly(new PointActionDto("Horarios", "WEB", "https://example.com/horarios"));
         assertThat(service.detail(t.id()).points().getFirst().category()).isEqualTo("TRANSFER");
 
         Long film = film();
@@ -186,7 +188,20 @@ public class JourneyPersistenceIntegrationTest {
                                 "PENDING",
                                 new SourceRef("FILM", film, null),
                                 "TRANSFER"));
-        assertThat(linked.category()).isEqualTo("FILM");
+        assertThat(linked.category()).isEqualTo("TRANSFER");
+    }
+
+    @Test
+    void customPointTypeIsIsolatedToTheActiveCoupleAndCanBeAssigned() {
+        TripDto t = trip();
+        PointTypeDto custom = pointTypes.create(new PointTypeRequest("Compras", "SHOP", "#2375A8"));
+        UUID stage = t.stages().getFirst().id();
+
+        PointDto point = service.savePoint(t.id(), null,
+                new PointRequest(stage, "Feria", DAY, null, null, null, 0, "PENDING", null, custom.code()));
+
+        assertThat(point.category()).isEqualTo(custom.code());
+        assertThat(pointTypes.list()).extracting(PointTypeDto::code).contains(custom.code());
     }
 
     @Test

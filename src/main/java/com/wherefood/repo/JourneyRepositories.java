@@ -44,6 +44,8 @@ public final class JourneyRepositories {
         List<JourneyPoint> findByJourneyIdAndCoupleId(UUID journeyId, UUID coupleId);
 
         boolean existsByJourneyIdAndCoupleId(UUID journeyId, UUID coupleId);
+
+        boolean existsByCoupleIdAndCategory(UUID coupleId, String category);
     }
 
     public interface Stays extends Scoped<JourneyStay> {

@@ -61,11 +61,13 @@ public class JourneySourceRepository {
         Section s = section(name);
         var rows =
                 jdbc.query(
-                        "select id,"
+                        "select c.id,"
                                 + s.title
-                                + " as title,zone_id from "
+                                + " as title,c.zone_id,"
+                                + thumbnailSql(s)
+                                + " as thumbnail_url from "
                                 + s.catalog
-                                + " where id=:id and couple_id=:couple",
+                                + " c where c.id=:id and c.couple_id=:couple",
                         Map.of("id", id, "couple", CoupleContext.current()),
                         (rs, n) ->
                                 new SourceDto(
@@ -73,7 +75,8 @@ public class JourneySourceRepository {
                                         rs.getLong("id"),
                                         rs.getString("title"),
                                         rs.getLong("zone_id"),
-                                        s.href + rs.getLong("id")));
+                                        s.href + rs.getLong("id"),
+                                        rs.getString("thumbnail_url"));
         if (rows.isEmpty())
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Ficha no encontrada");
         return rows.getFirst();
@@ -90,7 +93,9 @@ public class JourneySourceRepository {
         return jdbc.query(
                 "select id,"
                         + s.title
-                        + " as title,zone_id from "
+                        + " as title,c.zone_id,"
+                        + thumbnailSql(s)
+                        + " as thumbnail_url from "
                         + s.catalog
                         + " c where couple_id=:couple"
                         + active
@@ -100,7 +105,7 @@ public class JourneySourceRepository {
                         + s.title
                         + "))>0 order by "
                         + s.title
-                        + ",id limit 100",
+                        + ",c.id limit 1000",
                 params,
                 (rs, n) ->
                         new SourceDto(
@@ -108,7 +113,17 @@ public class JourneySourceRepository {
                                 rs.getLong("id"),
                                 rs.getString("title"),
                                 rs.getLong("zone_id"),
-                                s.href + rs.getLong("id")));
+                                s.href + rs.getLong("id"),
+                                rs.getString("thumbnail_url")));
+    }
+
+    private static String thumbnailSql(Section section) {
+        return switch (section) {
+            case FOOD -> "(select '/places/'||c.id||'/photo?thumbnail=true&v='||p.id from place_photos p where p.place_id=c.id and p.couple_id=c.couple_id order by p.id limit 1)";
+            case FILM -> "(select '/films/'||c.id||'/photo?thumbnail=true&v='||p.id from film_photos p where p.film_id=c.id and p.couple_id=c.couple_id order by p.id limit 1)";
+            case COOK -> "(select '/how-cook/recipes/'||c.id||'/photo?thumbnail=true&v='||p.id from recipe_photos p where p.recipe_id=c.id and p.couple_id=c.couple_id order by p.id limit 1)";
+            case FUN -> "(select '/why-fun/activities/'||c.id||'/photo?thumbnail=true&v='||p.id from why_fun_venue_photos p where p.id=c.cover_photo_id and p.venue_id=c.id and p.couple_id=c.couple_id)";
+        };
     }
 
     public List<JourneyDayEntryDto> journeyDayEntries(UUID journeyId, java.time.LocalDate day) {

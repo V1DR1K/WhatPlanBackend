@@ -74,6 +74,20 @@ public final class JourneyDtos {
             @NotNull @Positive Long entityId,
             @Positive Long experienceId) {}
 
+    public record PointActionRequest(
+            @NotBlank @Size(max = 40) String label,
+            @NotBlank @Pattern(regexp = "ACTIVITY|FOOD|FILM|COOK|FUN|TRANSFER|SHOP|TICKET|PHONE|LINK|INFO|WEB") String icon,
+            @NotBlank @Size(max = 1000) @SafeHttpUrl String url) {}
+
+    public record PointActionDto(String label, String icon, String url) {}
+
+    public record PointTypeRequest(
+            @NotBlank @Size(max = 80) String name,
+            @NotBlank @Pattern(regexp = "ACTIVITY|FOOD|FILM|COOK|FUN|TRANSFER|SHOP|TICKET|PHONE|LINK|INFO|WEB") String icon,
+            @NotBlank @Pattern(regexp = "#[0-9A-Fa-f]{6}") String color) {}
+
+    public record PointTypeDto(String code, String name, String icon, String color, int position, boolean builtIn) {}
+
     public record PointRequest(
             @NotNull UUID stageId,
             @NotBlank @Size(max = 160) String title,
@@ -84,7 +98,16 @@ public final class JourneyDtos {
             @Min(0) int position,
             @NotBlank @Pattern(regexp = "PENDING|COMPLETED|CANCELLED") String status,
             @Valid SourceRef source,
-            @Pattern(regexp = "GENERAL|FOOD|FILM|COOK|FUN|TRANSFER") String category) {
+            @Size(max = 50) @Pattern(regexp = "[A-Z][A-Z0-9_-]{0,49}") String category,
+            @Size(max = 8) List<@NotNull @Valid PointActionRequest> extraActions) {
+        public PointRequest(
+                UUID stageId, String title, LocalDate scheduledOn, LocalTime scheduledTime,
+                String notes, String mapsUrl, int position, String status, SourceRef source,
+                String category) {
+            this(stageId, title, scheduledOn, scheduledTime, notes, mapsUrl, position, status,
+                    source, category, null);
+        }
+
         public PointRequest(
                 UUID stageId,
                 String title,
@@ -95,7 +118,8 @@ public final class JourneyDtos {
                 int position,
                 String status,
                 SourceRef source) {
-            this(stageId, title, scheduledOn, scheduledTime, notes, mapsUrl, position, status, source, null);
+            this(stageId, title, scheduledOn, scheduledTime, notes, mapsUrl, position, status,
+                    source, null, null);
         }
     }
 
@@ -110,7 +134,8 @@ public final class JourneyDtos {
             int position,
             String status,
             SourceRef source,
-            String category) {}
+            String category,
+            List<PointActionDto> extraActions) {}
 
     public record StayRequest(
             @NotNull UUID stageId,
@@ -208,7 +233,7 @@ public final class JourneyDtos {
             String thumbnailUrl) {}
 
     public record SourceDto(
-            String section, Long entityId, String title, Long cityId, String href) {}
+            String section, Long entityId, String title, Long cityId, String href, String thumbnailUrl) {}
 
     public record ExperienceDto(Long id, LocalDate date, Long cityId, UUID stageId) {}
 
