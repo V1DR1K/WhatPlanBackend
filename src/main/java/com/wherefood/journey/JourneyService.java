@@ -169,7 +169,8 @@ public class JourneyService {
             throw bad("La fecha de fin debe ser igual o posterior al inicio");
         LocalDate nextStageDate = request.startsOn();
         for (StageRequest stage : request.stages()) {
-            if (!stage.startsOn().equals(nextStageDate))
+            if (stage.startsOn().isAfter(nextStageDate)
+                    || stage.startsOn().isBefore(nextStageDate.minusDays(1)))
                 throw bad("Los destinos deben cubrir los días del viaje en bloques consecutivos");
             dates(stage.startsOn(), stage.endsOn(), request.startsOn(), request.endsOn());
             nextStageDate = stage.endsOn().plusDays(1);
