@@ -159,6 +159,37 @@ public class JourneyPersistenceIntegrationTest {
     }
 
     @Test
+    void agendaCategoryPersistsAndLinkedSourcesKeepTheirSectionCategory() {
+        TripDto t = trip();
+        UUID stage = t.stages().getFirst().id();
+        PointRequest transfer =
+                new PointRequest(stage, "Subte a Retiro", DAY, null, null, null, 0, "PENDING", null, "TRANSFER");
+
+        PointDto saved = service.savePoint(t.id(), null, transfer);
+
+        assertThat(saved.category()).isEqualTo("TRANSFER");
+        assertThat(service.detail(t.id()).points().getFirst().category()).isEqualTo("TRANSFER");
+
+        Long film = film();
+        PointDto linked =
+                service.savePoint(
+                        t.id(),
+                        null,
+                        new PointRequest(
+                                stage,
+                                "Peli",
+                                DAY,
+                                null,
+                                null,
+                                null,
+                                1,
+                                "PENDING",
+                                new SourceRef("FILM", film, null),
+                                "TRANSFER"));
+        assertThat(linked.category()).isEqualTo("FILM");
+    }
+
+    @Test
     void originChangeIsSharedAndNeverReassignsHistory() {
         Long film = film();
         Long exp = experience(film);

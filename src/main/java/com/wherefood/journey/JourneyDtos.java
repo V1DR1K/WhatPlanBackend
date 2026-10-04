@@ -83,7 +83,21 @@ public final class JourneyDtos {
             @Size(max = 1000) @SafeHttpUrl String mapsUrl,
             @Min(0) int position,
             @NotBlank @Pattern(regexp = "PENDING|COMPLETED|CANCELLED") String status,
-            @Valid SourceRef source) {}
+            @Valid SourceRef source,
+            @Pattern(regexp = "GENERAL|FOOD|FILM|COOK|FUN|TRANSFER") String category) {
+        public PointRequest(
+                UUID stageId,
+                String title,
+                LocalDate scheduledOn,
+                LocalTime scheduledTime,
+                String notes,
+                String mapsUrl,
+                int position,
+                String status,
+                SourceRef source) {
+            this(stageId, title, scheduledOn, scheduledTime, notes, mapsUrl, position, status, source, null);
+        }
+    }
 
     public record PointDto(
             UUID id,
@@ -95,7 +109,8 @@ public final class JourneyDtos {
             String mapsUrl,
             int position,
             String status,
-            SourceRef source) {}
+            SourceRef source,
+            String category) {}
 
     public record StayRequest(
             @NotNull UUID stageId,

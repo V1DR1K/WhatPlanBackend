@@ -14,6 +14,7 @@ public class JourneyPoint extends JourneyEntity {
     public String mapsUrl;
     public int position;
     public String status = "PENDING";
+    public String category = "GENERAL";
     public Long placeId;
     public Long filmId;
     public Long recipeId;

@@ -376,7 +376,8 @@ public class JourneyService {
                 p.mapsUrl,
                 p.position,
                 p.status,
-                ref(p));
+                ref(p),
+                p.category);
     }
 
     @Transactional
@@ -408,6 +409,10 @@ public class JourneyService {
         p.mapsUrl = r.mapsUrl();
         p.position = r.position();
         p.status = r.status();
+        p.category =
+                r.source() != null
+                        ? r.source().section()
+                        : r.category() == null ? "GENERAL" : r.category();
         p.placeId =
                 p.filmId =
                         p.recipeId =
