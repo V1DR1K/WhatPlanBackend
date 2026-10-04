@@ -76,7 +76,7 @@ public class JourneySourceRepository {
                                         rs.getString("title"),
                                         rs.getLong("zone_id"),
                                         s.href + rs.getLong("id"),
-                                        rs.getString("thumbnail_url"));
+                                        rs.getString("thumbnail_url")));
         if (rows.isEmpty())
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Ficha no encontrada");
         return rows.getFirst();
