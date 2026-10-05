@@ -52,6 +52,14 @@ class JourneyMigrationTest {
                     "insert into place_reviews(place_id,author_id,comment,couple_id)"
                         + " values(8100,1,'Reseña"
                         + " conservada','00000000-0000-0000-0000-000000000001')");
+            s.execute(
+                    "insert into special_dates(special_date,label,recurrence,couple_id)"
+                        + " values(date '2026-01-07','Legacy important range','ONCE',"
+                        + "'00000000-0000-0000-0000-000000000001')");
+            s.execute(
+                    "insert into special_date_occurrences(special_date_id,occurred_on,created_by,updated_by,couple_id)"
+                        + " select id,date '2026-01-08',1,1,couple_id from special_dates"
+                        + " where label='Legacy important range'");
             String role = "migrator_" + UUID.randomUUID().toString().replace("-", "");
             s.execute(
                     "create role "
@@ -95,13 +103,25 @@ class JourneyMigrationTest {
                 r.next();
                 assertThat(r.getInt(1)).isZero();
             }
+            try (ResultSet r = s.executeQuery(
+                    "select special_date,ends_on from special_dates where label='Legacy important range'")) {
+                assertThat(r.next()).isTrue();
+                assertThat(r.getDate(2)).isEqualTo(r.getDate(1));
+            }
+            try (ResultSet r = s.executeQuery(
+                    "select occurred_on,ends_on from special_date_occurrences"
+                        + " where special_date_id=(select id from special_dates where label='Legacy important range')")) {
+                assertThat(r.next()).isTrue();
+                assertThat(r.getDate(2)).isEqualTo(r.getDate(1));
+            }
             try (ResultSet r =
                     s.executeQuery(
                             "select count(*) from pg_class where relname in"
-                                + " ('places','films','recipes','why_fun_venues','journeys','journey_files')"
+                                + " ('places','films','recipes','why_fun_venues','journeys','journey_files',"
+                                + "'special_dates','special_date_occurrences')"
                                 + " and relrowsecurity and relforcerowsecurity")) {
                 r.next();
-                assertThat(r.getInt(1)).isEqualTo(6);
+                assertThat(r.getInt(1)).isEqualTo(8);
             }
         }
     }

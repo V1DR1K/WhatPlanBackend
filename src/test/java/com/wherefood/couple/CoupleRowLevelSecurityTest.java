@@ -68,8 +68,8 @@ class CoupleRowLevelSecurityTest {
         try (Connection admin = adminConnection(); Statement statement = admin.createStatement()) {
             statement.executeUpdate("insert into couples(id, status, created_by) values ('" + OTHER_COUPLE + "', 'ACTIVE', 1)");
             statement.executeUpdate("insert into places(name, category_id, created_by, updated_by, couple_id) values ('Other couple place', 1, 2, 2, '" + OTHER_COUPLE + "')");
-            statement.executeUpdate("insert into special_dates(id, special_date, label, recurrence, couple_id) values (1001, date '2026-01-01', 'Legacy anniversary', 'ONCE', '" + ORIGINAL_COUPLE + "'), (1002, date '2026-01-02', 'Private anniversary', 'ONCE', '" + OTHER_COUPLE + "')");
-            statement.executeUpdate("insert into special_date_occurrences(id, special_date_id, occurred_on, created_by, updated_by, couple_id) values (1101, 1001, date '2026-01-01', 1, 1, '" + ORIGINAL_COUPLE + "'), (1102, 1002, date '2026-01-02', 2, 2, '" + OTHER_COUPLE + "')");
+            statement.executeUpdate("insert into special_dates(id, special_date, ends_on, label, recurrence, couple_id) values (1001, date '2026-01-01', date '2026-01-01', 'Legacy anniversary', 'ONCE', '" + ORIGINAL_COUPLE + "'), (1002, date '2026-01-02', date '2026-01-02', 'Private anniversary', 'ONCE', '" + OTHER_COUPLE + "')");
+            statement.executeUpdate("insert into special_date_occurrences(id, special_date_id, occurred_on, ends_on, created_by, updated_by, couple_id) values (1101, 1001, date '2026-01-01', date '2026-01-01', 1, 1, '" + ORIGINAL_COUPLE + "'), (1102, 1002, date '2026-01-02', date '2026-01-02', 2, 2, '" + OTHER_COUPLE + "')");
             statement.executeUpdate("insert into special_date_occurrence_comments(id, occurrence_id, author_id, updated_by, comment, couple_id) values (1201, 1101, 1, 1, 'Shared memory', '" + ORIGINAL_COUPLE + "'), (1202, 1102, 2, 2, 'Private memory', '" + OTHER_COUPLE + "')");
             statement.executeUpdate("insert into special_date_occurrence_photos(id, occurrence_id, image_base64, thumbnail_base64, width, height, position, created_by, couple_id) values (1301, 1101, 'a', 'a', 1, 1, 0, 1, '" + ORIGINAL_COUPLE + "'), (1302, 1102, 'b', 'b', 1, 1, 0, 2, '" + OTHER_COUPLE + "')");
             statement.executeUpdate("create role " + RUNTIME_USER + " login password '" + RUNTIME_PASSWORD + "' nosuperuser nobypassrls");
@@ -534,14 +534,14 @@ class CoupleRowLevelSecurityTest {
                 couple.executeUpdate();
             }
             try (PreparedStatement date = admin.prepareStatement(
-                    "insert into special_dates(id, special_date, label, recurrence, couple_id) values (?, date '2026-09-25', ?, 'ONCE', ?)")) {
+                    "insert into special_dates(id, special_date, ends_on, label, recurrence, couple_id) values (?, date '2026-09-25', date '2026-09-25', ?, 'ONCE', ?)")) {
                 date.setLong(1, dateId);
                 date.setString(2, "Quota test " + dateId);
                 date.setObject(3, coupleId);
                 date.executeUpdate();
             }
             try (PreparedStatement occurrence = admin.prepareStatement(
-                    "insert into special_date_occurrences(id, special_date_id, occurred_on, created_by, updated_by, couple_id) values (?, ?, date '2026-09-25', 3, 3, ?)")) {
+                    "insert into special_date_occurrences(id, special_date_id, occurred_on, ends_on, created_by, updated_by, couple_id) values (?, ?, date '2026-09-25', date '2026-09-25', 3, 3, ?)")) {
                 occurrence.setLong(1, occurrenceId);
                 occurrence.setLong(2, dateId);
                 occurrence.setObject(3, coupleId);

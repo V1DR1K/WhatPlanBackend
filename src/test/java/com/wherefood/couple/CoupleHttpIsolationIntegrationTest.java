@@ -863,12 +863,13 @@ class CoupleHttpIsolationIntegrationTest {
             }
 
             try (PreparedStatement specialDate = connection.prepareStatement("""
-                    insert into special_dates(special_date, label, recurrence, couple_id)
-                    values (?, ?, 'ONCE', ?) returning id
+                    insert into special_dates(special_date, ends_on, label, recurrence, couple_id)
+                    values (?, ?, ?, 'ONCE', ?) returning id
                     """)) {
                 specialDate.setObject(1, occurrenceDate);
-                specialDate.setString(2, "Gallery quota occurrence " + suffix);
-                specialDate.setObject(3, coupleId);
+                specialDate.setObject(2, occurrenceDate);
+                specialDate.setString(3, "Gallery quota occurrence " + suffix);
+                specialDate.setObject(4, coupleId);
                 try (ResultSet result = specialDate.executeQuery()) {
                     result.next();
                     specialDateId = result.getLong(1);
@@ -1493,14 +1494,15 @@ class CoupleHttpIsolationIntegrationTest {
         try (Connection connection = adminConnection()) {
             long authorId = scalarLong(connection, "select id from users where username = 'http-user-a1'");
             try (PreparedStatement specialDates = connection.prepareStatement("""
-                    insert into special_dates(special_date, label, recurrence, couple_id)
-                    select ?::date - event.day_offset, 'Synthetic calendar event ' || event.day_offset,
+                    insert into special_dates(special_date, ends_on, label, recurrence, couple_id)
+                    select ?::date - event.day_offset, ?::date - event.day_offset, 'Synthetic calendar event ' || event.day_offset,
                            'ONCE', ?::uuid
                     from generate_series(1, ?) as event(day_offset)
                     """)) {
                 specialDates.setObject(1, today);
-                specialDates.setObject(2, COUPLE_A_ID);
-                specialDates.setInt(3, syntheticVisitCount);
+                specialDates.setObject(2, today);
+                specialDates.setObject(3, COUPLE_A_ID);
+                specialDates.setInt(4, syntheticVisitCount);
                 specialDates.executeUpdate();
             }
             try (PreparedStatement visits = connection.prepareStatement("""
@@ -1565,10 +1567,10 @@ class CoupleHttpIsolationIntegrationTest {
     private static long insertSpecialDateAndVisit(Connection connection, long placeId, long userId, UUID coupleId,
             String label, LocalDate specialDateOn, String recurrence, LocalDate visitedOn) throws Exception {
         try (PreparedStatement dateStatement = connection.prepareStatement("""
-                insert into special_dates(special_date, label, recurrence, couple_id)
-                values (?, ?, ?, ?) returning id
+                insert into special_dates(special_date, ends_on, label, recurrence, couple_id)
+                values (?, ?, ?, ?, ?) returning id
                 """)) {
-            dateStatement.setObject(1, specialDateOn); dateStatement.setString(2, label); dateStatement.setString(3, recurrence); dateStatement.setObject(4, coupleId);
+            dateStatement.setObject(1, specialDateOn); dateStatement.setObject(2, specialDateOn); dateStatement.setString(3, label); dateStatement.setString(4, recurrence); dateStatement.setObject(5, coupleId);
             try (ResultSet result = dateStatement.executeQuery()) {
                 result.next();
             }
@@ -1586,14 +1588,15 @@ class CoupleHttpIsolationIntegrationTest {
     private static long insertOccurrence(Connection connection, long specialDateId, LocalDate occurredOn,
             long authorId, UUID coupleId) throws Exception {
         try (PreparedStatement statement = connection.prepareStatement("""
-                insert into special_date_occurrences(special_date_id, occurred_on, created_by, updated_by, couple_id)
-                values (?, ?, ?, ?, ?) returning id
+                insert into special_date_occurrences(special_date_id, occurred_on, ends_on, created_by, updated_by, couple_id)
+                values (?, ?, ?, ?, ?, ?) returning id
                 """)) {
             statement.setLong(1, specialDateId);
             statement.setObject(2, occurredOn);
-            statement.setLong(3, authorId);
+            statement.setObject(3, occurredOn);
             statement.setLong(4, authorId);
-            statement.setObject(5, coupleId);
+            statement.setLong(5, authorId);
+            statement.setObject(6, coupleId);
             try (ResultSet result = statement.executeQuery()) { result.next(); return result.getLong(1); }
         }
     }
