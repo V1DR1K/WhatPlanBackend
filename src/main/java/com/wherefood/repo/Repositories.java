@@ -141,6 +141,7 @@ public final class Repositories {
           WHERE s.couple_id = e.couple_id AND s.recurrence = 'ONCE'
             AND daterange(s.special_date, s.ends_on, '[]') @> e.occurred_on
             AND (CAST(:specialDateId AS bigint) IS NULL OR s.id = :specialDateId)
+          OFFSET 0
         ) s ON TRUE
         UNION ALL
         SELECT s.id, recurring_window.starts_on,
