@@ -134,10 +134,14 @@ public final class Repositories {
         SELECT s.id AS special_date_id,
           s.special_date AS occurred_on, s.ends_on AS ends_on,
           e.section, e.experience_id, e.image_url
-        FROM experience_events e JOIN special_dates s
-          ON s.couple_id = e.couple_id AND s.recurrence = 'ONCE'
-          AND daterange(s.special_date, s.ends_on, '[]') @> e.occurred_on
-        WHERE CAST(:specialDateId AS bigint) IS NULL OR s.id = :specialDateId
+        FROM experience_events e
+        JOIN LATERAL (
+          SELECT s.id, s.special_date, s.ends_on
+          FROM special_dates s
+          WHERE s.couple_id = e.couple_id AND s.recurrence = 'ONCE'
+            AND daterange(s.special_date, s.ends_on, '[]') @> e.occurred_on
+            AND (CAST(:specialDateId AS bigint) IS NULL OR s.id = :specialDateId)
+        ) s ON TRUE
         UNION ALL
         SELECT s.id, recurring_window.starts_on,
           recurring_window.starts_on + (s.ends_on - s.special_date),

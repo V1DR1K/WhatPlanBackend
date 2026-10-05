@@ -1545,7 +1545,9 @@ class CoupleHttpIsolationIntegrationTest {
             while (removedRows.find()) {
                 maximumJoinFilterRejections = Math.max(maximumJoinFilterRejections, Long.parseLong(removedRows.group(1)));
             }
-            assertThat(maximumJoinFilterRejections).isLessThan(syntheticVisitCount * 20L);
+            assertThat(maximumJoinFilterRejections)
+                    .as("calendar summary query plan:\n%s", planText)
+                    .isLessThan(syntheticVisitCount * 20L);
             System.out.println("C21_CALENDAR_EXPLAIN syntheticCoupleAVisits=" + syntheticVisitCount + "\n" + planText);
         }
     }
