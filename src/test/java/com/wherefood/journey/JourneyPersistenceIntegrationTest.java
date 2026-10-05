@@ -161,6 +161,69 @@ public class JourneyPersistenceIntegrationTest {
     }
 
     @Test
+    void tripCatalogFiltersBeforePaginationAndScopesDestinationsToCouple() {
+        LocalDate today = LocalDate.now(java.time.ZoneId.of("America/Argentina/Buenos_Aires"));
+        Long montevideo = locations.createCity(new CityRequest("Montevideo", "UY")).id();
+        TripDto past = catalogTrip("Buenos Aires pasado", today.minusDays(5), today.minusDays(3), 2L);
+        TripDto current = catalogTrip("Escapada actual", today, today.plusDays(2), 2L);
+        TripDto upcoming = catalogTrip("Montevideo futuro", today.plusDays(20), today.plusDays(23), montevideo);
+
+        assertThat(service.list(0, 20, false, "buenos", null, null, null, null, "starts-desc"))
+                .extracting(TripDto::name)
+                .containsExactly("Buenos Aires pasado");
+        assertThat(service.list(0, 20, false, null, "IN_PROGRESS", null, null, null, null))
+                .extracting(TripDto::id)
+                .containsExactly(current.id());
+        assertThat(service.list(0, 20, false, null, "UPCOMING", 3L, null, null, null))
+                .extracting(TripDto::id)
+                .containsExactly(upcoming.id());
+        assertThat(service.list(0, 20, false, null, null, null, today, today, null))
+                .extracting(TripDto::id)
+                .containsExactly(current.id());
+        assertThat(service.list(0, 20, false, null, null, null, today.plusDays(2), null, null))
+                .extracting(TripDto::id)
+                .containsExactly(upcoming.id(), current.id());
+        assertThat(service.list(0, 1, false, null, null, null, null, null, "name-asc"))
+                .extracting(TripDto::name)
+                .containsExactly("Buenos Aires pasado");
+
+        service.archive(past.id());
+        assertThat(service.list(0, 20, false, null, null, null, null, null, null))
+                .extracting(TripDto::id)
+                .doesNotContain(past.id());
+        assertThat(service.list(0, 20, true, null, null, null, null, null, null))
+                .extracting(TripDto::id)
+                .containsExactly(past.id());
+        assertThat(service.destinations()).extracting(CityDto::id).contains(2L, montevideo);
+
+        CoupleContext.set(UUID.randomUUID());
+        assertThat(service.list(0, 20, null, null, null, null, null, null, null)).isEmpty();
+        assertThat(service.destinations()).isEmpty();
+    }
+
+    private TripDto catalogTrip(String name, LocalDate from, LocalDate to, Long cityId) {
+        return service.saveTrip(
+                null,
+                new TripRequest(
+                        name,
+                        from,
+                        to,
+                        List.of(new StageRequest(null, cityId, from, to))));
+    }
+
+    @Test
+    void tripCatalogRejectsInvertedDateRangeAndUnknownFilters() {
+        assertThatThrownBy(() -> service.list(0, 20, false, null, null, null,
+                DAY.plusDays(2), DAY, null))
+                .isInstanceOf(ResponseStatusException.class)
+                .hasMessageContaining("fecha inicial");
+        assertThatThrownBy(() -> service.list(0, 20, false, null, "UNKNOWN", null,
+                null, null, null))
+                .isInstanceOf(ResponseStatusException.class)
+                .hasMessageContaining("estado de viaje");
+    }
+
+    @Test
     void agendaTypesAndCustomActionsPersistIndependentOfLinkedSource() {
         TripDto t = trip();
         UUID stage = t.stages().getFirst().id();

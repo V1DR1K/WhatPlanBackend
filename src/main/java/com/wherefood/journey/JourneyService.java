@@ -10,6 +10,7 @@ import jakarta.persistence.EntityManager;
 
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Sort;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -123,12 +124,73 @@ public class JourneyService {
     }
 
     public List<TripDto> list(int page, int size) {
+        return list(page, size, null, null, null, null, null, null, null);
+    }
+
+    public List<TripDto> list(
+            int page,
+            int size,
+            Boolean archived,
+            String search,
+            String status,
+            Long destinationId,
+            LocalDate fromDate,
+            LocalDate toDate,
+            String sortBy) {
+        if (fromDate != null && toDate != null && fromDate.isAfter(toDate))
+            throw bad("La fecha inicial no puede ser posterior a la fecha final");
+        if (destinationId != null && destinationId <= 0)
+            throw bad("Elegí un destino válido");
+
+        String normalizedSearch = search == null ? null : search.trim().toLowerCase(Locale.ROOT);
+        if (normalizedSearch != null && normalizedSearch.isEmpty()) normalizedSearch = null;
+        String normalizedStatus = normalizeTripStatus(status);
+        Sort ordering = tripSort(sortBy);
+        LocalDate today = LocalDate.now(ZoneId.of("America/Argentina/Buenos_Aires"));
         return trips
-                .findByCoupleIdOrderByStartsOnDescIdDesc(
-                        couple(), PageRequest.of(Math.max(0, page), Math.clamp(size, 1, 50)))
+                .findFiltered(
+                        couple(),
+                        archived,
+                        normalizedSearch,
+                        destinationId,
+                        fromDate,
+                        toDate,
+                        normalizedStatus,
+                        today,
+                        PageRequest.of(
+                                Math.max(0, page),
+                                Math.clamp(size, 1, 50),
+                                ordering))
                 .stream()
                 .map(this::dto)
                 .toList();
+    }
+
+    private String normalizeTripStatus(String status) {
+        if (status == null || status.isBlank()) return null;
+        return switch (status.trim().toUpperCase(Locale.ROOT).replace('-', '_')) {
+            case "UPCOMING", "IN_PROGRESS", "FINISHED" ->
+                    status.trim().toUpperCase(Locale.ROOT).replace('-', '_');
+            default -> throw bad("Elegí un estado de viaje válido");
+        };
+    }
+
+    private Sort tripSort(String sortBy) {
+        if (sortBy == null || sortBy.isBlank() || sortBy.equalsIgnoreCase("starts-desc"))
+            return Sort.by(Sort.Order.desc("startsOn"), Sort.Order.desc("id"));
+        return switch (sortBy.trim().toLowerCase(Locale.ROOT)) {
+            case "starts-asc" -> Sort.by(Sort.Order.asc("startsOn"), Sort.Order.asc("id"));
+            case "name-asc" -> Sort.by(Sort.Order.asc("name"), Sort.Order.asc("id"));
+            default -> throw bad("Elegí un orden de viajes válido");
+        };
+    }
+
+    public List<CityDto> destinations() {
+        List<Long> cityIds = stages.findByCoupleId(couple()).stream()
+                .map(stage -> stage.cityId)
+                .distinct()
+                .toList();
+        return locations.citiesByIds(cityIds);
     }
 
     private TripDto dto(Journey t) {

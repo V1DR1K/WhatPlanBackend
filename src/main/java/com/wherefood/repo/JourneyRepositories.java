@@ -4,6 +4,7 @@ import com.wherefood.domain.*;
 
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.*;
+import org.springframework.data.repository.query.Param;
 
 import java.util.*;
 
@@ -30,10 +31,49 @@ public final class JourneyRepositories {
         List<Journey> findByCoupleIdAndArchivedFalseOrderByStartsOnDescIdDesc(UUID coupleId);
 
         List<Journey> findByCoupleIdOrderByStartsOnDescIdDesc(UUID coupleId, Pageable pageable);
+
+        @Query("""
+                select j from Journey j
+                where j.coupleId = :coupleId
+                  and (:archived is null or j.archived = :archived)
+                  and (:search is null
+                       or lower(j.name) like concat('%', :search, '%')
+                       or exists (
+                           select s.id from JourneyStage s, Zone z
+                           where s.journeyId = j.id
+                             and s.coupleId = :coupleId
+                             and s.cityId = z.id
+                             and lower(z.name) like concat('%', :search, '%')
+                       ))
+                  and (:destinationId is null or exists (
+                       select s.id from JourneyStage s
+                       where s.journeyId = j.id
+                         and s.coupleId = :coupleId
+                         and s.cityId = :destinationId
+                  ))
+                  and (:fromDate is null or j.endsOn >= :fromDate)
+                  and (:toDate is null or j.startsOn <= :toDate)
+                  and (:status is null
+                       or (:status = 'UPCOMING' and j.startsOn > :today)
+                       or (:status = 'IN_PROGRESS' and j.startsOn <= :today and j.endsOn >= :today)
+                       or (:status = 'FINISHED' and j.endsOn < :today))
+                """)
+        List<Journey> findFiltered(
+                @Param("coupleId") UUID coupleId,
+                @Param("archived") Boolean archived,
+                @Param("search") String search,
+                @Param("destinationId") Long destinationId,
+                @Param("fromDate") java.time.LocalDate fromDate,
+                @Param("toDate") java.time.LocalDate toDate,
+                @Param("status") String status,
+                @Param("today") java.time.LocalDate today,
+                Pageable pageable);
     }
 
     public interface Stages extends Scoped<JourneyStage> {
         List<JourneyStage> findByCoupleIdAndJourneyIdIn(UUID coupleId, List<UUID> journeyIds);
+
+        List<JourneyStage> findByCoupleId(UUID coupleId);
 
         List<JourneyStage> findByJourneyIdAndCoupleId(UUID journeyId, UUID coupleId);
 

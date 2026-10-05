@@ -77,6 +77,16 @@ public class LocationService {
                 .toList();
     }
 
+    public List<CityDto> citiesByIds(Collection<Long> ids) {
+        if (ids.isEmpty()) return List.of();
+        return zones.findAllById(ids).stream()
+                .filter(zone -> zone.active)
+                .sorted(Comparator.comparing((Zone zone) -> zone.name, String.CASE_INSENSITIVE_ORDER)
+                        .thenComparing(zone -> zone.countryCode))
+                .map(zone -> new CityDto(zone.id, zone.name, zone.countryCode))
+                .toList();
+    }
+
     @Transactional
     public CityDto createCity(CityRequest request) {
         String country = request.countryCode().toUpperCase(Locale.ROOT);
