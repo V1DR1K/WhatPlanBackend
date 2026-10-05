@@ -35,8 +35,8 @@ public final class JourneyRepositories {
         @Query("""
                 select j from Journey j
                 where j.coupleId = :coupleId
-                  and (:archived is null or j.archived = :archived)
-                  and (:search is null
+                  and j.archived = coalesce(:archived, j.archived)
+                  and (coalesce(:search, '') = ''
                        or lower(j.name) like concat('%', :search, '%')
                        or exists (
                            select s.id from JourneyStage s, Zone z
@@ -45,18 +45,18 @@ public final class JourneyRepositories {
                              and s.cityId = z.id
                              and lower(z.name) like concat('%', :search, '%')
                        ))
-                  and (:destinationId is null or exists (
+                  and (coalesce(:destinationId, 0L) = 0L or exists (
                        select s.id from JourneyStage s
                        where s.journeyId = j.id
                          and s.coupleId = :coupleId
                          and s.cityId = :destinationId
                   ))
-                  and (:fromDate is null or j.endsOn >= :fromDate)
-                  and (:toDate is null or j.startsOn <= :toDate)
-                  and (:status is null
-                       or (:status = 'UPCOMING' and j.startsOn > :today)
-                       or (:status = 'IN_PROGRESS' and j.startsOn <= :today and j.endsOn >= :today)
-                       or (:status = 'FINISHED' and j.endsOn < :today))
+                  and coalesce(:fromDate, j.endsOn) <= j.endsOn
+                  and j.startsOn <= coalesce(:toDate, j.startsOn)
+                  and (coalesce(:status, '') = ''
+                       or (coalesce(:status, '') = 'UPCOMING' and j.startsOn > :today)
+                       or (coalesce(:status, '') = 'IN_PROGRESS' and j.startsOn <= :today and j.endsOn >= :today)
+                       or (coalesce(:status, '') = 'FINISHED' and j.endsOn < :today))
                 """)
         List<Journey> findFiltered(
                 @Param("coupleId") UUID coupleId,
