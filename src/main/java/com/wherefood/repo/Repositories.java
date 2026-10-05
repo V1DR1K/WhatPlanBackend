@@ -136,7 +136,7 @@ public final class Repositories {
           e.section, e.experience_id, e.image_url
         FROM experience_events e JOIN special_dates s
           ON s.couple_id = e.couple_id AND s.recurrence = 'ONCE'
-          AND e.occurred_on BETWEEN s.special_date AND s.ends_on
+          AND daterange(s.special_date, s.ends_on, '[]') @> e.occurred_on
         WHERE CAST(:specialDateId AS bigint) IS NULL OR s.id = :specialDateId
         UNION ALL
         SELECT s.id, recurring_window.starts_on,

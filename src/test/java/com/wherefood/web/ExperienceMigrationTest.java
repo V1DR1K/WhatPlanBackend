@@ -5,6 +5,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.io.*;
 import java.nio.charset.StandardCharsets;
+import java.util.Locale;
 import org.junit.jupiter.api.Test;
 
 class ExperienceMigrationTest {
@@ -96,8 +97,15 @@ class ExperienceMigrationTest {
   @Test
   void allowsDailySpecialDateRecurrence() throws IOException {
    String sql = migration("V70__allow_daily_special_date_recurrence.sql");
-   assertTrue(sql.contains("drop constraint chk_special_dates_recurrence"));
+   assertTrue(sql.toLowerCase(Locale.ROOT).contains("drop constraint chk_special_dates_recurrence"));
    assertTrue(sql.contains("'ONCE', 'ANNUAL', 'MONTHLY', 'DAILY'"));
+  }
+
+  @Test
+  void indexesOneTimeSpecialDateRangeLookups() throws IOException {
+   String sql = migration("V71__index_one_time_special_date_ranges.sql").toLowerCase(Locale.ROOT);
+   assertTrue(sql.contains("using gist (daterange(special_date, ends_on, '[]'))"));
+   assertTrue(sql.contains("where recurrence = 'once'"));
   }
 
   private static String migration(String name) throws IOException {
