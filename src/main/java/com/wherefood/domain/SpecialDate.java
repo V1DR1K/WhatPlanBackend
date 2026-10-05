@@ -9,6 +9,7 @@ public class SpecialDate extends CoupleScopedEntity {
  @Id @GeneratedValue(strategy = GenerationType.IDENTITY) public Long id;
  @Version public long version;
  @Column(name = "special_date", nullable = false) public LocalDate date;
+ @Column(name = "ends_on", nullable = false) public LocalDate endsOn;
  @Column(nullable = false, length = 160) public String label;
  @Enumerated(EnumType.STRING) @Column(nullable = false, length = 16) public SpecialDateRecurrence recurrence;
  @Column(nullable = false) public Instant createdAt;

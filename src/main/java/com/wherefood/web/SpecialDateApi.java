@@ -11,8 +11,12 @@ import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.server.ResponseStatusException;
 
-record SpecialDateRequest(@NotNull LocalDate date, @NotBlank @Size(max = 160) String label, @NotNull SpecialDateRecurrence recurrence) {}
-record SpecialDateDto(Long id, LocalDate date, String label, SpecialDateRecurrence recurrence, Instant createdAt, Instant updatedAt) {}
+record SpecialDateRequest(@NotNull LocalDate date, LocalDate endsOn, @NotBlank @Size(max = 160) String label, @NotNull SpecialDateRecurrence recurrence) {
+ SpecialDateRequest(LocalDate date, String label, SpecialDateRecurrence recurrence) {
+  this(date, date, label, recurrence);
+ }
+}
+record SpecialDateDto(Long id, LocalDate date, LocalDate endsOn, String label, SpecialDateRecurrence recurrence, Instant createdAt, Instant updatedAt) {}
 
 @RestController
 @RequestMapping("/api/special-dates")
@@ -30,5 +34,5 @@ public class SpecialDateApi {
  }
  @DeleteMapping("/{id}") @ResponseStatus(HttpStatus.NO_CONTENT) void delete(@PathVariable Long id, @AuthenticationPrincipal User actor) { service.delete(id, actor); }
 
- private static SpecialDateDto specialDate(com.wherefood.domain.SpecialDate value) { return new SpecialDateDto(value.id, value.date, value.label, value.recurrence, value.createdAt, value.updatedAt); }
+ private static SpecialDateDto specialDate(com.wherefood.domain.SpecialDate value) { return new SpecialDateDto(value.id, value.date, value.endsOn, value.label, value.recurrence, value.createdAt, value.updatedAt); }
 }

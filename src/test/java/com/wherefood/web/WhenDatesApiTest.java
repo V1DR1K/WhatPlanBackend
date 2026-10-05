@@ -87,13 +87,13 @@ class WhenDatesApiTest {
  void exposesEveryPhotoFromTheMatchingVisitForOnlyTheRequestedDate() {
   SpecialDates specialDates = mock(SpecialDates.class); PlaceVisits visits = mock(PlaceVisits.class); PlacePhotos placePhotos = mock(PlacePhotos.class);
   PlaceVisitPhotos visitPhotos = mock(PlaceVisitPhotos.class);
-  SpecialDate anniversary = new SpecialDate(); anniversary.id = 3L; anniversary.label = "Aniversario"; anniversary.date = LocalDate.of(2020, 2, 14); anniversary.recurrence = SpecialDateRecurrence.ANNUAL;
+  SpecialDate anniversary = new SpecialDate(); anniversary.id = 3L; anniversary.label = "Aniversario"; anniversary.date = LocalDate.of(2020, 2, 14); anniversary.endsOn = anniversary.date; anniversary.recurrence = SpecialDateRecurrence.ANNUAL;
   Place place = new Place(); place.id = 8L; place.name = "La cena"; place.address = "Rosario";
   PlaceVisit visit = new PlaceVisit(); visit.id = 12L; visit.place = place; visit.visitedOn = LocalDate.of(2026, 2, 14);
   PlaceVisitPhoto first = new PlaceVisitPhoto(); first.id = 24L; first.width = 1200; first.height = 800;
   PlaceVisitPhoto second = new PlaceVisitPhoto(); second.id = 25L; second.width = 800; second.height = 1200;
   when(specialDates.findByIdAndCoupleId(3L, null)).thenReturn(Optional.of(anniversary));
-  when(visits.findByCoupleIdAndVisitedOnOrderByVisitedOnDescIdDesc(null, visit.visitedOn)).thenReturn(List.of(visit));
+  when(visits.findByCoupleIdAndVisitedOnBetweenOrderByVisitedOnDescIdDesc(null, visit.visitedOn, visit.visitedOn)).thenReturn(List.of(visit));
   when(placePhotos.findByPlaceIdAndCoupleId(8L, null)).thenReturn(Optional.empty());
   when(visitPhotos.findByVisitIdAndCoupleIdOrderByPositionAscIdAsc(12L, null)).thenReturn(List.of(first, second));
 
@@ -102,13 +102,13 @@ class WhenDatesApiTest {
   assertEquals(2, entry.sourcePhotos().size());
   assertEquals("/place-visit-photos/24", entry.sourcePhotos().getFirst().url());
   assertEquals("/place-visit-photos/25?thumbnail=true", entry.sourcePhotos().get(1).thumbnailUrl());
-  verify(visits).findByCoupleIdAndVisitedOnOrderByVisitedOnDescIdDesc(null, visit.visitedOn);
+  verify(visits).findByCoupleIdAndVisitedOnBetweenOrderByVisitedOnDescIdDesc(null, visit.visitedOn, visit.visitedOn);
  }
 
  @Test
  void versionsMutableFilmPhotoUrlsInTimelineAndSourcePhotos() {
   SpecialDates specialDates = mock(SpecialDates.class);
-  SpecialDate specialDate = new SpecialDate(); specialDate.id = 3L; specialDate.label = "Aniversario"; specialDate.date = LocalDate.of(2020, 2, 14); specialDate.recurrence = SpecialDateRecurrence.ANNUAL;
+  SpecialDate specialDate = new SpecialDate(); specialDate.id = 3L; specialDate.label = "Aniversario"; specialDate.date = LocalDate.of(2020, 2, 14); specialDate.endsOn = specialDate.date; specialDate.recurrence = SpecialDateRecurrence.ANNUAL;
   LocalDate watchedOn = LocalDate.of(2026, 2, 14);
   Film film = new Film(); film.id = 20L; film.title = "Película privada";
   FilmView view = new FilmView(); view.id = 21L; view.film = film; view.watchedOn = watchedOn;
@@ -117,7 +117,7 @@ class WhenDatesApiTest {
   SpecialDateOccurrences occurrences = mock(SpecialDateOccurrences.class);
   when(specialDates.findByIdAndCoupleId(3L, null)).thenReturn(Optional.of(specialDate));
   when(occurrences.findBySpecialDateIdAndOccurredOnAndCoupleId(3L, watchedOn, null)).thenReturn(Optional.empty());
-  when(filmViews.findByCoupleIdAndWatchedOnOrderByWatchedOnDescIdDesc(null, watchedOn)).thenReturn(List.of(view));
+  when(filmViews.findByCoupleIdAndWatchedOnBetweenOrderByWatchedOnDescIdDesc(null, watchedOn, watchedOn)).thenReturn(List.of(view));
   when(filmPhotos.findByFilmIdAndCoupleId(20L, null)).thenReturn(Optional.of(photo));
   WhenDatesApi api = new WhenDatesApi(specialDates, occurrences, mock(SpecialDateOccurrenceComments.class), mock(SpecialDateOccurrencePhotos.class), mock(PlaceVisits.class), filmViews, mock(Cookings.class), mock(WhyFunVisits.class), mock(PlacePhotos.class), mock(PlaceVisitPhotos.class), filmPhotos, mock(RecipePhotos.class), mock(WhyFunVenuePhotos.class), mock(WhyFunVisitPhotos.class), mock(PhotoStorage.class), mock(CoupleMembers.class));
 

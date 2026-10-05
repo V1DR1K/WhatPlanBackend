@@ -10,6 +10,7 @@ public class SpecialDateOccurrence extends LocatedExperience {
  @Version public long version;
  @ManyToOne(fetch = FetchType.LAZY) @JoinColumn(name = "special_date_id", nullable = false) public SpecialDate specialDate;
  @Column(name = "occurred_on", nullable = false) public LocalDate occurredOn;
+ @Column(name = "ends_on", nullable = false) public LocalDate endsOn;
  @Column(name = "cover_photo_id") public Long coverPhotoId;
  @ManyToOne(fetch = FetchType.LAZY) @JoinColumn(name = "created_by", nullable = false) public User createdBy;
  @ManyToOne(fetch = FetchType.LAZY) @JoinColumn(name = "updated_by", nullable = false) public User updatedBy;

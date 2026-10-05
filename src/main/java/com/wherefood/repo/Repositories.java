@@ -17,6 +17,7 @@ public final class Repositories {
   String getLabel();
   String getRecurrence();
   LocalDate getOccurredOn();
+  LocalDate getEndsOn();
   Long getExperienceCount();
   String getImageUrl();
  }
@@ -130,9 +131,12 @@ public final class Repositories {
         WHERE v.couple_id = :coupleId AND v.scheduled_at <= :today
           AND (CAST(:zoneId AS bigint) IS NULL OR v.city_id = CAST(:zoneId AS bigint))
       ), event_rows AS (
-        SELECT s.id AS special_date_id, e.occurred_on, e.section, e.experience_id, e.image_url
+        SELECT s.id AS special_date_id,
+          CASE WHEN s.recurrence = 'ONCE' THEN s.special_date ELSE e.occurred_on END AS occurred_on,
+          e.section, e.experience_id, e.image_url
         FROM experience_events e JOIN special_dates s
-          ON s.couple_id = e.couple_id AND s.recurrence = 'ONCE' AND s.special_date = e.occurred_on
+          ON s.couple_id = e.couple_id AND s.recurrence = 'ONCE'
+          AND e.occurred_on BETWEEN s.special_date AND s.ends_on
         WHERE CAST(:specialDateId AS bigint) IS NULL OR s.id = :specialDateId
         UNION ALL
         SELECT s.id, e.occurred_on, e.section, e.experience_id, e.image_url
@@ -164,6 +168,7 @@ public final class Repositories {
       )
       SELECT s.id AS special_date_id, s.label AS label, COALESCE(s.recurrence, 'ONCE') AS recurrence,
         k.occurred_on AS occurred_on, COALESCE(es.experience_count, 0) AS experience_count,
+        COALESCE(o.ends_on, CASE WHEN s.recurrence = 'ONCE' THEN s.ends_on ELSE k.occurred_on END) AS ends_on,
         CASE WHEN o.cover_photo_id IS NOT NULL THEN '/when-dates/photos/' || o.cover_photo_id || '?thumbnail=true'
              ELSE es.image_url END AS image_url
       FROM summary_keys k
@@ -184,6 +189,8 @@ public final class Repositories {
   public interface SpecialDateOccurrences extends CoupleScopedRepository<SpecialDateOccurrence> {
      @EntityGraph(attributePaths = {"specialDate", "createdBy", "updatedBy"}) Optional<SpecialDateOccurrence> findBySpecialDateIdAndOccurredOnAndCoupleId(Long specialDateId, LocalDate occurredOn, java.util.UUID coupleId);
      @EntityGraph(attributePaths = {"specialDate", "createdBy", "updatedBy"}) Optional<SpecialDateOccurrence> findDetailedBySpecialDateIdAndOccurredOnAndCoupleId(Long specialDateId, LocalDate occurredOn, java.util.UUID coupleId);
+     @EntityGraph(attributePaths = {"specialDate", "createdBy", "updatedBy"}) Optional<SpecialDateOccurrence> findFirstBySpecialDateIdAndOccurredOnLessThanEqualAndEndsOnGreaterThanEqualAndCoupleId(Long specialDateId, LocalDate occurredOn, LocalDate sameDay, java.util.UUID coupleId);
+     @EntityGraph(attributePaths = {"specialDate", "createdBy", "updatedBy"}) Optional<SpecialDateOccurrence> findDetailedBySpecialDateIdAndOccurredOnLessThanEqualAndEndsOnGreaterThanEqualAndCoupleId(Long specialDateId, LocalDate occurredOn, LocalDate sameDay, java.util.UUID coupleId);
      @EntityGraph(attributePaths = {"specialDate", "createdBy", "updatedBy"}) Optional<SpecialDateOccurrence> findDetailedByIdAndCoupleId(Long id, java.util.UUID coupleId);
      @EntityGraph(attributePaths = {"specialDate", "createdBy", "updatedBy"}) List<SpecialDateOccurrence> findBySpecialDateIdInAndOccurredOnBetweenAndCoupleId(Collection<Long> specialDateIds, LocalDate from, LocalDate to, java.util.UUID coupleId);
       @EntityGraph(attributePaths = {"specialDate", "createdBy", "updatedBy"}) List<SpecialDateOccurrence> findAllByCoupleIdOrderByOccurredOnDescIdDesc(java.util.UUID coupleId);
@@ -338,6 +345,7 @@ public final class Repositories {
         @Query("select v from PlaceVisit v where v.id in :ids and v.place.id = :placeId and v.coupleId = :coupleId")
         List<PlaceVisit> findAllByIdInAndPlaceIdAndCoupleId(@Param("ids") Collection<Long> ids, @Param("placeId") Long placeId, @Param("coupleId") java.util.UUID coupleId);
       @EntityGraph(attributePaths = {"place", "createdBy", "updatedBy"}) List<PlaceVisit> findByCoupleIdAndVisitedOnOrderByVisitedOnDescIdDesc(java.util.UUID coupleId, LocalDate visitedOn);
+      @EntityGraph(attributePaths = {"place", "createdBy", "updatedBy"}) List<PlaceVisit> findByCoupleIdAndVisitedOnBetweenOrderByVisitedOnDescIdDesc(java.util.UUID coupleId, LocalDate from, LocalDate to);
        @EntityGraph(attributePaths = {"place", "createdBy", "updatedBy"}) Optional<PlaceVisit> findByPlaceIdAndVisitedOnAndCoupleId(Long placeId, LocalDate visitedOn, java.util.UUID coupleId);
       boolean existsByPlaceIdAndCoupleId(Long placeId, java.util.UUID coupleId);
     @EntityGraph(attributePaths = {"place", "createdBy", "updatedBy"}) Optional<PlaceVisit> findDetailedByIdAndCoupleId(Long id, java.util.UUID coupleId);
@@ -487,6 +495,7 @@ public final class Repositories {
        @EntityGraph(attributePaths = {"film", "createdBy", "updatedBy"}) List<FilmView> findAllByCoupleId(java.util.UUID coupleId);
        @EntityGraph(attributePaths = {"createdBy", "updatedBy"}) List<FilmView> findByFilmIdAndCoupleIdOrderByWatchedOnDescIdDesc(Long filmId, java.util.UUID coupleId);
        @EntityGraph(attributePaths = {"film", "film.platform", "film.genres", "createdBy", "updatedBy"}) List<FilmView> findByCoupleIdAndWatchedOnOrderByWatchedOnDescIdDesc(java.util.UUID coupleId, LocalDate watchedOn);
+       @EntityGraph(attributePaths = {"film", "film.platform", "film.genres", "createdBy", "updatedBy"}) List<FilmView> findByCoupleIdAndWatchedOnBetweenOrderByWatchedOnDescIdDesc(java.util.UUID coupleId, LocalDate from, LocalDate to);
       @EntityGraph(attributePaths = {"createdBy", "updatedBy"}) Optional<FilmView> findByIdAndFilmIdAndCoupleId(Long id, Long filmId, java.util.UUID coupleId);
       Optional<FilmView> findByFilmIdAndWatchedOnAndCoupleId(Long filmId, LocalDate watchedOn, java.util.UUID coupleId);
    }
@@ -646,6 +655,7 @@ public final class Repositories {
     List<WhyFunVisit> findAllByIdInAndVenueIdAndCoupleId(Collection<Long> ids, Long venueId, java.util.UUID coupleId);
     @EntityGraph(attributePaths = {"venue", "venue.category", "venue.subcategory", "venue.createdBy", "venue.updatedBy", "venue.schedules", "createdBy", "updatedBy"}) Optional<WhyFunVisit> findDetailedByIdAndCoupleId(Long id, java.util.UUID coupleId);
    @EntityGraph(attributePaths = {"venue", "venue.category", "venue.subcategory", "venue.createdBy", "venue.updatedBy", "venue.schedules", "createdBy", "updatedBy"}) List<WhyFunVisit> findByCoupleIdAndScheduledAtOrderByScheduledAtDescIdDesc(java.util.UUID coupleId, LocalDate scheduledAt);
+   @EntityGraph(attributePaths = {"venue", "venue.category", "venue.subcategory", "venue.createdBy", "venue.updatedBy", "venue.schedules", "createdBy", "updatedBy"}) List<WhyFunVisit> findByCoupleIdAndScheduledAtBetweenOrderByScheduledAtDescIdDesc(java.util.UUID coupleId, LocalDate from, LocalDate to);
      @Query("select v.venue.id as activityId, count(v) as visitCount from WhyFunVisit v where v.venue.id in :activityIds and v.coupleId=:coupleId group by v.venue.id") List<ActivityVisitCount> countsByActivityIdInAndCoupleId(@Param("activityIds") Collection<Long> activityIds, @Param("coupleId") java.util.UUID coupleId);
    }
 
@@ -740,6 +750,7 @@ public final class Repositories {
     @Query("select c from Cooking c where c.id in :ids and c.coupleId = :coupleId")
     List<Cooking> findAllByIdInAndCoupleId(@Param("ids") Collection<Long> ids, @Param("coupleId") java.util.UUID coupleId);
      @EntityGraph(attributePaths = {"recipe", "recipe.ingredients", "recipe.steps", "createdBy", "updatedBy"}) List<Cooking> findByCoupleIdAndCookedOnOrderByCookedOnDescIdDesc(java.util.UUID coupleId, LocalDate cookedOn);
+     @EntityGraph(attributePaths = {"recipe", "recipe.ingredients", "recipe.steps", "createdBy", "updatedBy"}) List<Cooking> findByCoupleIdAndCookedOnBetweenOrderByCookedOnDescIdDesc(java.util.UUID coupleId, LocalDate from, LocalDate to);
      @EntityGraph(attributePaths = {"recipe", "recipe.ingredients", "recipe.steps", "createdBy", "updatedBy"}) Optional<Cooking> findDetailedByIdAndCoupleId(Long id, java.util.UUID coupleId);
      boolean existsByRecipeIdAndCoupleId(Long recipeId, java.util.UUID coupleId);
      @Query("select c.recipe.id as recipeId, count(c) as cookingCount from Cooking c where c.recipe.id in :recipeIds and c.coupleId=:coupleId group by c.recipe.id") List<RecipeCookingCount> cookingCountsByRecipeIdInAndCoupleId(@Param("recipeIds") Collection<Long> recipeIds, @Param("coupleId") java.util.UUID coupleId);

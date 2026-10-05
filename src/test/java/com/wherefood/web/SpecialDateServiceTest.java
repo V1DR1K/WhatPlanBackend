@@ -2,6 +2,7 @@ package com.wherefood.web;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -49,6 +50,36 @@ class SpecialDateServiceTest {
                         com.wherefood.domain.SpecialDateRecurrence.ANNUAL), user()));
 
         assertEquals(HttpStatus.NOT_FOUND, error.getStatusCode());
+        verify(dates, never()).save(org.mockito.ArgumentMatchers.any());
+    }
+
+    @Test
+    void create_persistsInclusiveOneOffDateRange() {
+        when(dates.save(org.mockito.ArgumentMatchers.any())).thenAnswer(invocation -> invocation.getArgument(0));
+        LocalDate from = LocalDate.of(2026, 10, 10);
+        LocalDate to = LocalDate.of(2026, 10, 12);
+
+        var saved = service.create(new SpecialDateRequest(from, to, "Viaje",
+                com.wherefood.domain.SpecialDateRecurrence.ONCE), user());
+
+        assertEquals(from, saved.date);
+        assertEquals(to, saved.endsOn);
+        assertNotNull(saved.createdAt);
+    }
+
+    @Test
+    void create_rejectsInvertedAndRecurringRangesWithoutSaving() {
+        LocalDate from = LocalDate.of(2026, 10, 12);
+        LocalDate to = LocalDate.of(2026, 10, 10);
+        ResponseStatusException inverted = assertThrows(ResponseStatusException.class,
+                () -> service.create(new SpecialDateRequest(from, to, "Viaje",
+                        com.wherefood.domain.SpecialDateRecurrence.ONCE), user()));
+        ResponseStatusException recurring = assertThrows(ResponseStatusException.class,
+                () -> service.create(new SpecialDateRequest(from, from.plusDays(2), "Viaje",
+                        com.wherefood.domain.SpecialDateRecurrence.ANNUAL), user()));
+
+        assertEquals(HttpStatus.BAD_REQUEST, inverted.getStatusCode());
+        assertEquals(HttpStatus.BAD_REQUEST, recurring.getStatusCode());
         verify(dates, never()).save(org.mockito.ArgumentMatchers.any());
     }
 

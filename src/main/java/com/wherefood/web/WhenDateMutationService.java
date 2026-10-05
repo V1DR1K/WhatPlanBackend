@@ -76,8 +76,7 @@ public class WhenDateMutationService {
     @Transactional
     public void deleteComment(Long specialDateId, LocalDate date, User actor) {
         requireMember(actor);
-        SpecialDateOccurrence occurrence = occurrences
-                .findDetailedBySpecialDateIdAndOccurredOnAndCoupleId(specialDateId, date, CoupleContext.current())
+        SpecialDateOccurrence occurrence = findOccurrenceOn(specialDateId, date)
                 .orElseThrow(() -> notFound("Recuerdo"));
         comments.findByOccurrenceIdAndAuthorIdAndCoupleId(occurrence.id, actor.id, CoupleContext.current()).ifPresent(comments::delete);
         touch(occurrence, actor);
@@ -135,14 +134,28 @@ public class WhenDateMutationService {
     private SpecialDateOccurrence ensureOccurrence(SpecialDate date, LocalDate occurredOn, User actor, boolean allowFuture) {
         SpecialDate lockedDate = specialDates.findLockedByIdAndCoupleId(date.id, CoupleContext.current())
                 .orElseThrow(() -> notFound("Fecha especial"));
+        var existingRange = occurrences
+                .findDetailedBySpecialDateIdAndOccurredOnLessThanEqualAndEndsOnGreaterThanEqualAndCoupleId(
+                        lockedDate.id, occurredOn, occurredOn, CoupleContext.current());
+        if (existingRange.isPresent()) {
+            if (!allowFuture && occurredOn.isAfter(RosarioClock.today()))
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                        "La fecha todavía no ocurrió");
+            return existingRange.get();
+        }
         validateOccurrence(lockedDate, occurredOn, allowFuture);
         return occurrences.findDetailedBySpecialDateIdAndOccurredOnAndCoupleId(lockedDate.id, occurredOn, CoupleContext.current())
                 .orElseGet(() -> {
                     SpecialDateOccurrence value = new SpecialDateOccurrence();
                     value.specialDate = lockedDate;
-                    value.occurredOn = occurredOn;
+                    boolean oneOff = lockedDate.recurrence == null
+                            || lockedDate.recurrence == com.wherefood.domain.SpecialDateRecurrence.ONCE;
+                    value.occurredOn = oneOff ? lockedDate.date : occurredOn;
+                    value.endsOn = oneOff
+                            ? (lockedDate.endsOn == null ? lockedDate.date : lockedDate.endsOn)
+                            : occurredOn;
                     value.cityId = 1L;
-                    if (journey != null) journey.locateNew(value, null, null, null, occurredOn);
+                    if (journey != null) journey.locateNew(value, null, null, null, value.occurredOn);
                     value.createdBy = value.updatedBy = actor;
                     value.createdAt = value.updatedAt = Instant.now();
                     return occurrences.save(value);
@@ -168,6 +181,11 @@ public class WhenDateMutationService {
                 .orElseThrow(() -> notFound("Recuerdo"));
     }
 
+    private java.util.Optional<SpecialDateOccurrence> findOccurrenceOn(Long specialDateId, LocalDate date) {
+        return occurrences.findDetailedBySpecialDateIdAndOccurredOnLessThanEqualAndEndsOnGreaterThanEqualAndCoupleId(
+                specialDateId, date, date, CoupleContext.current());
+    }
+
     private void requireMember(User actor) { authorization.requireActiveMember(actor); }
 
     private void touch(SpecialDateOccurrence occurrence, User actor) {
@@ -180,7 +198,8 @@ public class WhenDateMutationService {
         if (!allowFuture && occurredOn.isAfter(RosarioClock.today())) throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
                 "La fecha todavía no ocurrió");
         boolean matches = switch (date.recurrence == null ? com.wherefood.domain.SpecialDateRecurrence.ONCE : date.recurrence) {
-            case ONCE -> date.date.equals(occurredOn);
+            case ONCE -> !occurredOn.isBefore(date.date)
+                    && !occurredOn.isAfter(date.endsOn == null ? date.date : date.endsOn);
             case ANNUAL -> date.date.getMonthValue() == occurredOn.getMonthValue()
                     && date.date.getDayOfMonth() == occurredOn.getDayOfMonth();
             case MONTHLY -> date.date.getDayOfMonth() == occurredOn.getDayOfMonth();

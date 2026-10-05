@@ -16,13 +16,13 @@ import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 import org.springframework.web.server.ResponseStatusException;
 
-record WhenDateLabelDto(Long id, String label, SpecialDateRecurrence recurrence) {}
+record WhenDateLabelDto(Long id, String label, SpecialDateRecurrence recurrence, LocalDate date, LocalDate endsOn) {}
 record WhenDateSourcePhotoDto(String id, String url, String thumbnailUrl, int width, int height) {}
 record WhenDateEntryDto(String id, String section, Long entityId, Long experienceId, LocalDate date, String title, String detail, String imageUrl, String href, List<WhenDateLabelDto> specialDates, List<WhenDateSourcePhotoDto> sourcePhotos, Map<Long, String> occurrenceCoverUrls) {}
-record WhenDateOccurrenceSummaryDto(WhenDateLabelDto specialDate, LocalDate occurredOn, int experienceCount, String imageUrl) {}
+record WhenDateOccurrenceSummaryDto(WhenDateLabelDto specialDate, LocalDate occurredOn, LocalDate endsOn, int experienceCount, String imageUrl) {}
 record SpecialDateOccurrencePhotoDto(Long id, String url, String thumbnailUrl, int width, int height, int position, String createdBy, Instant createdAt) {}
 record SpecialDateOccurrenceCommentDto(Long id, String author, String updatedBy, String comment, Instant createdAt, Instant updatedAt) {}
-record WhenDateOccurrenceDto(Long id, WhenDateLabelDto specialDate, LocalDate occurredOn, List<WhenDateEntryDto> entries, List<SpecialDateOccurrencePhotoDto> photos, SpecialDateOccurrencePhotoDto coverPhoto, List<SpecialDateOccurrenceCommentDto> comments, String createdBy, String updatedBy, Instant createdAt, Instant updatedAt, Long cityId, UUID stageId) {}
+record WhenDateOccurrenceDto(Long id, WhenDateLabelDto specialDate, LocalDate occurredOn, LocalDate endsOn, List<WhenDateEntryDto> entries, List<SpecialDateOccurrencePhotoDto> photos, SpecialDateOccurrencePhotoDto coverPhoto, List<SpecialDateOccurrenceCommentDto> comments, String createdBy, String updatedBy, Instant createdAt, Instant updatedAt, Long cityId, UUID stageId) {}
 record WhenDateCommentRequest(@NotBlank @Size(max = 2000) String comment) {}
 
 @RestController
@@ -67,8 +67,8 @@ public class WhenDatesApi {
            ? specialDates.findSummaryPageByCoupleId(CoupleContext.current(), specialDateId, RosarioClock.today(), limit + 1, offset)
            : specialDates.findSummaryPageByCoupleId(CoupleContext.current(), specialDateId, zoneId, RosarioClock.today(), limit + 1, offset);
    List<WhenDateOccurrenceSummaryDto> content = page.stream().limit(limit).map(value -> new WhenDateOccurrenceSummaryDto(
-           new WhenDateLabelDto(value.getSpecialDateId(), value.getLabel(), SpecialDateRecurrence.valueOf(value.getRecurrence())),
-           value.getOccurredOn(), Math.toIntExact(value.getExperienceCount()), value.getImageUrl())).toList();
+           new WhenDateLabelDto(value.getSpecialDateId(), value.getLabel(), SpecialDateRecurrence.valueOf(value.getRecurrence()), value.getOccurredOn(), value.getEndsOn()),
+           value.getOccurredOn(), value.getEndsOn(), Math.toIntExact(value.getExperienceCount()), value.getImageUrl())).toList();
    Long nextCursor = page.size() > limit && offset + limit <= MAX_SUMMARY_OFFSET ? offset + limit : null;
    return new Slice<>(content, nextCursor);
   }
@@ -78,8 +78,13 @@ public class WhenDatesApi {
   }
 
  @GetMapping("/special-dates/{specialDateId}/occurrences/{occurredOn}") @Transactional(readOnly = true) WhenDateOccurrenceDto occurrence(@PathVariable Long specialDateId, @PathVariable LocalDate occurredOn, @RequestParam(required = false) Long zoneId) {
-  SpecialDate specialDate = specialDate(specialDateId); validateOccurrence(specialDate, occurredOn);
-  return occurrenceDto(specialDate, occurredOn, occurrences.findBySpecialDateIdAndOccurredOnAndCoupleId(specialDateId, occurredOn, CoupleContext.current()).orElse(null), zoneId);
+  SpecialDate specialDate = specialDate(specialDateId);
+  SpecialDateOccurrence value = occurrences.findDetailedBySpecialDateIdAndOccurredOnLessThanEqualAndEndsOnGreaterThanEqualAndCoupleId(specialDateId, occurredOn, occurredOn, CoupleContext.current()).orElse(null);
+  if (value == null) {
+   validateOccurrence(specialDate, occurredOn);
+   value = occurrences.findDetailedBySpecialDateIdAndOccurredOnAndCoupleId(specialDateId, occurredOn, CoupleContext.current()).orElse(null);
+  }
+  return occurrenceDto(specialDate, value == null ? occurredOn : value.occurredOn, value, zoneId);
  }
   WhenDateOccurrenceDto occurrence(Long specialDateId, LocalDate occurredOn) {
    return occurrence(specialDateId, occurredOn, null);
@@ -123,13 +128,13 @@ public class WhenDatesApi {
   }
 
   private List<WhenDateEntryDto> entries(LocalDate from, LocalDate to, Long requestedSpecialDateId, Long zoneId) {
-  if (from == null || !from.equals(to)) return List.of();
+  if (from == null || to == null || from.isAfter(to)) return List.of();
   List<SpecialDate> dates = specialDates.findByIdAndCoupleId(requestedSpecialDateId, CoupleContext.current()).map(List::of).orElseGet(List::of);
   LocalDate today = RosarioClock.today(); List<WhenDateEntryDto> result = new ArrayList<>();
-    for (PlaceVisit visit : placeVisits.findByCoupleIdAndVisitedOnOrderByVisitedOnDescIdDesc(CoupleContext.current(), from)) if (zoneId == null || zoneId.equals(visit.cityId)) add(result, "FOOD", visit.id, visit.place.id, visit.visitedOn, visit.place.name, visit.place.address, placeImage(visit), "/food/places/" + visit.place.id, dates, from, to, today, placeSourcePhotos(visit));
-    for (FilmView view : filmViews.findByCoupleIdAndWatchedOnOrderByWatchedOnDescIdDesc(CoupleContext.current(), from)) add(result, "FILM", view.id, view.film.id, view.watchedOn, view.film.title, view.film.platform == null ? "Película vista" : view.film.platform.icon + " " + view.film.platform.name, filmImage(view.film), "/films/" + view.film.id, dates, from, to, today, filmSourcePhotos(view.film));
-    for (Cooking cooking : cookings.findByCoupleIdAndCookedOnOrderByCookedOnDescIdDesc(CoupleContext.current(), from)) add(result, "COOK", cooking.id, cooking.recipe.id, cooking.cookedOn, cooking.recipe.name, homeLabel(cooking.home), recipeImage(cooking.recipe), "/how-cook/" + cooking.recipe.id, dates, from, to, today, recipeSourcePhotos(cooking.recipe));
-    for (WhyFunVisit visit : funVisits.findByCoupleIdAndScheduledAtOrderByScheduledAtDescIdDesc(CoupleContext.current(), from)) if (zoneId == null || zoneId.equals(visit.cityId)) add(result, "FUN", visit.id, visit.venue.id, visit.scheduledAt, visit.venue.name, visit.venue.address, funImage(visit), "/why-fun/" + visit.venue.id, dates, from, to, today, funSourcePhotos(visit));
+    for (PlaceVisit visit : placeVisits.findByCoupleIdAndVisitedOnBetweenOrderByVisitedOnDescIdDesc(CoupleContext.current(), from, to)) if (zoneId == null || zoneId.equals(visit.cityId)) add(result, "FOOD", visit.id, visit.place.id, visit.visitedOn, visit.place.name, visit.place.address, placeImage(visit), "/food/places/" + visit.place.id, dates, from, to, today, placeSourcePhotos(visit));
+    for (FilmView view : filmViews.findByCoupleIdAndWatchedOnBetweenOrderByWatchedOnDescIdDesc(CoupleContext.current(), from, to)) add(result, "FILM", view.id, view.film.id, view.watchedOn, view.film.title, view.film.platform == null ? "Película vista" : view.film.platform.icon + " " + view.film.platform.name, filmImage(view.film), "/films/" + view.film.id, dates, from, to, today, filmSourcePhotos(view.film));
+    for (Cooking cooking : cookings.findByCoupleIdAndCookedOnBetweenOrderByCookedOnDescIdDesc(CoupleContext.current(), from, to)) add(result, "COOK", cooking.id, cooking.recipe.id, cooking.cookedOn, cooking.recipe.name, homeLabel(cooking.home), recipeImage(cooking.recipe), "/how-cook/" + cooking.recipe.id, dates, from, to, today, recipeSourcePhotos(cooking.recipe));
+    for (WhyFunVisit visit : funVisits.findByCoupleIdAndScheduledAtBetweenOrderByScheduledAtDescIdDesc(CoupleContext.current(), from, to)) if (zoneId == null || zoneId.equals(visit.cityId)) add(result, "FUN", visit.id, visit.venue.id, visit.scheduledAt, visit.venue.name, visit.venue.address, funImage(visit), "/why-fun/" + visit.venue.id, dates, from, to, today, funSourcePhotos(visit));
     Map<String, String> coverUrls = from == null || to == null ? Map.of() : occurrenceCoverUrls(result, from, to);
     return result.stream().map(entry -> entry(entry, coverUrls)).sorted(Comparator.comparing(WhenDateEntryDto::date).reversed().thenComparing(WhenDateEntryDto::section).thenComparing(WhenDateEntryDto::experienceId)).toList();
   }
@@ -143,10 +148,14 @@ public class WhenDatesApi {
   }
 
   private WhenDateOccurrenceDto occurrenceDto(SpecialDate specialDate, LocalDate occurredOn, SpecialDateOccurrence occurrence, Long zoneId) {
-  if (occurrence == null) return new WhenDateOccurrenceDto(null, label(specialDate), occurredOn, entries(occurredOn, occurredOn, specialDate.id, zoneId), List.of(), null, List.of(), null, null, null, null, null, null);
+  if (occurrence == null) {
+   LocalDate from = recurrence(specialDate) == SpecialDateRecurrence.ONCE ? specialDate.date : occurredOn;
+   LocalDate to = recurrence(specialDate) == SpecialDateRecurrence.ONCE ? specialDate.endsOn : occurredOn;
+   return new WhenDateOccurrenceDto(null, label(specialDate), from, to, entries(from, to, specialDate.id, zoneId), List.of(), null, List.of(), null, null, null, null, null, null);
+  }
   List<SpecialDateOccurrencePhotoDto> occurrencePhotos = photos.findByOccurrenceIdAndCoupleIdOrderByPositionAscIdAsc(occurrence.id, CoupleContext.current()).stream().map(WhenDatesApi::photo).toList(); SpecialDateOccurrencePhotoDto cover = occurrencePhotos.stream().filter(value -> value.id().equals(occurrence.coverPhotoId)).findFirst().orElse(null);
   List<SpecialDateOccurrenceCommentDto> occurrenceComments = comments.findByOccurrenceIdAndCoupleIdOrderByAuthorUsername(occurrence.id, CoupleContext.current()).stream().map(WhenDatesApi::comment).toList();
-  return new WhenDateOccurrenceDto(occurrence.id, label(specialDate), occurredOn, entries(occurredOn, occurredOn, specialDate.id, zoneId), occurrencePhotos, cover, occurrenceComments, occurrence.createdBy.username, occurrence.updatedBy.username, occurrence.createdAt, occurrence.updatedAt, occurrence.cityId, occurrence.stageId);
+  return new WhenDateOccurrenceDto(occurrence.id, label(specialDate), occurrence.occurredOn, occurrence.endsOn, entries(occurrence.occurredOn, occurrence.endsOn, specialDate.id, zoneId), occurrencePhotos, cover, occurrenceComments, occurrence.createdBy.username, occurrence.updatedBy.username, occurrence.createdAt, occurrence.updatedAt, occurrence.cityId, occurrence.stageId);
   }
 
   private Map<String, String> occurrenceCoverUrls(List<WhenDateEntryDto> entries, LocalDate from, LocalDate to) {
@@ -165,7 +174,7 @@ public class WhenDatesApi {
    return coupleMembers.findByCoupleIdAndStatusOrderBySlot(coupleId, CoupleMemberStatus.ACTIVE).stream().skip(index).findFirst().map(value -> value.displayName).orElse("Integrante");
   }
  private void validateOccurrence(SpecialDate specialDate, LocalDate occurredOn) {  if (!matches(specialDate, occurredOn)) throw badRequest("La fecha no coincide con esta fecha especial"); }
-  private static boolean matches(SpecialDate specialDate, LocalDate date) { if (specialDate.date == null) return false; return switch (recurrence(specialDate)) { case ONCE -> specialDate.date.equals(date); case ANNUAL -> specialDate.date.getMonthValue() == date.getMonthValue() && specialDate.date.getDayOfMonth() == date.getDayOfMonth(); case MONTHLY -> specialDate.date.getDayOfMonth() == date.getDayOfMonth(); }; }
+  private static boolean matches(SpecialDate specialDate, LocalDate date) { if (specialDate.date == null) return false; return switch (recurrence(specialDate)) { case ONCE -> !date.isBefore(specialDate.date) && !date.isAfter(specialDate.endsOn == null ? specialDate.date : specialDate.endsOn); case ANNUAL -> specialDate.date.getMonthValue() == date.getMonthValue() && specialDate.date.getDayOfMonth() == date.getDayOfMonth(); case MONTHLY -> specialDate.date.getDayOfMonth() == date.getDayOfMonth(); }; }
    private String placeImage(PlaceVisit visit) { if (visit.coverPhotoId != null) return "/place-visit-photos/" + visit.coverPhotoId + "?thumbnail=true"; return placePhotos.findByPlaceIdAndCoupleId(visit.place.id, CoupleContext.current()).map(photo -> versionedPhotoUrl("/places/" + visit.place.id + "/photo", photo.id, true)).orElse(null); }
    private String filmImage(Film film) { return filmPhotos.findByFilmIdAndCoupleId(film.id, CoupleContext.current()).map(photo -> versionedPhotoUrl("/films/" + film.id + "/photo", photo.id, true)).orElse(film.posterPath); }
    private String recipeImage(Recipe recipe) { return recipePhotos.findByRecipeIdAndCoupleId(recipe.id, CoupleContext.current()).map(photo -> versionedPhotoUrl("/how-cook/recipes/" + recipe.id + "/photo", photo.id, true)).orElse(null); }
@@ -176,7 +185,7 @@ public class WhenDatesApi {
   static String versionedPhotoUrl(String path, Long photoId, boolean thumbnail) { return path + "?" + (thumbnail ? "thumbnail=true&" : "") + "v=" + photoId; }
   private List<WhenDateSourcePhotoDto> funSourcePhotos(WhyFunVisit visit) { List<WhenDateSourcePhotoDto> result = funVisitPhotos.findByVisitIdAndCoupleIdOrderByPositionAscIdAsc(visit.id, CoupleContext.current()).stream().map(photo -> source("FUN:VISIT:" + photo.id, "/why-fun/activity-visit-photos/" + photo.id, "/why-fun/activity-visit-photos/" + photo.id + "?thumbnail=true", photo.width, photo.height)).toList(); return result.isEmpty() ? funPhotos.findByVenueIdAndCoupleIdOrderByIdAsc(visit.venue.id, CoupleContext.current()).stream().map(photo -> source("FUN:VENUE:" + photo.id, "/why-fun/photos/" + photo.id, "/why-fun/photos/" + photo.id + "?thumbnail=true", photo.width, photo.height)).toList() : result; }
   private static WhenDateSourcePhotoDto source(String id, String url, String thumbnailUrl, int width, int height) { return new WhenDateSourcePhotoDto(id, url, thumbnailUrl, width, height); }
-  private static WhenDateLabelDto label(SpecialDate value) { return new WhenDateLabelDto(value.id, value.label, recurrence(value)); }
+  private static WhenDateLabelDto label(SpecialDate value) { return new WhenDateLabelDto(value.id, value.label, recurrence(value), value.date, value.endsOn); }
   private static SpecialDateRecurrence recurrence(SpecialDate value) { return value.recurrence == null ? SpecialDateRecurrence.ONCE : value.recurrence; }
  private static SpecialDateOccurrencePhotoDto photo(SpecialDateOccurrencePhoto value) { return new SpecialDateOccurrencePhotoDto(value.id, "/when-dates/photos/" + value.id, "/when-dates/photos/" + value.id + "?thumbnail=true", value.width, value.height, value.position, value.createdBy.username, value.createdAt); }
  private static SpecialDateOccurrenceCommentDto comment(SpecialDateOccurrenceComment value) { return new SpecialDateOccurrenceCommentDto(value.id, value.author.username, value.updatedBy.username, value.comment, value.createdAt, value.updatedAt); }

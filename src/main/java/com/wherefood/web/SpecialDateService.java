@@ -61,6 +61,14 @@ public class SpecialDateService {
 
     private static void apply(SpecialDate value, SpecialDateRequest request) {
         value.date = request.date();
+        value.endsOn = request.endsOn() == null ? request.date() : request.endsOn();
+        if (value.endsOn.isBefore(value.date))
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "La fecha de fin no puede ser anterior al inicio");
+        if (request.recurrence() != com.wherefood.domain.SpecialDateRecurrence.ONCE
+                && !value.endsOn.equals(value.date))
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "Los rangos solo están disponibles para fechas únicas");
         value.label = request.label().trim();
         value.recurrence = request.recurrence();
     }
