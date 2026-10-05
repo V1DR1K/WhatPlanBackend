@@ -39,7 +39,7 @@ public final class JourneyDtos {
             @NotBlank @Size(max = 160) String name,
             @NotNull LocalDate startsOn,
             @NotNull LocalDate endsOn,
-            @NotEmpty @Size(max = 100) List<@Valid StageRequest> stages,
+            @Size(min = 1, max = 1) List<@Valid StageRequest> stages,
             @Min(1) @Max(100) Integer maxTripPhotos,
             @Min(1) @Max(100) Integer maxDayPhotos) {
         public TripRequest(String name, LocalDate startsOn, LocalDate endsOn,
@@ -248,10 +248,19 @@ public final class JourneyDtos {
     public record DateLinkRequest(
             @NotNull UUID stageId,
             @NotNull LocalDate date,
+            LocalDate endsOn,
             Long specialDateId,
-            @Size(max = 160) String label) {}
+            @Size(max = 160) String label) {
+        public DateLinkRequest(UUID stageId, LocalDate date, Long specialDateId, String label) {
+            this(stageId, date, date, specialDateId, label);
+        }
+    }
 
-    public record LinkedDateDto(Long specialDateId, LocalDate date, String label, UUID stageId) {}
+    public record LinkedDateDto(Long specialDateId, LocalDate date, LocalDate endsOn, String label, UUID stageId) {
+        public LinkedDateDto(Long specialDateId, LocalDate date, String label, UUID stageId) {
+            this(specialDateId, date, date, label, stageId);
+        }
+    }
 
     public record DetailDto(
             TripDto trip,
@@ -275,6 +284,10 @@ public final class JourneyDtos {
     public record JourneyDayEntryDto(
             String id, String section, LocalDate date, String title, String detail,
             String href, List<JourneySourcePhotoDto> photos) {}
+
+    public record JourneyGalleryEntryDto(
+            LocalDate date, String section, String title, String href,
+            List<JourneySourcePhotoDto> photos) {}
 
     public record JourneySourcePhotoDto(
             String id, String url, String thumbnailUrl, int width, int height) {}

@@ -146,7 +146,7 @@ public class JourneySourceRepository {
                     + " as detail, s.id as stage_id from " + section.experiences + " e join "
                     + section.catalog + " c on c.id=e." + section.parent
                     + " and c.couple_id=e.couple_id join journey_stages s on s.journey_id=:journey"
-                    + " and s.couple_id=:couple and :day between s.starts_on and s.ends_on"
+                    + " and s.couple_id=:couple and s.position=0 and :day between s.starts_on and s.ends_on"
                     + " and (e.stage_id=s.id or e.stage_id is null) where e.couple_id=:couple"
                     + " and e." + section.date + "=:day"
                     + ((section == Section.FOOD || section == Section.FUN)
@@ -172,6 +172,18 @@ public class JourneySourceRepository {
                         .thenComparing(JourneyDayEntryDto::title, String.CASE_INSENSITIVE_ORDER)
                         .thenComparing(JourneyDayEntryDto::id))
                 .toList();
+    }
+
+    public List<JourneyGalleryEntryDto> journeyGalleryEntries(UUID journeyId,
+            java.time.LocalDate from, java.time.LocalDate to) {
+        List<JourneyGalleryEntryDto> result = new ArrayList<>();
+        for (java.time.LocalDate day = from; !day.isAfter(to); day = day.plusDays(1)) {
+            for (JourneyDayEntryDto entry : journeyDayEntries(journeyId, day)) {
+                if (!entry.photos().isEmpty()) result.add(new JourneyGalleryEntryDto(
+                        day, entry.section(), entry.title(), entry.href(), entry.photos()));
+            }
+        }
+        return result;
     }
 
     private record ExperienceRow(Long id, String title, String detail) {}
@@ -336,7 +348,7 @@ public class JourneySourceRepository {
 
     public List<LinkedDateDto> dates(UUID journeyId) {
         return jdbc.query(
-                "select o.special_date_id,o.occurred_on,d.label,o.stage_id from"
+                "select o.special_date_id,o.occurred_on,o.ends_on,d.label,o.stage_id from"
                     + " special_date_occurrences o join special_dates d on d.id=o.special_date_id"
                     + " and d.couple_id=o.couple_id join journey_stages s on s.id=o.stage_id and"
                     + " s.couple_id=o.couple_id where s.journey_id=:journey and o.couple_id=:couple"
@@ -346,8 +358,9 @@ public class JourneySourceRepository {
                         new LinkedDateDto(
                                 rs.getLong(1),
                                 rs.getObject(2, java.time.LocalDate.class),
-                                rs.getString(3),
-                                rs.getObject(4, UUID.class)));
+                                rs.getObject(3, java.time.LocalDate.class),
+                                rs.getString(4),
+                                rs.getObject(5, UUID.class)));
     }
 
     public boolean stageHasExperiences(UUID stage) {

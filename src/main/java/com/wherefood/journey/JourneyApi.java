@@ -61,6 +61,11 @@ public class JourneyApi {
         return dayService.days(id);
     }
 
+    @GetMapping("/{id}/gallery")
+    public List<JourneyGalleryEntryDto> gallery(@PathVariable UUID id) {
+        return dayService.gallery(id);
+    }
+
     @GetMapping("/{id}/days/{day}")
     public JourneyDayDto day(@PathVariable UUID id, @PathVariable java.time.LocalDate day) {
         return dayService.day(id, day);

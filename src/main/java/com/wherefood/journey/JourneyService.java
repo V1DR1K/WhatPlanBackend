@@ -187,6 +187,7 @@ public class JourneyService {
 
     public List<CityDto> destinations() {
         List<Long> cityIds = stages.findByCoupleId(couple()).stream()
+                .filter(stage -> stage.position == 0)
                 .map(stage -> stage.cityId)
                 .distinct()
                 .toList();
@@ -209,6 +210,7 @@ public class JourneyService {
                 t.archived,
                 stages.findByJourneyIdAndCoupleId(t.id, couple()).stream()
                         .sorted(Comparator.comparingInt(s -> s.position))
+                        .limit(1)
                         .map(
                                 s -> {
                                     CityDto c = locations.city(s.cityId);
@@ -232,16 +234,12 @@ public class JourneyService {
     public TripDto saveTrip(UUID id, TripRequest request) {
         if (request.endsOn().isBefore(request.startsOn()))
             throw bad("La fecha de fin debe ser igual o posterior al inicio");
-        LocalDate nextStageDate = request.startsOn();
-        for (StageRequest stage : request.stages()) {
-            if (stage.startsOn().isAfter(nextStageDate)
-                    || stage.startsOn().isBefore(nextStageDate.minusDays(1)))
-                throw bad("Los destinos deben cubrir los días del viaje en bloques consecutivos");
-            dates(stage.startsOn(), stage.endsOn(), request.startsOn(), request.endsOn());
-            nextStageDate = stage.endsOn().plusDays(1);
-        }
-        if (!nextStageDate.equals(request.endsOn().plusDays(1)))
-            throw bad("Los destinos deben cubrir todos los días del viaje");
+        if (request.stages().size() != 1)
+            throw bad("Cada viaje debe tener un solo destino");
+        StageRequest requestedStage = request.stages().getFirst();
+        if (!requestedStage.startsOn().equals(request.startsOn())
+                || !requestedStage.endsOn().equals(request.endsOn()))
+            throw bad("El destino debe cubrir todo el período del viaje");
         Journey t = id == null ? new Journey() : trip(id, true);
         if (id != null && journeyDays.findByJourneyIdAndCoupleIdOrderByDay(id, couple()).stream()
                 .anyMatch(day -> day.day.isBefore(request.startsOn())
@@ -275,9 +273,9 @@ public class JourneyService {
         }
         for (JourneyStage old : existing)
             if (!retained.contains(old.id)) {
-                if (hasStageContent(t.id, old.id))
-                    throw conflict("Reubicá el contenido antes de quitar una etapa");
-                stages.delete(old);
+                // Keep contentful legacy stages intact so a single-destination edit does not
+                // detach old experiences. They remain hidden from the current trip interface.
+                if (!hasStageContent(t.id, old.id)) stages.delete(old);
             }
         em.flush();
         return dto(t);
@@ -1142,9 +1140,14 @@ public class JourneyService {
 
     @Transactional
     public LinkedDateDto linkDate(UUID tripId, DateLinkRequest r, User actor) {
-        trip(tripId, true);
+        Journey journey = trip(tripId, true);
         JourneyStage st = stage(tripId, r.stageId());
-        dates(r.date(), r.date(), st.startsOn, st.endsOn);
+        LocalDate rangeEnd = r.endsOn() == null ? r.date() : r.endsOn();
+        dates(r.date(), rangeEnd, journey.startsOn, journey.endsOn);
+        if (!r.date().equals(journey.startsOn) || !rangeEnd.equals(journey.endsOn))
+            throw bad("La fecha importante debe abarcar el período completo del viaje");
+        if (!st.startsOn.equals(journey.startsOn) || !st.endsOn.equals(journey.endsOn))
+            throw bad("La fecha importante debe abarcar el período completo del viaje");
         sources.memberId(actor.id);
         SpecialDate template;
         if (r.specialDateId() != null)
@@ -1159,41 +1162,35 @@ public class JourneyService {
             if (r.label() == null || r.label().isBlank())
                 throw bad("Escribí el nombre de la fecha");
             template = new SpecialDate();
-            template.date = r.date();
+            template.date = journey.startsOn;
+            template.endsOn = journey.endsOn;
             template.label = r.label().trim();
             template.recurrence = SpecialDateRecurrence.ONCE;
             template.createdAt = template.updatedAt = Instant.now();
             dateTemplates.save(template);
             em.flush();
         }
-        boolean matches =
-                switch (template.recurrence) {
-                    case ONCE -> template.date.equals(r.date());
-                    case ANNUAL ->
-                            template.date.getMonthValue() == r.date().getMonthValue()
-                                    && template.date.getDayOfMonth() == r.date().getDayOfMonth();
-                    case MONTHLY -> template.date.getDayOfMonth() == r.date().getDayOfMonth();
-                };
-        if (!matches) throw bad("El día no coincide con la fecha importante");
+        if (template.date == null) throw bad("La fecha importante no tiene una fecha de inicio");
         SpecialDateOccurrence o =
                 dateOccurrences
                         .findDetailedBySpecialDateIdAndOccurredOnAndCoupleId(
-                                template.id, r.date(), couple())
+                                template.id, journey.startsOn, couple())
                         .orElseGet(SpecialDateOccurrence::new);
         if (o.stageId != null && !o.stageId.equals(st.id))
-            throw conflict("Esta fecha ya pertenece a otra etapa; cambiala desde WhenDates");
+            throw conflict("Esta fecha ya está vinculada a otro viaje; cambiala desde WhenDates");
         if (o.id == null) {
             o.specialDate = template;
-            o.occurredOn = r.date();
+            o.occurredOn = journey.startsOn;
             o.createdBy = actor;
             o.createdAt = Instant.now();
         }
+        o.endsOn = journey.endsOn;
         o.cityId = st.cityId;
         o.stageId = st.id;
         o.updatedBy = actor;
         o.updatedAt = Instant.now();
         dateOccurrences.save(o);
-        return new LinkedDateDto(template.id, r.date(), template.label, st.id);
+        return new LinkedDateDto(template.id, journey.startsOn, journey.endsOn, template.label, st.id);
     }
 
     public void validateCatalogCity(String section, Long entity, Long city) {

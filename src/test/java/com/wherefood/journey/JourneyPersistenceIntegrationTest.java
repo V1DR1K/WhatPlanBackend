@@ -470,7 +470,8 @@ public class JourneyPersistenceIntegrationTest {
                 service.linkDate(
                         t.id(),
                         new DateLinkRequest(
-                                t.stages().getFirst().id(), future, null, "Aniversario de viaje"),
+                                t.stages().getFirst().id(), future, future.plusDays(1), null,
+                                "Aniversario de viaje"),
                         actor);
         assertThat(service.detail(t.id()).dates()).contains(d);
         assertThat(
@@ -480,10 +481,9 @@ public class JourneyPersistenceIntegrationTest {
     }
 
     @Test
-    void multipleCountriesAllowStagesSharingTravelDay() {
+    void journeysRejectMultipleDestinations() {
         CityDto city = locations.createCity(new CityRequest("Montevideo", "UY"));
-        var t =
-                service.saveTrip(
+        assertThatThrownBy(() -> service.saveTrip(
                         null,
                         new TripRequest(
                                 "Río de la Plata",
@@ -491,13 +491,9 @@ public class JourneyPersistenceIntegrationTest {
                                 DAY.plusDays(2),
                                 List.of(
                                         new StageRequest(null, 2L, DAY, DAY.plusDays(1)),
-                                        new StageRequest(
-                                                null,
-                                                city.id(),
-                                                DAY.plusDays(1),
-                                                DAY.plusDays(2)))));
-        assertThat(t.stages()).extracting(StageDto::countryCode).containsExactly("AR", "UY");
-        assertThat(t.stages().getFirst().endsOn()).isEqualTo(t.stages().getLast().startsOn());
+                                        new StageRequest(null, city.id(), DAY.plusDays(1), DAY.plusDays(2))))))
+                .isInstanceOf(ResponseStatusException.class)
+                .hasMessageContaining("un solo destino");
     }
 
     @Test

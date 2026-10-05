@@ -42,6 +42,7 @@ public final class JourneyRepositories {
                            select s.id from JourneyStage s, Zone z
                            where s.journeyId = j.id
                              and s.coupleId = :coupleId
+                             and s.position = 0
                              and s.cityId = z.id
                              and lower(z.name) like concat('%', :search, '%')
                        ))
@@ -49,6 +50,7 @@ public final class JourneyRepositories {
                        select s.id from JourneyStage s
                        where s.journeyId = j.id
                          and s.coupleId = :coupleId
+                         and s.position = 0
                          and s.cityId = :destinationId
                   ))
                   and coalesce(:fromDate, j.endsOn) <= j.endsOn

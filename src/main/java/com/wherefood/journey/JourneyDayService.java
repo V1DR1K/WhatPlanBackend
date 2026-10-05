@@ -90,8 +90,8 @@ public class JourneyDayService {
         List<JourneyStage> stages = journeyStages(journeyId);
         List<JourneySpecialDateDto> dateLinks = specialDates
                 .findAllByCoupleIdOrderByDateAscLabelAscIdAsc(couple()).stream()
-                .filter(template -> stages.stream().anyMatch(stage ->
-                        !date.isBefore(stage.startsOn) && !date.isAfter(stage.endsOn)))
+                .filter(template -> stages.stream().anyMatch(stage -> stage.position == 0
+                        && !date.isBefore(stage.startsOn) && !date.isAfter(stage.endsOn)))
                 .filter(template -> matches(template, date))
                 .map(template -> new JourneySpecialDateDto(template.id, template.label,
                         template.recurrence == null ? "ONCE" : template.recurrence.name(),
@@ -109,21 +109,19 @@ public class JourneyDayService {
 
     public List<JourneyDayIndexDto> days(UUID journeyId) {
         Journey journey = trip(journeyId, false);
-        List<JourneyStage> journeyStages = journeyStages(journeyId);
-        Map<UUID, String> destinations = new HashMap<>();
-        journeyStages.forEach(stage -> destinations.put(stage.id, locations.city(stage.cityId).name()));
+        String destination = journeyStages(journeyId).stream()
+                .filter(stage -> stage.position == 0).findFirst()
+                .map(stage -> locations.city(stage.cityId).name()).orElse("");
         List<JourneyDayIndexDto> result = new ArrayList<>();
         for (LocalDate date = journey.startsOn; !date.isAfter(journey.endsOn); date = date.plusDays(1)) {
-            LocalDate currentDate = date;
-            List<String> dayDestinations = journeyStages.stream()
-                    .filter(stage -> !currentDate.isBefore(stage.startsOn)
-                            && !currentDate.isAfter(stage.endsOn))
-                    .map(stage -> destinations.get(stage.id))
-                    .distinct()
-                    .toList();
-            result.add(new JourneyDayIndexDto(date, dayDestinations));
+            result.add(new JourneyDayIndexDto(date, destination.isBlank() ? List.of() : List.of(destination)));
         }
         return result;
+    }
+
+    public List<JourneyGalleryEntryDto> gallery(UUID journeyId) {
+        Journey journey = trip(journeyId, false);
+        return sources.journeyGalleryEntries(journeyId, journey.startsOn, journey.endsOn);
     }
 
     @Transactional
@@ -276,7 +274,8 @@ public class JourneyDayService {
     private static boolean matches(SpecialDate template, LocalDate date) {
         if (template.date == null) return false;
         return switch (template.recurrence == null ? SpecialDateRecurrence.ONCE : template.recurrence) {
-            case ONCE -> template.date.equals(date);
+            case ONCE -> !date.isBefore(template.date)
+                    && !date.isAfter(template.endsOn == null ? template.date : template.endsOn);
             case ANNUAL -> template.date.getMonthValue() == date.getMonthValue()
                     && template.date.getDayOfMonth() == date.getDayOfMonth();
             case MONTHLY -> template.date.getDayOfMonth() == date.getDayOfMonth();
