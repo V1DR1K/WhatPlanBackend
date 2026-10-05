@@ -170,7 +170,7 @@ public class JourneyPersistenceIntegrationTest {
 
         assertThat(service.list(0, 20, false, "buenos", null, null, null, null, "starts-desc"))
                 .extracting(TripDto::name)
-                .containsExactly("Buenos Aires pasado");
+                .containsExactly("Escapada actual", "Buenos Aires pasado");
         assertThat(service.list(0, 20, false, null, "IN_PROGRESS", null, null, null, null))
                 .extracting(TripDto::id)
                 .containsExactly(current.id());
