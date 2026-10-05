@@ -272,14 +272,7 @@ public class JourneyDayService {
     }
 
     private static boolean matches(SpecialDate template, LocalDate date) {
-        if (template.date == null) return false;
-        return switch (template.recurrence == null ? SpecialDateRecurrence.ONCE : template.recurrence) {
-            case ONCE -> !date.isBefore(template.date)
-                    && !date.isAfter(template.endsOn == null ? template.date : template.endsOn);
-            case ANNUAL -> template.date.getMonthValue() == date.getMonthValue()
-                    && template.date.getDayOfMonth() == date.getDayOfMonth();
-            case MONTHLY -> template.date.getDayOfMonth() == date.getDayOfMonth();
-        };
+        return SpecialDateOccurrenceWindow.forDate(template, date).isPresent();
     }
 
     private void pruneEmptyDay(UUID journeyId, LocalDate date) {

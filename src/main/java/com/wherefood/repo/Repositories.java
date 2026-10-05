@@ -132,27 +132,68 @@ public final class Repositories {
           AND (CAST(:zoneId AS bigint) IS NULL OR v.city_id = CAST(:zoneId AS bigint))
       ), event_rows AS (
         SELECT s.id AS special_date_id,
-          CASE WHEN s.recurrence = 'ONCE' THEN s.special_date ELSE e.occurred_on END AS occurred_on,
+          s.special_date AS occurred_on, s.ends_on AS ends_on,
           e.section, e.experience_id, e.image_url
         FROM experience_events e JOIN special_dates s
           ON s.couple_id = e.couple_id AND s.recurrence = 'ONCE'
           AND e.occurred_on BETWEEN s.special_date AND s.ends_on
         WHERE CAST(:specialDateId AS bigint) IS NULL OR s.id = :specialDateId
         UNION ALL
-        SELECT s.id, e.occurred_on, e.section, e.experience_id, e.image_url
+        SELECT s.id, recurring_window.starts_on,
+          recurring_window.starts_on + (s.ends_on - s.special_date),
+          e.section, e.experience_id, e.image_url
         FROM experience_events e JOIN special_dates s
           ON s.couple_id = e.couple_id AND s.recurrence = 'ANNUAL'
-          AND EXTRACT(MONTH FROM s.special_date) = EXTRACT(MONTH FROM e.occurred_on)
-          AND EXTRACT(DAY FROM s.special_date) = EXTRACT(DAY FROM e.occurred_on)
+        CROSS JOIN LATERAL (
+          SELECT candidate.starts_on
+          FROM generate_series(EXTRACT(YEAR FROM e.occurred_on)::int - 1,
+                               EXTRACT(YEAR FROM e.occurred_on)::int) AS years(year_value)
+          CROSS JOIN LATERAL (
+            SELECT make_date(years.year_value, EXTRACT(MONTH FROM s.special_date)::int, 1)
+              + LEAST(EXTRACT(DAY FROM s.special_date)::int,
+                  EXTRACT(DAY FROM (make_date(years.year_value,
+                    EXTRACT(MONTH FROM s.special_date)::int, 1) + INTERVAL '1 month'
+                    - INTERVAL '1 day'))::int) - 1 AS starts_on
+          ) candidate
+          WHERE e.occurred_on BETWEEN candidate.starts_on
+            AND candidate.starts_on + (s.ends_on - s.special_date)
+          ORDER BY candidate.starts_on DESC
+          LIMIT 1
+        ) recurring_window
         WHERE CAST(:specialDateId AS bigint) IS NULL OR s.id = :specialDateId
         UNION ALL
-        SELECT s.id, e.occurred_on, e.section, e.experience_id, e.image_url
+        SELECT s.id, recurring_window.starts_on,
+          recurring_window.starts_on + (s.ends_on - s.special_date),
+          e.section, e.experience_id, e.image_url
         FROM experience_events e JOIN special_dates s
           ON s.couple_id = e.couple_id AND s.recurrence = 'MONTHLY'
-          AND EXTRACT(DAY FROM s.special_date) = EXTRACT(DAY FROM e.occurred_on)
+        CROSS JOIN LATERAL (
+          SELECT candidate.starts_on
+          FROM generate_series(0, 1) AS offsets(months_back)
+          CROSS JOIN LATERAL (
+            SELECT (date_trunc('month', e.occurred_on)
+                    - offsets.months_back * INTERVAL '1 month')::date AS month_start
+          ) month_value
+          CROSS JOIN LATERAL (
+            SELECT month_value.month_start
+              + LEAST(EXTRACT(DAY FROM s.special_date)::int,
+                  EXTRACT(DAY FROM (month_value.month_start + INTERVAL '1 month'
+                    - INTERVAL '1 day'))::int) - 1 AS starts_on
+          ) candidate
+          WHERE e.occurred_on BETWEEN candidate.starts_on
+            AND candidate.starts_on + (s.ends_on - s.special_date)
+          ORDER BY candidate.starts_on DESC
+          LIMIT 1
+        ) recurring_window
+        WHERE CAST(:specialDateId AS bigint) IS NULL OR s.id = :specialDateId
+        UNION ALL
+        SELECT s.id, e.occurred_on, e.occurred_on,
+          e.section, e.experience_id, e.image_url
+        FROM experience_events e JOIN special_dates s
+          ON s.couple_id = e.couple_id AND s.recurrence = 'DAILY'
         WHERE CAST(:specialDateId AS bigint) IS NULL OR s.id = :specialDateId
       ), event_summary AS (
-        SELECT special_date_id, occurred_on, COUNT(*) AS experience_count,
+        SELECT special_date_id, occurred_on, MAX(ends_on) AS ends_on, COUNT(*) AS experience_count,
           (ARRAY_AGG(image_url ORDER BY section, experience_id) FILTER (WHERE image_url IS NOT NULL))[1] AS image_url
         FROM event_rows GROUP BY special_date_id, occurred_on
       ), summary_keys AS (
@@ -168,7 +209,8 @@ public final class Repositories {
       )
       SELECT s.id AS special_date_id, s.label AS label, COALESCE(s.recurrence, 'ONCE') AS recurrence,
         k.occurred_on AS occurred_on, COALESCE(es.experience_count, 0) AS experience_count,
-        COALESCE(o.ends_on, CASE WHEN s.recurrence = 'ONCE' THEN s.ends_on ELSE k.occurred_on END) AS ends_on,
+        COALESCE(o.ends_on, es.ends_on,
+          CASE WHEN s.recurrence = 'ONCE' THEN s.ends_on ELSE k.occurred_on END) AS ends_on,
         CASE WHEN o.cover_photo_id IS NOT NULL THEN '/when-dates/photos/' || o.cover_photo_id || '?thumbnail=true'
              ELSE es.image_url END AS image_url
       FROM summary_keys k
@@ -193,6 +235,7 @@ public final class Repositories {
      @EntityGraph(attributePaths = {"specialDate", "createdBy", "updatedBy"}) Optional<SpecialDateOccurrence> findDetailedBySpecialDateIdAndOccurredOnLessThanEqualAndEndsOnGreaterThanEqualAndCoupleId(Long specialDateId, LocalDate occurredOn, LocalDate sameDay, java.util.UUID coupleId);
      @EntityGraph(attributePaths = {"specialDate", "createdBy", "updatedBy"}) Optional<SpecialDateOccurrence> findDetailedByIdAndCoupleId(Long id, java.util.UUID coupleId);
      @EntityGraph(attributePaths = {"specialDate", "createdBy", "updatedBy"}) List<SpecialDateOccurrence> findBySpecialDateIdInAndOccurredOnBetweenAndCoupleId(Collection<Long> specialDateIds, LocalDate from, LocalDate to, java.util.UUID coupleId);
+     @EntityGraph(attributePaths = {"specialDate", "createdBy", "updatedBy"}) List<SpecialDateOccurrence> findBySpecialDateIdInAndOccurredOnLessThanEqualAndEndsOnGreaterThanEqualAndCoupleId(Collection<Long> specialDateIds, LocalDate to, LocalDate from, java.util.UUID coupleId);
       @EntityGraph(attributePaths = {"specialDate", "createdBy", "updatedBy"}) List<SpecialDateOccurrence> findAllByCoupleIdOrderByOccurredOnDescIdDesc(java.util.UUID coupleId);
       @EntityGraph(attributePaths = {"specialDate", "createdBy", "updatedBy"}) List<SpecialDateOccurrence> findByCoupleIdAndOccurredOnLessThanEqualOrderByOccurredOnDescIdDesc(java.util.UUID coupleId, LocalDate occurredOn);
     }

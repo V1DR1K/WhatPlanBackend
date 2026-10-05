@@ -93,6 +93,13 @@ class ExperienceMigrationTest {
    assertTrue(migration("V40__backfill_special_date_recurrence.sql").contains("set recurrence = 'ONCE' where recurrence is null"));
   }
 
+  @Test
+  void allowsDailySpecialDateRecurrence() throws IOException {
+   String sql = migration("V70__allow_daily_special_date_recurrence.sql");
+   assertTrue(sql.contains("drop constraint chk_special_dates_recurrence"));
+   assertTrue(sql.contains("'ONCE', 'ANNUAL', 'MONTHLY', 'DAILY'"));
+  }
+
   private static String migration(String name) throws IOException {
   try (InputStream stream = ExperienceMigrationTest.class.getResourceAsStream("/db/migration/" + name)) { return new String(stream.readAllBytes(), StandardCharsets.UTF_8); }
  }

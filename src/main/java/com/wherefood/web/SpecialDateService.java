@@ -6,6 +6,7 @@ import com.wherefood.domain.SpecialDate;
 import com.wherefood.domain.User;
 import com.wherefood.repo.Repositories.SpecialDates;
 import java.time.Instant;
+import java.time.temporal.ChronoUnit;
 import java.util.List;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
@@ -65,10 +66,22 @@ public class SpecialDateService {
         if (value.endsOn.isBefore(value.date))
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
                     "La fecha de fin no puede ser anterior al inicio");
-        if (request.recurrence() != com.wherefood.domain.SpecialDateRecurrence.ONCE
-                && !value.endsOn.equals(value.date))
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
-                    "Los rangos solo están disponibles para fechas únicas");
+        long rangeDays = ChronoUnit.DAYS.between(value.date, value.endsOn);
+        switch (request.recurrence()) {
+            case MONTHLY -> {
+                if (rangeDays > 27) throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                        "Un rango mensual puede durar hasta 28 días para no superponerse con el siguiente mes");
+            }
+            case ANNUAL -> {
+                if (rangeDays > 364) throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                        "Un rango anual puede durar hasta 365 días para no superponerse con el siguiente año");
+            }
+            case DAILY -> {
+                if (rangeDays > 0) throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                        "La repetición diaria se configura para un solo día");
+            }
+            case ONCE -> { }
+        }
         value.label = request.label().trim();
         value.recurrence = request.recurrence();
     }

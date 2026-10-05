@@ -6,6 +6,7 @@ import com.wherefood.domain.SpecialDate;
 import com.wherefood.domain.SpecialDateOccurrence;
 import com.wherefood.domain.SpecialDateOccurrenceComment;
 import com.wherefood.domain.SpecialDateOccurrencePhoto;
+import com.wherefood.domain.SpecialDateOccurrenceWindow;
 import com.wherefood.domain.User;
 import com.wherefood.repo.Repositories.SpecialDateOccurrenceComments;
 import com.wherefood.repo.Repositories.SpecialDateOccurrencePhotos;
@@ -148,12 +149,11 @@ public class WhenDateMutationService {
                 .orElseGet(() -> {
                     SpecialDateOccurrence value = new SpecialDateOccurrence();
                     value.specialDate = lockedDate;
-                    boolean oneOff = lockedDate.recurrence == null
-                            || lockedDate.recurrence == com.wherefood.domain.SpecialDateRecurrence.ONCE;
-                    value.occurredOn = oneOff ? lockedDate.date : occurredOn;
-                    value.endsOn = oneOff
-                            ? (lockedDate.endsOn == null ? lockedDate.date : lockedDate.endsOn)
-                            : occurredOn;
+                    SpecialDateOccurrenceWindow.Window window = SpecialDateOccurrenceWindow
+                            .forDate(lockedDate, occurredOn).orElseThrow(() -> new ResponseStatusException(
+                                    HttpStatus.BAD_REQUEST, "La fecha no coincide con esta fecha especial"));
+                    value.occurredOn = window.startsOn();
+                    value.endsOn = window.endsOn();
                     value.cityId = 1L;
                     if (journey != null) journey.locateNew(value, null, null, null, value.occurredOn);
                     value.createdBy = value.updatedBy = actor;
@@ -197,14 +197,8 @@ public class WhenDateMutationService {
     private static void validateOccurrence(SpecialDate date, LocalDate occurredOn, boolean allowFuture) {
         if (!allowFuture && occurredOn.isAfter(RosarioClock.today())) throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
                 "La fecha todavía no ocurrió");
-        boolean matches = switch (date.recurrence == null ? com.wherefood.domain.SpecialDateRecurrence.ONCE : date.recurrence) {
-            case ONCE -> !occurredOn.isBefore(date.date)
-                    && !occurredOn.isAfter(date.endsOn == null ? date.date : date.endsOn);
-            case ANNUAL -> date.date.getMonthValue() == occurredOn.getMonthValue()
-                    && date.date.getDayOfMonth() == occurredOn.getDayOfMonth();
-            case MONTHLY -> date.date.getDayOfMonth() == occurredOn.getDayOfMonth();
-        };
-        if (!matches) throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+        if (SpecialDateOccurrenceWindow.forDate(date, occurredOn).isEmpty())
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
                 "La fecha no coincide con esta fecha especial");
     }
 

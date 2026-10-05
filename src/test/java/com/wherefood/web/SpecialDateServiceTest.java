@@ -68,19 +68,34 @@ class SpecialDateServiceTest {
     }
 
     @Test
-    void create_rejectsInvertedAndRecurringRangesWithoutSaving() {
+    void create_rejectsInvertedAndUnsupportedRecurringRangesWithoutSaving() {
         LocalDate from = LocalDate.of(2026, 10, 12);
         LocalDate to = LocalDate.of(2026, 10, 10);
         ResponseStatusException inverted = assertThrows(ResponseStatusException.class,
                 () -> service.create(new SpecialDateRequest(from, to, "Viaje",
                         com.wherefood.domain.SpecialDateRecurrence.ONCE), user()));
-        ResponseStatusException recurring = assertThrows(ResponseStatusException.class,
+        ResponseStatusException daily = assertThrows(ResponseStatusException.class,
                 () -> service.create(new SpecialDateRequest(from, from.plusDays(2), "Viaje",
-                        com.wherefood.domain.SpecialDateRecurrence.ANNUAL), user()));
+                        com.wherefood.domain.SpecialDateRecurrence.DAILY), user()));
 
         assertEquals(HttpStatus.BAD_REQUEST, inverted.getStatusCode());
-        assertEquals(HttpStatus.BAD_REQUEST, recurring.getStatusCode());
+        assertEquals(HttpStatus.BAD_REQUEST, daily.getStatusCode());
         verify(dates, never()).save(org.mockito.ArgumentMatchers.any());
+    }
+
+    @Test
+    void create_allowsInclusiveAnnualAndMonthlyRanges() {
+        when(dates.save(org.mockito.ArgumentMatchers.any())).thenAnswer(invocation -> invocation.getArgument(0));
+        LocalDate from = LocalDate.of(2026, 10, 10);
+
+        var annual = service.create(new SpecialDateRequest(from, from.plusDays(2), "Aniversario",
+                com.wherefood.domain.SpecialDateRecurrence.ANNUAL), user());
+        var monthly = service.create(new SpecialDateRequest(from, from.plusDays(2), "Mensuario",
+                com.wherefood.domain.SpecialDateRecurrence.MONTHLY), user());
+
+        assertEquals(from.plusDays(2), annual.endsOn);
+        assertEquals(from.plusDays(2), monthly.endsOn);
+        verify(dates, org.mockito.Mockito.times(2)).save(org.mockito.ArgumentMatchers.any());
     }
 
     private static User user() {

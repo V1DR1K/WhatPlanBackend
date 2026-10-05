@@ -1,3 +1,3 @@
 package com.wherefood.domain;
 
-public enum SpecialDateRecurrence { ONCE, ANNUAL, MONTHLY }
+public enum SpecialDateRecurrence { ONCE, ANNUAL, MONTHLY, DAILY }
