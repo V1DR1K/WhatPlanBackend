@@ -2,6 +2,7 @@ package com.wherefood.web;
 
 import com.wherefood.config.*;
 import com.wherefood.domain.*;
+import com.wherefood.application.PlaceInput;
 import com.wherefood.repo.Repositories.*;
 import jakarta.validation.constraints.*;
 import java.io.IOException;
@@ -23,6 +24,7 @@ record HighlightTagRequest(@NotBlank @Size(max = 60) String name, @NotBlank @Siz
 }
 record HighlightTagDto(Long id, String name, String emoji, boolean active) {}
 record PlaceRequest(@NotBlank @Size(max = 120) String name, @Size(max = 300) String address, @Size(max = 1000) @SafeHttpUrl String sourceUrl, @Size(max = 1000) @SafeHttpUrl String mapsUrl, boolean acceptsReservations, @NotNull @Positive Long categoryId, @Size(max = 30) List<@NotNull @Positive Long> tagIds, @Positive Long zoneId, UUID stageId) {
+ PlaceInput toInput() { return new PlaceInput(name, address, sourceUrl, mapsUrl, acceptsReservations, categoryId, tagIds, zoneId, stageId); }
  PlaceRequest(String name, String address, String sourceUrl, String mapsUrl, boolean acceptsReservations, Long categoryId, List<Long> tagIds) {
   this(name, address, sourceUrl, mapsUrl, acceptsReservations, categoryId, tagIds, null, null);
  }
@@ -137,10 +139,10 @@ public class Api {
  }
 
   @PostMapping("/places") PlaceDto addPlace(@RequestBody @jakarta.validation.Valid PlaceRequest request, @AuthenticationPrincipal User owner) {
-   return place(placeService.create(request, owner));
+   return place(placeService.create(request.toInput(), owner));
   }
   @PutMapping("/places/{id}") PlaceDto editPlace(@PathVariable Long id, @RequestBody @jakarta.validation.Valid PlaceRequest request, @AuthenticationPrincipal User owner) {
-   return place(placeService.update(id, request, owner));
+   return place(placeService.update(id, request.toInput(), owner));
   }
    @DeleteMapping("/places/{id}") @ResponseStatus(HttpStatus.NO_CONTENT) void deletePlace(@PathVariable Long id, @AuthenticationPrincipal User owner) { placeService.archive(id, owner); }
    @GetMapping("/places/archived") Slice<PlaceDto> archivedPlaces(@RequestParam(required = false) Long zoneId,

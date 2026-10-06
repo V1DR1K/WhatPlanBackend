@@ -5,7 +5,7 @@ import jakarta.validation.constraints.*;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
-record SettingsRequest(@NotNull @Min(1) @Max(50) Integer catalogPageSize) {}
+record SettingsRequest(@NotNull @Min(1) @Max(30) Integer catalogPageSize) {}
 record SettingsDto(int catalogPageSize) {}
 
 @RestController

@@ -1,6 +1,7 @@
 package com.wherefood.web;
 
 import com.wherefood.domain.*;
+import com.wherefood.application.FunPlanInput;
 import com.wherefood.repo.Repositories.*;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.*;
@@ -22,6 +23,11 @@ import com.wherefood.config.CoupleContext;
 record FunCategoryRequest(Long parentId, @NotBlank @Size(max = 80) String name, @NotBlank @Size(max = 20) String icon, boolean active) {}
 record FunCategoryDto(Long id, Long parentId, String name, String slug, String icon, boolean active) {}
 record FunPlanRequest(@NotBlank @Size(max = 160) String name, @NotBlank @Size(max = 250) String address, LocalDate scheduledAt, @NotNull @Positive Long categoryId, @NotNull @Positive Long subcategoryId, @Size(max = 7) List<@Valid ActivityScheduleRequest> schedules, @Positive Long zoneId, UUID stageId) {
+ FunPlanInput toInput() {
+  List<FunPlanInput.Schedule> planSchedules = schedules == null ? null : schedules.stream()
+    .map(value -> new FunPlanInput.Schedule(value.dayOfWeek(), value.opensAt(), value.closesAt())).toList();
+  return new FunPlanInput(name, address, scheduledAt, categoryId, subcategoryId, planSchedules, zoneId, stageId);
+ }
  FunPlanRequest(String name, String address, LocalDate scheduledAt, Long categoryId, Long subcategoryId, List<ActivityScheduleRequest> schedules) {
   this(name, address, scheduledAt, categoryId, subcategoryId, schedules, null, null);
  }
@@ -67,6 +73,8 @@ public class WhyFunApi {
  @PutMapping("/categories/{id}") @PreAuthorize("hasRole('ADMIN')") FunCategoryDto updateCategory(@PathVariable Long id, @RequestBody @Valid FunCategoryRequest request) { return category(categoryAdminService.update(id, request)); }
  @DeleteMapping("/categories/{id}") @PreAuthorize("hasRole('ADMIN')") @ResponseStatus(HttpStatus.NO_CONTENT) void deleteCategory(@PathVariable Long id) { categoryAdminService.delete(id); }
 
+ /** Legacy compatibility surface. New clients should use /activities and /activity-visits. */
+ @Deprecated(forRemoval = false)
  @GetMapping("/plans") Slice<FunPlanDto> listPlans(@RequestParam(required = false) Long zoneId, @RequestParam(required = false) Long categoryId, @RequestParam(required = false) Long subcategoryId, @RequestParam(required = false) String timeline, @RequestParam(required = false) Long cursor, @RequestParam(defaultValue = "12") int size) {
   int limit = Math.max(1, Math.min(size, 30));
   LocalDate now = RosarioClock.today();
@@ -90,15 +98,15 @@ public class WhyFunApi {
  Slice<FunPlanDto> listPlans(Long categoryId, Long subcategoryId, String timeline, Long cursor, int size) {
   return listPlans(null, categoryId, subcategoryId, timeline, cursor, size);
  }
- @GetMapping("/plans/{id}") FunPlanDto getPlan(@PathVariable Long id) { return plan(findPlan(id)); }
-  @PostMapping("/plans") @ResponseStatus(HttpStatus.CREATED) FunPlanDto addPlan(@RequestBody @Valid FunPlanRequest request, @AuthenticationPrincipal User author) { return plan(planService.create(request, author)); }
-  @PutMapping("/plans/{id}") FunPlanDto updatePlan(@PathVariable Long id, @RequestBody @Valid FunPlanRequest request, @AuthenticationPrincipal User author) { return plan(planService.update(id, request, author)); }
-  @DeleteMapping("/plans/{id}") @ResponseStatus(HttpStatus.NO_CONTENT) void deletePlan(@PathVariable Long id, @AuthenticationPrincipal User author) { planService.delete(id, author); }
-  @PostMapping(value = "/plans/{id}/photos", consumes = MediaType.MULTIPART_FORM_DATA_VALUE) FunPlanDto uploadPhoto(@PathVariable Long id, @RequestPart("file") MultipartFile file, @AuthenticationPrincipal User author) throws IOException { return plan(mediaService.uploadPlanPhoto(id, file, author)); }
-  @PutMapping("/plans/{id}/cover/{photoId}") FunPlanDto setCover(@PathVariable Long id, @PathVariable Long photoId, @AuthenticationPrincipal User author) { return plan(mediaService.setVenueCover(id, photoId, author)); }
-  @DeleteMapping("/photos/{photoId}") @ResponseStatus(HttpStatus.NO_CONTENT) void deletePhoto(@PathVariable Long photoId, @AuthenticationPrincipal User author) { mediaService.deleteVenuePhoto(photoId, author); }
- @GetMapping(value = "/photos/{photoId}", produces = "image/webp") ResponseEntity<byte[]> photo(@PathVariable Long photoId, @RequestParam(defaultValue = "false") boolean thumbnail) { WhyFunVenuePhoto photo = photos.findByIdAndCoupleId(photoId, CoupleContext.current()).orElseThrow(() -> notFound("Foto")); return PrivateMediaResponse.webp(storage.bytes(thumbnail ? photo.thumbnailBase64 : photo.imageBase64)); }
-  @PutMapping("/plans/{id}/review") FunReviewDto saveReview(@PathVariable Long id, @RequestBody @Valid FunReviewRequest request, @AuthenticationPrincipal User author) { return review(planService.saveOwnReview(id, request, author)); }
+ @Deprecated(forRemoval = false) @GetMapping("/plans/{id}") FunPlanDto getPlan(@PathVariable Long id) { return plan(findPlan(id)); }
+ @Deprecated(forRemoval = false) @PostMapping("/plans") @ResponseStatus(HttpStatus.CREATED) FunPlanDto addPlan(@RequestBody @Valid FunPlanRequest request, @AuthenticationPrincipal User author) { return plan(planService.create(request.toInput(), author)); }
+ @Deprecated(forRemoval = false) @PutMapping("/plans/{id}") FunPlanDto updatePlan(@PathVariable Long id, @RequestBody @Valid FunPlanRequest request, @AuthenticationPrincipal User author) { return plan(planService.update(id, request.toInput(), author)); }
+ @Deprecated(forRemoval = false) @DeleteMapping("/plans/{id}") @ResponseStatus(HttpStatus.NO_CONTENT) void deletePlan(@PathVariable Long id, @AuthenticationPrincipal User author) { planService.delete(id, author); }
+ @Deprecated(forRemoval = false) @PostMapping(value = "/plans/{id}/photos", consumes = MediaType.MULTIPART_FORM_DATA_VALUE) FunPlanDto uploadPhoto(@PathVariable Long id, @RequestPart("file") MultipartFile file, @AuthenticationPrincipal User author) throws IOException { return plan(mediaService.uploadPlanPhoto(id, file, author)); }
+ @Deprecated(forRemoval = false) @PutMapping("/plans/{id}/cover/{photoId}") FunPlanDto setCover(@PathVariable Long id, @PathVariable Long photoId, @AuthenticationPrincipal User author) { return plan(mediaService.setVenueCover(id, photoId, author)); }
+ @Deprecated(forRemoval = false) @DeleteMapping("/photos/{photoId}") @ResponseStatus(HttpStatus.NO_CONTENT) void deletePhoto(@PathVariable Long photoId, @AuthenticationPrincipal User author) { mediaService.deleteVenuePhoto(photoId, author); }
+ @Deprecated(forRemoval = false) @GetMapping(value = "/photos/{photoId}", produces = "image/webp") ResponseEntity<byte[]> photo(@PathVariable Long photoId, @RequestParam(defaultValue = "false") boolean thumbnail) { WhyFunVenuePhoto photo = photos.findByIdAndCoupleId(photoId, CoupleContext.current()).orElseThrow(() -> notFound("Foto")); return PrivateMediaResponse.webp(storage.bytes(thumbnail ? photo.thumbnailBase64 : photo.imageBase64)); }
+  @Deprecated(forRemoval = false) @PutMapping("/plans/{id}/review") FunReviewDto saveReview(@PathVariable Long id, @RequestBody @Valid FunReviewRequest request, @AuthenticationPrincipal User author) { return review(planService.saveOwnReview(id, request, author)); }
 
  private WhyFunVenue findPlan(Long id) { return venues.findDetailedByIdAndCoupleId(id, CoupleContext.current()).orElseThrow(() -> notFound("Plan")); }
  private FunPlanDto plan(WhyFunVenue value) { List<WhyFunVenuePhoto> planPhotos = photos.findByVenueIdAndCoupleIdOrderByIdAsc(value.id, CoupleContext.current()); List<FunReviewDto> planReviews = reviews.summariesByVenueIdAndCoupleId(value.id, CoupleContext.current()).stream().map(WhyFunApi::review).toList(); return plan(value, cover(value, planPhotos), planPhotos.stream().map(WhyFunApi::photo).toList(), planReviews); }

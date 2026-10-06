@@ -25,12 +25,14 @@ public class LocationService {
     private final Couples couples;
     private final Journeys journeys;
     private final Stages stages;
+    private final CoupleMembers coupleMembers;
 
-    public LocationService(Zones zones, Couples couples, Journeys journeys, Stages stages) {
+    public LocationService(Zones zones, Couples couples, Journeys journeys, Stages stages, CoupleMembers coupleMembers) {
         this.zones = zones;
         this.couples = couples;
         this.journeys = journeys;
         this.stages = stages;
+        this.coupleMembers = coupleMembers;
     }
 
     public static UUID couple() {
@@ -181,6 +183,15 @@ public class LocationService {
                                                         o.label() + " · " + o.key().substring(0, 8))
                                                 : o)
                         .toList();
-        return new LocationContext(couple(), origin, identified, maxUploadBytes);
+        List<CoupleMember> activeMembers = coupleMembers.findByCoupleIdAndStatusOrderBySlot(
+                couple(), CoupleMemberStatus.ACTIVE);
+        List<MemberIdentity> members = activeMembers.stream()
+                .map(member -> new MemberIdentity(member.user.username, member.displayName))
+                .toList();
+        List<HomeLabel> homeLabels = java.util.stream.IntStream
+                .range(0, Math.min(activeMembers.size(), Home.values().length))
+                .mapToObj(index -> new HomeLabel(Home.values()[index], activeMembers.get(index).displayName))
+                .toList();
+        return new LocationContext(couple(), origin, identified, maxUploadBytes, members, homeLabels);
     }
 }

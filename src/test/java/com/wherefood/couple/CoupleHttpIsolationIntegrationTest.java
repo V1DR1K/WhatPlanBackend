@@ -1366,6 +1366,10 @@ class CoupleHttpIsolationIntegrationTest {
             JsonNode location = objectMapper.readTree(context.getBody());
             assertThat(location.path("coupleId").asText()).isEqualTo(COUPLE_A_ID.toString());
             assertThat(location.path("originCityId").asLong()).isEqualTo(1);
+            assertThat(location.path("members").get(0).path("displayName").asText()).isEqualTo("Member A1");
+            assertThat(location.path("members").get(1).path("displayName").asText()).isEqualTo("Member A2");
+            assertThat(location.path("homeLabels").get(0).path("displayName").asText()).isEqualTo("Member A1");
+            assertThat(location.path("homeLabels").get(1).path("displayName").asText()).isEqualTo("Member A2");
             assertThat(context.getBody()).contains("Rosario");
 
             for (var catalog : java.util.Map.of(

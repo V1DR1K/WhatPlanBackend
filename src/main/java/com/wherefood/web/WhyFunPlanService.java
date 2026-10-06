@@ -2,6 +2,7 @@ package com.wherefood.web;
 
 import com.wherefood.config.CoupleContext;
 import com.wherefood.couple.CoupleAuthorizationService;
+import com.wherefood.application.FunPlanInput;
 import com.wherefood.domain.User;
 import com.wherefood.domain.WhyFunCategory;
 import com.wherefood.domain.WhyFunVenue;
@@ -49,7 +50,7 @@ public class WhyFunPlanService {
     }
 
     @Transactional
-    public WhyFunVenue create(FunPlanRequest request, User actor) {
+    public WhyFunVenue create(FunPlanInput request, User actor) {
         authorization.requireActiveMember(actor);
         WhyFunVenue plan = new WhyFunVenue();
         plan.createdBy = plan.updatedBy = actor;
@@ -61,7 +62,7 @@ public class WhyFunPlanService {
     }
 
     @Transactional
-    public WhyFunVenue update(Long id, FunPlanRequest request, User actor) {
+    public WhyFunVenue update(Long id, FunPlanInput request, User actor) {
         authorization.requireActiveMember(actor);
         WhyFunVenue plan = findPlan(id);
         apply(plan, request);
@@ -107,7 +108,7 @@ public class WhyFunPlanService {
                         "Categoría no encontrada"));
     }
 
-    private void apply(WhyFunVenue plan, FunPlanRequest request) {
+    private void apply(WhyFunVenue plan, FunPlanInput request) {
         if (request.zoneId() != null) {
             if (zoneSettings != null) zoneSettings.requireActive(request.zoneId());
             plan.zoneId = request.zoneId();
@@ -138,7 +139,7 @@ public class WhyFunPlanService {
         plan.schedules.clear();
         if (plan.id != null) venues.flush();
         if (request.schedules() == null) return;
-        for (ActivityScheduleRequest source : request.schedules()) {
+        for (FunPlanInput.Schedule source : request.schedules()) {
             if (source.opensAt().equals(source.closesAt())) {
                 throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
                         "El horario de apertura y cierre debe ser distinto");

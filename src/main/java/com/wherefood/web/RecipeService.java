@@ -2,6 +2,7 @@ package com.wherefood.web;
 
 import com.wherefood.config.CoupleContext;
 import com.wherefood.couple.CoupleAuthorizationService;
+import com.wherefood.application.RecipeInput;
 import com.wherefood.domain.Recipe;
 import com.wherefood.domain.RecipeIngredient;
 import com.wherefood.domain.RecipeStep;
@@ -43,7 +44,7 @@ public class RecipeService {
     }
 
     @Transactional
-    public Recipe create(RecipeRequest request, User actor) {
+    public Recipe create(RecipeInput request, User actor) {
         authorization.requireActiveMember(actor);
         Recipe recipe = new Recipe();
         recipe.createdBy = recipe.updatedBy = actor;
@@ -55,7 +56,7 @@ public class RecipeService {
     }
 
     @Transactional
-    public Recipe update(Long recipeId, RecipeRequest request, User actor) {
+    public Recipe update(Long recipeId, RecipeInput request, User actor) {
         authorization.requireActiveMember(actor);
         Recipe recipe = findRecipe(recipeId);
         apply(recipe, request);
@@ -81,7 +82,7 @@ public class RecipeService {
                         "Receta no encontrada"));
     }
 
-    private void apply(Recipe recipe, RecipeRequest request) {
+    private void apply(Recipe recipe, RecipeInput request) {
         if (request.zoneId() != null) {
             if (zoneSettings != null) zoneSettings.requireActive(request.zoneId());
             recipe.zoneId = request.zoneId();
@@ -92,11 +93,11 @@ public class RecipeService {
         recipe.sourceUrl = blankToNull(request.sourceUrl());
         recipe.ingredients.clear();
         recipe.steps.clear();
-        List<RecipeIngredientRequest> ingredients = request.ingredients() == null
+        List<RecipeInput.Ingredient> ingredients = request.ingredients() == null
                 ? List.of() : request.ingredients();
-        List<RecipeStepRequest> steps = request.steps() == null ? List.of() : request.steps();
+        List<RecipeInput.Step> steps = request.steps() == null ? List.of() : request.steps();
         for (int position = 0; position < ingredients.size(); position++) {
-            RecipeIngredientRequest source = ingredients.get(position);
+            RecipeInput.Ingredient source = ingredients.get(position);
             RecipeIngredient ingredient = new RecipeIngredient();
             ingredient.recipe = recipe;
             ingredient.name = source.name().trim();
@@ -106,7 +107,7 @@ public class RecipeService {
             recipe.ingredients.add(ingredient);
         }
         for (int position = 0; position < steps.size(); position++) {
-            RecipeStepRequest source = steps.get(position);
+            RecipeInput.Step source = steps.get(position);
             RecipeStep step = new RecipeStep();
             step.recipe = recipe;
             step.instruction = source.instruction().trim();

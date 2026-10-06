@@ -99,7 +99,7 @@ class WhyFunPlanServiceTest {
         FunPlanRequest request = new FunPlanRequest("Plan editado", "Dirección", null, category.id,
                 subcategory.id, null);
 
-        WhyFunVenue updated = service.update(plan.id, request, actor);
+        WhyFunVenue updated = service.update(plan.id, request.toInput(), actor);
 
         assertEquals(category, updated.category);
         assertEquals(subcategory, updated.subcategory);

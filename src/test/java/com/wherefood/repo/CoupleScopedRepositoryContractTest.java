@@ -1,7 +1,11 @@
 package com.wherefood.repo;
 
 import com.wherefood.domain.*;
+import java.lang.reflect.Method;
+import java.util.Arrays;
 import org.junit.jupiter.api.Test;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 
 import java.util.List;
 
@@ -66,5 +70,23 @@ class CoupleScopedRepositoryContractTest {
             assertThat(CoupleScopedEntity.class.isAssignableFrom(entity)).isTrue();
             assertDoesNotThrow(()->assertEquals("couple_id",entity.getField("coupleId").getAnnotation(jakarta.persistence.Column.class).name()));
         });
+    }
+
+    @Test
+    void everyCustomPrivateRepositoryMethodDeclaresCoupleScope() {
+        PRIVATE_REPOSITORIES.forEach(repository -> Arrays.stream(repository.getDeclaredMethods()).forEach(method ->
+                assertThat(declaresCoupleScope(method))
+                        .as(repository.getSimpleName() + "." + method.getName() + " couple scope")
+                        .isTrue()));
+    }
+
+    private static boolean declaresCoupleScope(Method method) {
+        if (method.getName().contains("CoupleId")) return true;
+        if (Arrays.stream(method.getParameterAnnotations()).flatMap(Arrays::stream)
+                .anyMatch(annotation -> annotation instanceof Param param && param.value().equals("coupleId"))) {
+            return true;
+        }
+        Query query = method.getAnnotation(Query.class);
+        return query != null && (query.value().contains("coupleId") || query.countQuery().contains("coupleId"));
     }
 }

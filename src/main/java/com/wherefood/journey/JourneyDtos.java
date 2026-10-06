@@ -26,8 +26,13 @@ public final class JourneyDtos {
     public record LocationOption(
             String key, Long cityId, UUID stageId, UUID journeyId, String label) {}
 
+    public record MemberIdentity(String username, String displayName) {}
+
+    public record HomeLabel(com.wherefood.domain.Home home, String displayName) {}
+
     public record LocationContext(
-            UUID coupleId, Long originCityId, List<LocationOption> options, long maxUploadBytes) {}
+            UUID coupleId, Long originCityId, List<LocationOption> options, long maxUploadBytes,
+            List<MemberIdentity> members, List<HomeLabel> homeLabels) {}
 
     public record StageRequest(
             UUID id,

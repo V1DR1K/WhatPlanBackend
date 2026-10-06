@@ -10,6 +10,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.wherefood.config.CoupleContext;
+import com.wherefood.application.PlaceInput;
 import com.wherefood.couple.CoupleAuthorizationService;
 import com.wherefood.domain.Category;
 import com.wherefood.domain.HighlightTag;
@@ -82,7 +83,7 @@ class PlaceServiceTest {
         PlaceService zonedService = new PlaceService(places, categories, tags,
                 new CoupleAuthorizationService(members), zoneSettings);
 
-        Place created = zonedService.create(new PlaceRequest("Café", "Centro", null, null, false,
+        Place created = zonedService.create(new PlaceInput("Café", "Centro", null, null, false,
                 3L, List.of(), 2L), member);
 
         assertEquals(2L, created.zoneId);
@@ -128,7 +129,7 @@ class PlaceServiceTest {
         when(places.findDetailedByIdAndCoupleId(5L, coupleId)).thenReturn(Optional.of(existing));
         when(categories.findById(4L)).thenReturn(Optional.of(inactive));
 
-        PlaceRequest request = new PlaceRequest("Café", "Centro", null, null, false, 4L, List.of());
+        PlaceInput request = new PlaceInput("Café", "Centro", null, null, false, 4L, List.of());
         assertEquals(404, assertThrows(ResponseStatusException.class,
                 () -> service.update(5L, request, member)).getStatusCode().value());
         verify(places, never()).save(any(Place.class));
@@ -199,12 +200,12 @@ class PlaceServiceTest {
         verify(places, never()).save(any(Place.class));
     }
 
-    private static PlaceRequest request() {
-        return new PlaceRequest("Café", "Centro", null, null, false, 3L, List.of());
+    private static PlaceInput request() {
+        return new PlaceInput("Café", "Centro", null, null, false, 3L, List.of());
     }
 
-    private static PlaceRequest requestWithTags(List<Long> tagIds) {
-        return new PlaceRequest("Café", "Centro", null, null, false, 3L, tagIds);
+    private static PlaceInput requestWithTags(List<Long> tagIds) {
+        return new PlaceInput("Café", "Centro", null, null, false, 3L, tagIds);
     }
 
     private static User user(Long id, Role role) {

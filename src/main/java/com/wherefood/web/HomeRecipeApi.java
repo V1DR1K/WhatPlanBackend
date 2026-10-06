@@ -1,6 +1,7 @@
 package com.wherefood.web;
 
 import com.wherefood.domain.*;
+import com.wherefood.application.RecipeInput;
 import com.wherefood.repo.Repositories.*;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.*;
@@ -21,6 +22,13 @@ import com.wherefood.config.CoupleContext;
 record RecipeIngredientRequest(@NotBlank @Size(max = 160) String name, @DecimalMin(value = "0.0", inclusive = false) BigDecimal quantity, @NotBlank @Size(max = 30) String unit) {}
 record RecipeStepRequest(@NotBlank @Size(max = 2000) String instruction) {}
 record RecipeRequest(@NotBlank @Size(max = 160) String name, @Size(max = 1000) @SafeHttpUrl String sourceUrl, @Size(max = 50) List<@Valid RecipeIngredientRequest> ingredients, @Size(max = 50) List<@Valid RecipeStepRequest> steps, @Positive Long zoneId, UUID stageId) {
+ RecipeInput toInput() {
+  List<RecipeInput.Ingredient> recipeIngredients = ingredients == null ? null : ingredients.stream()
+    .map(value -> new RecipeInput.Ingredient(value.name(), value.quantity(), value.unit())).toList();
+  List<RecipeInput.Step> recipeSteps = steps == null ? null : steps.stream()
+    .map(value -> new RecipeInput.Step(value.instruction())).toList();
+  return new RecipeInput(name, sourceUrl, recipeIngredients, recipeSteps, zoneId, stageId);
+ }
  RecipeRequest(String name, String sourceUrl, List<RecipeIngredientRequest> ingredients, List<RecipeStepRequest> steps) {
   this(name, sourceUrl, ingredients, steps, null, null);
  }
@@ -108,10 +116,10 @@ public class HomeRecipeApi {
  }
  @GetMapping("/recipes/{id}") @Transactional(readOnly = true) RecipeDto getRecipe(@PathVariable Long id) { return recipe(findRecipe(id)); }
  @PostMapping("/recipes") @ResponseStatus(HttpStatus.CREATED) RecipeDto addRecipe(@RequestBody @Valid RecipeRequest request, @AuthenticationPrincipal User author) {
-  return recipe(recipeService.create(request, author));
+  return recipe(recipeService.create(request.toInput(), author));
  }
  @PutMapping("/recipes/{id}") RecipeDto updateRecipe(@PathVariable Long id, @RequestBody @Valid RecipeRequest request, @AuthenticationPrincipal User author) {
-  return recipe(recipeService.update(id, request, author));
+  return recipe(recipeService.update(id, request.toInput(), author));
  }
   @DeleteMapping("/recipes/{id}") @ResponseStatus(HttpStatus.NO_CONTENT) void deleteRecipe(@PathVariable Long id, @AuthenticationPrincipal User author) {
    recipeService.delete(id, author);

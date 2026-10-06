@@ -470,10 +470,8 @@ public final class Repositories {
   }
 
    public interface ItemReviews extends CoupleScopedRepository<ItemReview> {
-     @EntityGraph(attributePaths = {"item", "author"}) List<ItemReview> findByItemIdInOrderByItemIdAscAuthorUsername(Collection<Long> itemIds);
      @EntityGraph(attributePaths = {"item", "author"}) List<ItemReview> findByItemIdInAndCoupleIdOrderByItemIdAscAuthorUsername(Collection<Long> itemIds, java.util.UUID coupleId);
      Optional<ItemReview> findByItemIdAndAuthorIdAndCoupleId(Long itemId, Long authorId, java.util.UUID coupleId);
-    @Query("select r.id as reviewId, author.username as author from ItemReview r join r.author author where r.item.id in :itemIds") List<ReviewAuthor> authorsByItemIdIn(@Param("itemIds") Collection<Long> itemIds);
     @Query("select r.id as reviewId, author.username as author from ItemReview r join r.author author where r.item.id in :itemIds and r.coupleId=:coupleId") List<ReviewAuthor> authorsByItemIdInAndCoupleId(@Param("itemIds") Collection<Long> itemIds, @Param("coupleId") java.util.UUID coupleId);
   }
 
@@ -685,9 +683,7 @@ public final class Repositories {
     }
 
    public interface WhyFunVenueReviews extends CoupleScopedRepository<WhyFunVenueReview> {
-   @Query("select r.id as id, r.venue.id as venueId, u.username as author, r.rating as rating, r.comment as comment, r.updatedAt as updatedAt from WhyFunVenueReview r join r.author u where r.venue.id=:venueId order by u.username") List<WhyFunReviewSummary> summariesByVenueId(@Param("venueId") Long venueId);
    @Query("select r.id as id, r.venue.id as venueId, u.username as author, r.rating as rating, r.comment as comment, r.updatedAt as updatedAt from WhyFunVenueReview r join r.author u where r.venue.id=:venueId and r.coupleId=:coupleId order by u.username") List<WhyFunReviewSummary> summariesByVenueIdAndCoupleId(@Param("venueId") Long venueId, @Param("coupleId") java.util.UUID coupleId);
-    @Query("select r.id as id, r.venue.id as venueId, u.username as author, r.rating as rating, r.comment as comment, r.updatedAt as updatedAt from WhyFunVenueReview r join r.author u where r.venue.id in :venueIds order by r.venue.id asc, u.username") List<WhyFunReviewSummary> summariesByVenueIdIn(@Param("venueIds") Collection<Long> venueIds);
     @Query("select r.id as id, r.venue.id as venueId, u.username as author, r.rating as rating, r.comment as comment, r.updatedAt as updatedAt from WhyFunVenueReview r join r.author u where r.venue.id in :venueIds and r.coupleId=:coupleId order by r.venue.id asc, u.username") List<WhyFunReviewSummary> summariesByVenueIdInAndCoupleId(@Param("venueIds") Collection<Long> venueIds, @Param("coupleId") java.util.UUID coupleId);
    @EntityGraph(attributePaths = "author") Optional<WhyFunVenueReview> findByVenueIdAndAuthorIdAndCoupleId(Long venueId, Long authorId, java.util.UUID coupleId);
    }
@@ -774,7 +770,6 @@ public final class Repositories {
     public interface RecipePhotos extends CoupleScopedRepository<RecipePhoto> {
      Optional<RecipePhoto> findByRecipeIdAndCoupleId(Long recipeId, java.util.UUID coupleId);
      Optional<RecipePhoto> findByIdAndRecipeIdAndCoupleId(Long id, Long recipeId, java.util.UUID coupleId);
-     @Query("select p.id as id, p.recipe.id as recipeId, p.width as width, p.height as height, p.createdAt as createdAt from RecipePhoto p where p.recipe.id in :recipeIds") List<RecipePhotoMetadata> metadataByRecipeIdIn(@Param("recipeIds") Collection<Long> recipeIds);
      @Query("select p.id as id, p.recipe.id as recipeId, p.width as width, p.height as height, p.createdAt as createdAt from RecipePhoto p where p.recipe.id in :recipeIds and p.coupleId=:coupleId") List<RecipePhotoMetadata> metadataByRecipeIdInAndCoupleId(@Param("recipeIds") Collection<Long> recipeIds, @Param("coupleId") java.util.UUID coupleId);
     }
 

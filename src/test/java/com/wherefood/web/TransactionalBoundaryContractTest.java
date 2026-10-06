@@ -31,8 +31,8 @@ class TransactionalBoundaryContractTest {
         assertServiceWrite("update", CookingReviewService.class, Long.class, CookingReviewRequest.class,
                 com.wherefood.domain.User.class);
         assertServiceWrite("delete", CookingReviewService.class, Long.class, com.wherefood.domain.User.class);
-        assertServiceWrite("create", RecipeService.class, RecipeRequest.class, com.wherefood.domain.User.class);
-        assertServiceWrite("update", RecipeService.class, Long.class, RecipeRequest.class,
+        assertServiceWrite("create", RecipeService.class, com.wherefood.application.RecipeInput.class, com.wherefood.domain.User.class);
+        assertServiceWrite("update", RecipeService.class, Long.class, com.wherefood.application.RecipeInput.class,
                 com.wherefood.domain.User.class);
         assertServiceWrite("delete", RecipeService.class, Long.class, com.wherefood.domain.User.class);
         assertServiceWrite("replacePhoto", RecipeMediaService.class, Long.class,
@@ -67,8 +67,8 @@ class TransactionalBoundaryContractTest {
                 com.wherefood.domain.User.class);
         assertServiceWrite("saveOwn", PlaceReviewService.class, Long.class, PlaceReviewRequest.class,
                 com.wherefood.domain.User.class);
-        assertServiceWrite("create", PlaceService.class, PlaceRequest.class, com.wherefood.domain.User.class);
-        assertServiceWrite("update", PlaceService.class, Long.class, PlaceRequest.class,
+        assertServiceWrite("create", PlaceService.class, com.wherefood.application.PlaceInput.class, com.wherefood.domain.User.class);
+        assertServiceWrite("update", PlaceService.class, Long.class, com.wherefood.application.PlaceInput.class,
                 com.wherefood.domain.User.class);
         assertServiceWrite("archive", PlaceService.class, Long.class, com.wherefood.domain.User.class);
         assertServiceWrite("restore", PlaceService.class, Long.class, com.wherefood.domain.User.class);
@@ -115,9 +115,9 @@ class TransactionalBoundaryContractTest {
                 com.wherefood.domain.User.class);
         assertServiceWrite("deleteVenuePhoto", WhyFunMediaService.class, Long.class,
                 com.wherefood.domain.User.class);
-        assertServiceWrite("create", WhyFunPlanService.class, FunPlanRequest.class,
+        assertServiceWrite("create", WhyFunPlanService.class, com.wherefood.application.FunPlanInput.class,
                 com.wherefood.domain.User.class);
-        assertServiceWrite("update", WhyFunPlanService.class, Long.class, FunPlanRequest.class,
+        assertServiceWrite("update", WhyFunPlanService.class, Long.class, com.wherefood.application.FunPlanInput.class,
                 com.wherefood.domain.User.class);
         assertServiceWrite("delete", WhyFunPlanService.class, Long.class,
                 com.wherefood.domain.User.class);

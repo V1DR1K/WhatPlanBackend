@@ -2,6 +2,7 @@ package com.wherefood.web;
 
 import com.wherefood.config.CoupleContext;
 import com.wherefood.couple.CoupleAuthorizationService;
+import com.wherefood.application.PlaceInput;
 import com.wherefood.domain.Category;
 import com.wherefood.domain.HighlightTag;
 import com.wherefood.domain.Place;
@@ -50,7 +51,7 @@ public class PlaceService {
     }
 
     @Transactional
-    public Place create(PlaceRequest request, User actor) {
+    public Place create(PlaceInput request, User actor) {
         authorization.requireActiveMember(actor);
         Place place = new Place();
         apply(place, request);
@@ -66,7 +67,7 @@ public class PlaceService {
     }
 
     @Transactional
-    public Place update(Long placeId, PlaceRequest request, User actor) {
+    public Place update(Long placeId, PlaceInput request, User actor) {
         authorization.requireActiveMember(actor);
         Place place = findActive(placeId);
         Category selectedCategory = categories.findById(request.categoryId())
@@ -113,7 +114,7 @@ public class PlaceService {
         return place;
     }
 
-    private void apply(Place place, PlaceRequest request) {
+    private void apply(Place place, PlaceInput request) {
         if (request.zoneId() != null) {
             if (journey != null) journey.validateCatalogCity("FOOD", place.id, request.zoneId());
             if (zoneSettings != null) zoneSettings.requireActive(request.zoneId());
