@@ -177,6 +177,12 @@ public class JourneyDayService {
     @Transactional
     public JourneyPhotoDto uploadPhoto(UUID journeyId, String purpose, LocalDate date,
             MultipartFile upload) throws IOException {
+        return uploadPhoto(journeyId, purpose, date, null, upload);
+    }
+
+    @Transactional
+    public JourneyPhotoDto uploadPhoto(UUID journeyId, String purpose, LocalDate date,
+            Instant occurredAt, MultipartFile upload) throws IOException {
         Journey journey = trip(journeyId, true);
         boolean dayPhoto = "DAY".equals(purpose);
         if (!dayPhoto && !"TRIP".equals(purpose))
@@ -200,15 +206,11 @@ public class JourneyDayService {
                     "El viaje alcanzó el límite de fotos configurado");
         PhotoStorage.ImageData image = photoStorage.processJourneyPhoto(upload);
         if (dayPhoto) getOrCreateDay(journey, date);
-        String rawName = Optional.ofNullable(upload.getOriginalFilename()).orElse("foto.webp")
-                .replace('\\', '/');
-        String name = rawName.substring(rawName.lastIndexOf('/') + 1)
-                .replace('\r', '_').replace('\n', '_');
         JourneyFile file = new JourneyFile();
         file.journeyId = journeyId;
         file.purpose = purpose;
         file.day = date;
-        file.name = name.isBlank() ? "foto.webp" : name.substring(0, Math.min(name.length(), 255));
+        file.name = "Foto";
         file.contentType = "image/webp";
         file.content = Base64.getDecoder().decode(image.image());
         file.thumbnailContent = Base64.getDecoder().decode(image.thumbnail());
@@ -216,6 +218,7 @@ public class JourneyDayService {
         file.width = image.width();
         file.height = image.height();
         file.createdAt = Instant.now();
+        file.occurredAt = occurredAt == null ? file.createdAt : occurredAt;
         JourneyFile saved = files.saveAndFlush(file);
         if (journey.coverFileId == null) {
             journey.coverFileId = saved.id;

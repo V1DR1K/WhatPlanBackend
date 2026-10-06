@@ -16,6 +16,7 @@ public class JourneyPoint extends JourneyEntity {
     public java.time.LocalDate scheduledOn;
     public java.time.LocalTime scheduledTime;
     public String notes;
+    public String address;
     public String mapsUrl;
     public int position;
     public String status = "PENDING";

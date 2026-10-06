@@ -448,7 +448,8 @@ public class JourneyService {
                 p.category,
                 p.extraActions == null ? List.of() : p.extraActions.stream()
                         .map(action -> new PointActionDto(action.label(), action.icon(), action.url()))
-                        .toList());
+                        .toList(),
+                p.address);
     }
 
     @Transactional
@@ -478,6 +479,7 @@ public class JourneyService {
         p.scheduledTime = r.scheduledTime();
         p.notes = r.notes();
         p.mapsUrl = r.mapsUrl();
+        p.address = r.address();
         p.position = r.position();
         p.status = r.status();
         p.category = pointTypes.requireCategory(
@@ -606,7 +608,9 @@ public class JourneyService {
                 s.source,
                 s.bookingUrl,
                 s.mapsUrl,
-                s.photoId);
+                s.photoId,
+                s.checkInTime,
+                s.checkOutTime);
     }
 
     @Transactional
@@ -632,12 +636,23 @@ public class JourneyService {
         s.name = r.name().trim();
         s.startsOn = r.startsOn();
         s.endsOn = r.endsOn();
+        s.checkInTime = r.checkInTime();
+        s.checkOutTime = r.checkOutTime();
         s.address = r.address();
         s.price = r.price();
         s.currency = r.currency();
         s.source = r.source();
         s.bookingUrl = r.bookingUrl();
         s.mapsUrl = r.mapsUrl();
+        if (r.photoId() != null) {
+            JourneyFile cover = owned(files, r.photoId());
+            if (!tripId.equals(cover.journeyId)
+                    || !Objects.equals(id, cover.stayId)
+                    || cover.contentType == null
+                    || !cover.contentType.startsWith("image/"))
+                throw bad("La portada debe ser una foto de este alojamiento");
+        }
+        s.photoId = r.photoId();
         stays.save(s);
         return stayDto(s);
     }
@@ -873,7 +888,8 @@ public class JourneyService {
                 "/whither-journey/files/" + f.id + "/content",
                 f.purpose == null ? "ATTACHMENT" : f.purpose, f.day, f.width, f.height,
                 f.thumbnailContent == null ? null
-                        : "/whither-journey/files/" + f.id + "/content?thumbnail=true");
+                        : "/whither-journey/files/" + f.id + "/content?thumbnail=true",
+                f.occurredAt);
     }
 
     private FileDto fileDto(FileSummary f) {
@@ -891,7 +907,8 @@ public class JourneyService {
                 f.getWidth(), f.getHeight(),
                 "TRIP".equals(f.getPurpose()) || "DAY".equals(f.getPurpose())
                         ? "/whither-journey/files/" + f.getId() + "/content?thumbnail=true"
-                        : null);
+                        : null,
+                f.getOccurredAt());
     }
 
     public JourneyFile file(UUID id) {
@@ -929,6 +946,20 @@ public class JourneyService {
             boolean hotelPhoto,
             MultipartFile upload)
             throws java.io.IOException {
+        return upload(tripId, stageId, pointId, stayId, movementId, hotelPhoto, null, upload);
+    }
+
+    @Transactional
+    public FileDto upload(
+            UUID tripId,
+            UUID stageId,
+            UUID pointId,
+            UUID stayId,
+            UUID movementId,
+            boolean hotelPhoto,
+            Instant occurredAt,
+            MultipartFile upload)
+            throws java.io.IOException {
         trip(tripId, true);
         associations(tripId, stageId, pointId, stayId, movementId);
         associationStage(stageId, pointId, stayId, movementId);
@@ -938,6 +969,16 @@ public class JourneyService {
         String type = fileType(bytes);
         if (hotelPhoto && (stayId == null || !type.startsWith("image/")))
             throw bad("La foto del alojamiento debe ser una imagen");
+        if (stayId != null && type.startsWith("image/")) {
+            long stayPhotoCount =
+                    files.findSummariesByJourneyIdAndCoupleId(tripId, couple()).stream()
+                            .filter(file -> stayId.equals(file.getStayId()))
+                            .filter(file -> file.getContentType() != null
+                                    && file.getContentType().startsWith("image/"))
+                            .count();
+            if (stayPhotoCount >= 5)
+                throw conflict("Cada alojamiento admite hasta 5 fotos");
+        }
         JourneyFile f = new JourneyFile();
         f.journeyId = tripId;
         f.stageId = associationStage(stageId, pointId, stayId, movementId);
@@ -945,16 +986,7 @@ public class JourneyService {
         f.stayId = stayId;
         f.movementId = movementId;
         f.purpose = "ATTACHMENT";
-        String name = upload.getOriginalFilename();
-        String safeName = name == null ? "archivo" : name.replace('\\', '/');
-        safeName =
-                safeName.substring(safeName.lastIndexOf('/') + 1)
-                        .replace('\r', '_')
-                        .replace('\n', '_');
-        f.name =
-                safeName.isBlank()
-                        ? "archivo"
-                        : safeName.substring(0, Math.min(255, safeName.length()));
+        f.name = type.startsWith("image/") ? "Foto" : "Documento";
         f.contentType = type;
         f.content = bytes;
         f.byteSize = bytes.length;
@@ -965,6 +997,7 @@ public class JourneyService {
             f.height = image.height();
         }
         f.createdAt = Instant.now();
+        f.occurredAt = occurredAt == null ? f.createdAt : occurredAt;
         files.saveAndFlush(f);
         if (hotelPhoto) {
             JourneyStay s = owned(stays, stayId);
@@ -972,6 +1005,15 @@ public class JourneyService {
             stays.save(s);
         }
         return fileDto(f);
+    }
+
+    @Transactional
+    public FileDto updateFileDate(UUID id, Instant occurredAt) {
+        if (occurredAt == null) throw bad("Indicá la fecha del archivo");
+        JourneyFile file = owned(files, id);
+        trip(file.journeyId, true);
+        file.occurredAt = occurredAt;
+        return fileDto(files.save(file));
     }
 
     @Transactional

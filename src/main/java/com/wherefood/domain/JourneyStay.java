@@ -10,6 +10,8 @@ public class JourneyStay extends JourneyEntity {
     public String name;
     public java.time.LocalDate startsOn;
     public java.time.LocalDate endsOn;
+    public java.time.LocalTime checkInTime;
+    public java.time.LocalTime checkOutTime;
     public String address;
     public java.math.BigDecimal price;
     public String currency;

@@ -99,13 +99,22 @@ public final class JourneyDtos {
             @NotBlank @Pattern(regexp = "PENDING|COMPLETED|CANCELLED") String status,
             @Valid SourceRef source,
             @Size(max = 50) @Pattern(regexp = "[A-Z][A-Z0-9_-]{0,49}") String category,
-            @Size(max = 8) List<@NotNull @Valid PointActionRequest> extraActions) {
+            @Size(max = 8) List<@NotNull @Valid PointActionRequest> extraActions,
+            @Size(max = 500) String address) {
+        public PointRequest(
+                UUID stageId, String title, LocalDate scheduledOn, LocalTime scheduledTime,
+                String notes, String mapsUrl, int position, String status, SourceRef source,
+                String category, List<PointActionRequest> extraActions) {
+            this(stageId, title, scheduledOn, scheduledTime, notes, mapsUrl, position, status,
+                    source, category, extraActions, null);
+        }
+
         public PointRequest(
                 UUID stageId, String title, LocalDate scheduledOn, LocalTime scheduledTime,
                 String notes, String mapsUrl, int position, String status, SourceRef source,
                 String category) {
             this(stageId, title, scheduledOn, scheduledTime, notes, mapsUrl, position, status,
-                    source, category, null);
+                    source, category, null, null);
         }
 
         public PointRequest(
@@ -119,7 +128,7 @@ public final class JourneyDtos {
                 String status,
                 SourceRef source) {
             this(stageId, title, scheduledOn, scheduledTime, notes, mapsUrl, position, status,
-                    source, null, null);
+                    source, null, null, null);
         }
     }
 
@@ -135,7 +144,8 @@ public final class JourneyDtos {
             String status,
             SourceRef source,
             String category,
-            List<PointActionDto> extraActions) {}
+            List<PointActionDto> extraActions,
+            String address) {}
 
     public record StayRequest(
             @NotNull UUID stageId,
@@ -147,7 +157,18 @@ public final class JourneyDtos {
             @Pattern(regexp = "[A-Z]{3}") String currency,
             @Size(max = 300) String source,
             @Size(max = 1000) @SafeHttpUrl String bookingUrl,
-            @Size(max = 1000) @SafeHttpUrl String mapsUrl) {}
+            @Size(max = 1000) @SafeHttpUrl String mapsUrl,
+            LocalTime checkInTime,
+            LocalTime checkOutTime,
+            UUID photoId) {
+        public StayRequest(
+                UUID stageId, String name, LocalDate startsOn, LocalDate endsOn,
+                String address, BigDecimal price, String currency, String source,
+                String bookingUrl, String mapsUrl) {
+            this(stageId, name, startsOn, endsOn, address, price, currency, source,
+                    bookingUrl, mapsUrl, null, null, null);
+        }
+    }
 
     public record StayDto(
             UUID id,
@@ -161,7 +182,9 @@ public final class JourneyDtos {
             String source,
             String bookingUrl,
             String mapsUrl,
-            UUID photoId) {}
+            UUID photoId,
+            LocalTime checkInTime,
+            LocalTime checkOutTime) {}
 
     public record PackingRequest(
             @NotNull @Positive Long userId,
@@ -222,6 +245,8 @@ public final class JourneyDtos {
 
     public record FileLinksRequest(UUID stageId, UUID pointId, UUID stayId, UUID movementId) {}
 
+    public record FileDateRequest(@NotNull Instant occurredAt) {}
+
     public record StageBalanceDto(UUID stageId, List<BalanceDto> balances) {}
 
     public record FileDto(
@@ -238,7 +263,8 @@ public final class JourneyDtos {
             LocalDate day,
             Integer width,
             Integer height,
-            String thumbnailUrl) {}
+            String thumbnailUrl,
+            Instant occurredAt) {}
 
     public record SourceDto(
             String section, Long entityId, String title, Long cityId, String href, String thumbnailUrl) {}

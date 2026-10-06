@@ -137,6 +137,8 @@ public final class JourneyRepositories {
         Integer getWidth();
 
         Integer getHeight();
+
+        java.time.Instant getOccurredAt();
     }
 
     public interface Files extends Scoped<JourneyFile> {

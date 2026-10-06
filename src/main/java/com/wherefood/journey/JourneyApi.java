@@ -96,8 +96,9 @@ public class JourneyApi {
     public JourneyPhotoDto uploadPhoto(@PathVariable UUID id,
             @RequestParam(defaultValue = "TRIP") String purpose,
             @RequestParam(required = false) java.time.LocalDate day,
+            @RequestParam(required = false) java.time.Instant occurredAt,
             @RequestPart("file") MultipartFile file) throws java.io.IOException {
-        return dayService.uploadPhoto(id, purpose, day, file);
+        return dayService.uploadPhoto(id, purpose, day, occurredAt, file);
     }
 
     @PutMapping("/{id}/cover/{fileId}")
@@ -245,9 +246,11 @@ public class JourneyApi {
             @RequestParam(required = false) UUID stayId,
             @RequestParam(required = false) UUID movementId,
             @RequestParam(defaultValue = "false") boolean hotelPhoto,
+            @RequestParam(required = false) java.time.Instant occurredAt,
             @RequestPart("file") MultipartFile file)
             throws java.io.IOException {
-        return service.upload(id, stageId, pointId, stayId, movementId, hotelPhoto, file);
+        return service.upload(
+                id, stageId, pointId, stayId, movementId, hotelPhoto, occurredAt, file);
     }
 
     @GetMapping("/files/{id}/content")
@@ -277,6 +280,12 @@ public class JourneyApi {
     @PutMapping("/files/{id}/links")
     public FileDto relinkFile(@PathVariable UUID id, @RequestBody FileLinksRequest request) {
         return service.relinkFile(id, request);
+    }
+
+    @PutMapping("/files/{id}/date")
+    public FileDto updateFileDate(
+            @PathVariable UUID id, @Valid @RequestBody FileDateRequest request) {
+        return service.updateFileDate(id, request.occurredAt());
     }
 
     @DeleteMapping("/files/{id}")

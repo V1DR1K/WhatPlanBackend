@@ -28,4 +28,5 @@ public class JourneyFile extends JourneyEntity {
     public Integer height;
 
     public java.time.Instant createdAt;
+    public java.time.Instant occurredAt;
 }
