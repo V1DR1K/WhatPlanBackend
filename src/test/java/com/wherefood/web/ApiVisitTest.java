@@ -274,7 +274,7 @@ class ApiVisitTest {
   User tomas = user(7L, "tomas");
   Place place = place(33L, tomas, Instant.parse("2026-07-23T00:00:00Z"));
   place.zoneId = 2L;
-  when(places.findPageIdsByCoupleId(coupleId, 2L, null, (String) null, null, "date-desc", null, 6, 0))
+  when(places.findPageIdsByCoupleId(coupleId, 2L, null, (String) null, null, "created-desc", null, 6, 0))
           .thenReturn(List.of(33L));
   when(places.findActiveByIdInAndCoupleId(List.of(33L), coupleId)).thenReturn(List.of(place));
   when(visits.findByPlaceIdInAndCoupleIdOrderByPlaceIdAscVisitedOnDescIdDesc(List.of(33L), coupleId)).thenReturn(List.of());
@@ -289,7 +289,7 @@ class ApiVisitTest {
 
   assertEquals(List.of(33L), result.content().stream().map(PlaceDto::id).toList());
   assertEquals(2L, result.content().getFirst().zoneId());
-  verify(places).findPageIdsByCoupleId(coupleId, 2L, null, (String) null, null, "date-desc", null, 6, 0);
+  verify(places).findPageIdsByCoupleId(coupleId, 2L, null, (String) null, null, "created-desc", null, 6, 0);
  }
 
   @Test
