@@ -17,6 +17,9 @@ public class WhyFunVenue extends CoupleScopedEntity {
   @ManyToOne(fetch = FetchType.LAZY) @JoinColumn(name = "created_by", nullable = false) public User createdBy;
   @ManyToOne(fetch = FetchType.LAZY) @JoinColumn(name = "updated_by", nullable = false) public User updatedBy;
  @Column(name = "scheduled_at") public LocalDate scheduledAt;
+ @Column(name = "single_occurrence", nullable = false) public boolean singleOccurrence;
+ @Column(name = "start_date") public LocalDate startDate;
+ @Column(name = "end_date") public LocalDate endDate;
  @Column(name = "cover_photo_id") public Long coverPhotoId;
  @OneToMany(mappedBy = "venue", cascade = CascadeType.ALL, orphanRemoval = true) public List<WhyFunVenueSchedule> schedules = new ArrayList<>();
  @Column(nullable = false) public Instant createdAt;

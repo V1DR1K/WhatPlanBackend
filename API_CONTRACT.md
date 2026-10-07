@@ -51,36 +51,51 @@ the next request's `cursor`; it is `null` when there are no more results.
 `size` defaults to `5` and its effective value is clamped to `1..30`.
 
 - `GET /api/films` accepts `cursor`, `size`, `search`, `sort`, plus the
-  existing `genre`, `platformId`, and `watched` filters. `search` matches a
+  existing `genre`, `platformId`, and `watched` filters, and `reviewStatus`.
+  `reviewStatus` accepts `ALL` (default), `REVIEWED`, or `UNREVIEWED` and
+  matches a film with at least one view in that state. A film with mixed views
+  can appear in both filtered results. `search` matches a
   local title or original title. `sort` accepts `rating-desc`, `rating-asc`,
-  `date-desc`, and `date-asc` (`rating` and `date` remain aliases for their
-  descending variants). Dates use `updatedAt`; the default is `date-desc`.
+  `created-desc`, `date-desc`, and `date-asc` (`rating` and `date` remain
+  aliases for their descending variants). `date` orders by `updatedAt`; the
+  default is `created-desc`.
   Ratings are averages of film reviews. Each content item has
   the existing `FilmDto` fields: `id`, `tmdbId`, `title`, `originalTitle`,
   `synopsis`, `releaseDate`, `posterUrl`, `thumbnailUrl`, `posterWidth`,
   `posterHeight`, `genres`, `platform`, `watchedCount`, `lastWatchedOn`,
   `author`, `reviews`, `views`, `createdAt`, `updatedAt`, and `tmdb`.
 - `GET /api/how-cook/recipes` accepts `cursor`, `size`, `search`, `home`,
-  `cooked`, and `sort`. `home` is `TOMAS` or `AVRIL` and selects recipes with
+  `cooked`, `sort`, and `reviewStatus`. `reviewStatus` accepts `ALL` (default),
+  `REVIEWED`, or `UNREVIEWED` and matches a recipe with at least one cooking in
+  that state. A recipe with mixed cookings can appear in both filtered results.
+  `home` is `TOMAS` or `AVRIL` and selects recipes with
   at least one cooking at that legacy member slot. `cooked=true` selects recipes with cooking
   history; `cooked=false` selects recipes without it. `sort` accepts
-  `rating-desc`, `rating-asc`, `date-desc`, and `date-asc` (`rating` and
-  `date` are descending aliases); dates use `updatedAt`, and the default is
-  `date-desc`. Recipe content fields are `id`, `name`, `sourceUrl`, `photoUrl`,
+  `rating-desc`, `rating-asc`, `created-desc`, `date-desc`, and `date-asc`
+  (`rating` and `date` are descending aliases); `date` uses `updatedAt`, and
+  the default is `created-desc`. Recipe content fields are `id`, `name`, `sourceUrl`, `photoUrl`,
   `thumbnailUrl`, `photoWidth`, `photoHeight`, `rating`, `cookingCount`,
   `homes`, `ingredients`, `steps`, `createdBy`, `updatedBy`, `createdAt`, and
   `updatedAt`. `rating` is the average of cooking-review ratings or `null` if
   none exists; `homes` is an ordered subset of `["TOMAS", "AVRIL"]`.
 - `GET /api/why-fun/activities` accepts `cursor`, `size`, `search`, `visited`,
-  `sort`, plus the existing `categoryId` and `subcategoryId` filters. Search
+  `sort`, `reviewStatus`, and the existing `categoryId` and `subcategoryId`
+  filters. `reviewStatus` accepts `ALL` (default), `REVIEWED`, or `UNREVIEWED`
+  and matches an activity with at least one visit in that state. An activity
+  with mixed visits can appear in both filtered results. Search
   matches activity name, address, category, or subcategory. `visited=true`
   selects activities with `visitCount > 0`; `visited=false` selects pending
   activities with `visitCount == 0`. `sort` accepts `rating-desc`,
-  `rating-asc`, `date-desc`, and `date-asc` (`rating` and `date` are descending
-  aliases); dates use `updatedAt`, and the default is `date-desc`. Each
+  `rating-asc`, `created-desc`, `date-desc`, and `date-asc` (`rating` and
+  `date` are descending aliases); `date` uses `updatedAt`, and the default is
+  `created-desc`. Each
   content item has the existing `ActivityDto` fields: `id`, `name`, `address`,
-  `category`, `subcategory`, `schedules`, `profilePhoto`, `rating`,
+  `singleOccurrence`, `startDate`, `endDate`, `category`, `subcategory`,
+  `schedules`, `profilePhoto`, `rating`,
   `visitCount`, `createdBy`, `updatedBy`, `createdAt`, and `updatedAt`.
+  `singleOccurrence` defaults to `false`; when true, `startDate` and `endDate`
+  are required ISO dates with the end on or after the start. Weekly `schedules`
+  remain independent and can be supplied alongside this date range.
 
 Catalog DTO media fields contain only URL and dimension metadata. Image bytes
 remain available exclusively from their dedicated photo endpoints.
@@ -89,9 +104,10 @@ Cooking-review requests and responses include `complexity` and `taste` from `1`
 through `5`, alongside `rating`. Existing cooking reviews were initialized with
 `complexity: 1` and their existing `rating` copied to `taste`.
 
-`GET /api/places` also defaults to `date-desc`, which orders places by
-`updatedAt` (then `createdAt`). This makes every active catalog open with the
-most recently modified entry first.
+`GET /api/places` accepts `reviewStatus=ALL` (default), `REVIEWED`, or
+`UNREVIEWED`; status is evaluated over place visits. A place with mixed visits
+can appear in both filtered results. The `created-desc` sort orders active
+places by `createdAt` and then ID, and is the default for every active catalog.
 
 All collections are ordered by their explicit photo position or their relevant
 experience date. A visit/cooking cover is selected with `PUT .../cover/{photoId}`.

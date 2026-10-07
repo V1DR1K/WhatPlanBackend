@@ -110,20 +110,22 @@ public class Api {
  @PutMapping("/highlight-tags/{id}") @PreAuthorize("hasRole('ADMIN')") HighlightTagDto updateTag(@PathVariable Long id, @RequestBody @jakarta.validation.Valid HighlightTagRequest request) { return tag(catalogAdminService.updateTag(id, request)); }
  @DeleteMapping("/highlight-tags/{id}") @PreAuthorize("hasRole('ADMIN')") @ResponseStatus(HttpStatus.NO_CONTENT) void deleteTag(@PathVariable Long id) { catalogAdminService.deleteTag(id); }
 
- @GetMapping("/places") Slice<PlaceDto> list(@RequestParam(required = false) Long zoneId, @RequestParam(required = false) Long categoryId, @RequestParam(required = false) Long highlightTagId, @RequestParam(required = false) PlaceStatus status, @RequestParam(required = false) String search, @RequestParam(required = false) String sort, @RequestParam(required = false) Long cursor, @RequestParam(defaultValue = "12") int size) {
+ @GetMapping("/places") Slice<PlaceDto> list(@RequestParam(required = false) Long zoneId, @RequestParam(required = false) Long categoryId, @RequestParam(required = false) Long highlightTagId, @RequestParam(required = false) PlaceStatus status, @RequestParam(defaultValue = "ALL") ReviewStatusFilter reviewStatus, @RequestParam(required = false) String search, @RequestParam(required = false) String sort, @RequestParam(required = false) Long cursor, @RequestParam(defaultValue = "12") int size) {
    int limit = Math.max(1, Math.min(size, 30));
    long offset = cursor == null ? 0 : Math.max(0, cursor);
    if (offset > 1_000_000) throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Cursor inválido");
    String normalizedSearch = search == null || search.isBlank() ? null : search.trim().toLowerCase(Locale.ROOT);
-   String normalizedSort = sort == null ? "date-desc" : sort.trim().toLowerCase(Locale.ROOT);
-   if (!Set.of("rating", "rating-desc", "rating-asc", "date", "date-desc", "date-asc").contains(normalizedSort)) {
+   String normalizedSort = sort == null ? "created-desc" : sort.trim().toLowerCase(Locale.ROOT);
+   if (!Set.of("rating", "rating-desc", "rating-asc", "created-desc", "date", "date-desc", "date-asc").contains(normalizedSort)) {
     throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Orden inválido");
    }
-   List<Long> ids = zoneId == null
-           ? places.findPageIdsByCoupleId(CoupleContext.current(), categoryId, highlightTagId,
-                   status == null ? null : status.name(), normalizedSearch, normalizedSort, limit + 1, offset)
+   List<Long> ids = highlightTagId == null
+           ? places.findPageIdsByCoupleId(CoupleContext.current(), zoneId, categoryId,
+                   status == null ? null : status.name(), normalizedSearch, normalizedSort,
+                   reviewStatus.queryValue(), limit + 1, offset)
            : places.findPageIdsByCoupleId(CoupleContext.current(), zoneId, categoryId, highlightTagId,
-                   status == null ? null : status.name(), normalizedSearch, normalizedSort, limit + 1, offset);
+                   status == null ? null : status.name(), normalizedSearch, normalizedSort,
+                   reviewStatus.queryValue(), limit + 1, offset);
    Long next = ids.size() > limit ? offset + limit : null;
    List<Long> pageIds = ids.stream().limit(limit).toList();
    if (pageIds.isEmpty()) return new Slice<>(List.of(), next);
@@ -134,10 +136,13 @@ public class Api {
   return new Slice<>(page.stream().map(place -> place(place, summaries.get(place.id))).toList(), next);
  }
 
- Slice<PlaceDto> list(Long categoryId, Long highlightTagId, PlaceStatus status, String search, String sort, Long cursor, int size) {
-  return list(null, categoryId, highlightTagId, status, search, sort, cursor, size);
+ Slice<PlaceDto> list(Long zoneId, Long categoryId, PlaceStatus status, ReviewStatusFilter reviewStatus,
+         String search, String sort, Long cursor, int size) {
+  return list(zoneId, categoryId, null, status, reviewStatus, search, sort, cursor, size);
  }
-
+ Slice<PlaceDto> list(Long zoneId, Long categoryId, PlaceStatus status, String search, String sort, Long cursor, int size) {
+  return list(zoneId, categoryId, status, ReviewStatusFilter.ALL, search, sort, cursor, size);
+ }
   @PostMapping("/places") PlaceDto addPlace(@RequestBody @jakarta.validation.Valid PlaceRequest request, @AuthenticationPrincipal User owner) {
    return place(placeService.create(request.toInput(), owner));
   }

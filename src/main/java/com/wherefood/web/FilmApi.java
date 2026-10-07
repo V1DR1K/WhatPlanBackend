@@ -114,18 +114,21 @@ public class FilmApi {
   @PutMapping("/film-genres/{id}") @PreAuthorize("hasRole('ADMIN')") FilmGenreOptionDto updateGenre(@PathVariable Long id, @RequestBody @Valid FilmGenreOptionRequest request) { return genre(catalogAdminService.updateGenre(id, request)); }
   @DeleteMapping("/film-genres/{id}") @PreAuthorize("hasRole('ADMIN')") @ResponseStatus(HttpStatus.NO_CONTENT) void deleteGenre(@PathVariable Long id) { catalogAdminService.deleteGenre(id); }
 
-  @GetMapping("/films") Slice<FilmDto> list(@RequestParam(required = false) Long zoneId, @RequestParam(required = false) String genre, @RequestParam(required = false) Long platformId, @RequestParam(required = false) Boolean watched, @RequestParam(required = false) String search, @RequestParam(required = false) String sort, @RequestParam(required = false) Long cursor, @RequestParam(defaultValue = "5") int size) {
+  @GetMapping("/films") Slice<FilmDto> list(@RequestParam(required = false) Long zoneId, @RequestParam(required = false) String genre, @RequestParam(required = false) Long platformId, @RequestParam(required = false) Boolean watched, @RequestParam(defaultValue = "ALL") ReviewStatusFilter reviewStatus, @RequestParam(required = false) String search, @RequestParam(required = false) String sort, @RequestParam(required = false) Long cursor, @RequestParam(defaultValue = "5") int size) {
    int limit = Math.max(1, Math.min(size, 30));
    long offset = cursor == null ? 0 : Math.max(0, cursor);
    if (offset > 1_000_000) throw badRequest("Cursor inválido");
    String normalizedSearch = search == null || search.isBlank() ? null : search.trim().toLowerCase(Locale.ROOT);
-   String normalizedSort = sort == null ? "date-desc" : sort.trim().toLowerCase(Locale.ROOT);
-   if (!Set.of("date", "date-desc", "date-asc", "rating", "rating-desc", "rating-asc").contains(normalizedSort)) {
+   String normalizedSort = sort == null ? "created-desc" : sort.trim().toLowerCase(Locale.ROOT);
+   if (!Set.of("created-desc", "date", "date-desc", "date-asc", "rating", "rating-desc", "rating-asc").contains(normalizedSort)) {
     throw badRequest("Orden inválido");
    }
    String normalizedGenre = genre == null || genre.isBlank() ? null : genre.trim().toLowerCase(Locale.ROOT);
-   List<Long> ids = films.findPageIdsByCoupleId(CoupleContext.current(), normalizedGenre, platformId,
-           watched, normalizedSearch, normalizedSort, limit + 1, offset);
+   List<Long> ids = zoneId == null
+           ? films.findPageIdsByCoupleId(CoupleContext.current(), normalizedGenre, platformId, watched,
+                   normalizedSearch, normalizedSort, reviewStatus.queryValue(), limit + 1, offset)
+           : films.findPageIdsByCoupleId(CoupleContext.current(), zoneId, normalizedGenre,
+                   platformId, watched, normalizedSearch, normalizedSort, reviewStatus.queryValue(), limit + 1, offset);
    Long next = ids.size() > limit ? offset + limit : null;
    List<Long> pageIds = ids.stream().limit(limit).toList();
    if (pageIds.isEmpty()) return new Slice<>(List.of(), null);
@@ -136,8 +139,12 @@ public class FilmApi {
    return new Slice<>(page.stream().map(film -> film(film, false, photosByFilm.get(film.id))).toList(), next);
    }
 
+  Slice<FilmDto> list(String genre, Long platformId, Boolean watched, ReviewStatusFilter reviewStatus,
+          String search, String sort, Long cursor, int size) {
+   return list(null, genre, platformId, watched, reviewStatus, search, sort, cursor, size);
+  }
   Slice<FilmDto> list(String genre, Long platformId, Boolean watched, String search, String sort, Long cursor, int size) {
-   return list(null, genre, platformId, watched, search, sort, cursor, size);
+   return list(null, genre, platformId, watched, ReviewStatusFilter.ALL, search, sort, cursor, size);
   }
 
   @GetMapping("/films/{id}") FilmDto get(@PathVariable Long id) { return film(findFilm(id), true); }

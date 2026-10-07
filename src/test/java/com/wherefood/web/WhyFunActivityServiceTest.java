@@ -54,7 +54,7 @@ class WhyFunActivityServiceTest {
 
         WhyFunVenue updated = new WhyFunActivityService(categories, activities,
                 new CoupleAuthorizationService(members)).update(activity.id,
-                        new ActivityRequest("Actividad editada", "Dirección", category.id, subcategory.id, null),
+                        new ActivityRequest("Actividad editada", "Dirección", category.id, subcategory.id, false, null, null, null),
                         actor);
 
         assertEquals(category, updated.category);

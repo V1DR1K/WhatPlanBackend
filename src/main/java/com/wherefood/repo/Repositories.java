@@ -307,6 +307,17 @@ public final class Repositories {
             and (cast(:zoneId as bigint) is null or place.zone_id = cast(:zoneId as bigint))
             and (cast(:categoryId as bigint) is null or place.category_id = cast(:categoryId as bigint))
             and (cast(:status as text) is null or place.status = cast(:status as text))
+            and (cast(:reviewStatus as text) is null
+                 or (cast(:reviewStatus as text) = 'REVIEWED' and exists (
+                     select 1 from place_visits visit
+                     join place_visit_reviews review
+                       on review.visit_id = visit.id and review.couple_id = visit.couple_id
+                     where visit.place_id = place.id and visit.couple_id = place.couple_id))
+                 or (cast(:reviewStatus as text) = 'UNREVIEWED' and exists (
+                     select 1 from place_visits visit
+                     where visit.place_id = place.id and visit.couple_id = place.couple_id
+                       and not exists (select 1 from place_visit_reviews review
+                                       where review.visit_id = visit.id and review.couple_id = visit.couple_id))))
             and (cast(:highlightTagId as bigint) is null
                  or exists (select 1 from place_highlight_tags tag
                             where tag.place_id = place.id and tag.couple_id = place.couple_id
@@ -316,6 +327,7 @@ public final class Repositories {
                  or position(cast(:search as text) in lower(category.name)) > 0
                  or position(cast(:search as text) in lower(place.address)) > 0)
           order by
+            case when cast(:sort as text) = 'created-desc' then place.created_at end desc,
             case when cast(:sort as text) in ('rating', 'rating-desc') then rating.rating end desc,
             case when cast(:sort as text) = 'rating-asc' then rating.rating end asc,
             case when cast(:sort as text) in ('date', 'date-desc') then place.updated_at end desc,
@@ -329,6 +341,7 @@ public final class Repositories {
           @Param("zoneId") Long zoneId,
           @Param("categoryId") Long categoryId, @Param("highlightTagId") Long highlightTagId,
           @Param("status") String status, @Param("search") String search, @Param("sort") String sort,
+          @Param("reviewStatus") String reviewStatus,
           @Param("limit") int limit, @Param("offset") long offset);
   @Query(value = """
           select place.id from places place
@@ -343,9 +356,17 @@ public final class Repositories {
   default List<Long> findArchivedPageIdsByCoupleId(java.util.UUID coupleId, int limit, long offset) {
     return findArchivedPageIdsByCoupleId(coupleId, null, limit, offset);
   }
-  default List<Long> findPageIdsByCoupleId(java.util.UUID coupleId, Long categoryId, Long highlightTagId,
+  default List<Long> findPageIdsByCoupleId(java.util.UUID coupleId, Long zoneId, Long categoryId,
+          Long highlightTagId, String status, String search, String sort, int limit, long offset) {
+    return findPageIdsByCoupleId(coupleId, zoneId, categoryId, highlightTagId, status, search, sort, null, limit, offset);
+  }
+  default List<Long> findPageIdsByCoupleId(java.util.UUID coupleId, Long zoneId, Long categoryId,
+          String status, String search, String sort, String reviewStatus, int limit, long offset) {
+    return findPageIdsByCoupleId(coupleId, zoneId, categoryId, null, status, search, sort, reviewStatus, limit, offset);
+  }
+  default List<Long> findPageIdsByCoupleId(java.util.UUID coupleId, Long zoneId, Long categoryId,
           String status, String search, String sort, int limit, long offset) {
-    return findPageIdsByCoupleId(coupleId, null, categoryId, highlightTagId, status, search, sort, limit, offset);
+    return findPageIdsByCoupleId(coupleId, zoneId, categoryId, null, status, search, sort, null, limit, offset);
   }
   @EntityGraph(attributePaths = {"category", "createdBy", "highlightTags"})
   @Query("select place from Place place where place.id in :ids and place.coupleId = :coupleId and place.deactivatedAt is not null")
@@ -469,7 +490,7 @@ public final class Repositories {
    List<FilmGenreOption> findAllByNameIn(Collection<String> names);
   }
 
-   public interface ItemReviews extends CoupleScopedRepository<ItemReview> {
+  public interface ItemReviews extends CoupleScopedRepository<ItemReview> {
      @EntityGraph(attributePaths = {"item", "author"}) List<ItemReview> findByItemIdInAndCoupleIdOrderByItemIdAscAuthorUsername(Collection<Long> itemIds, java.util.UUID coupleId);
      Optional<ItemReview> findByItemIdAndAuthorIdAndCoupleId(Long itemId, Long authorId, java.util.UUID coupleId);
     @Query("select r.id as reviewId, author.username as author from ItemReview r join r.author author where r.item.id in :itemIds and r.coupleId=:coupleId") List<ReviewAuthor> authorsByItemIdInAndCoupleId(@Param("itemIds") Collection<Long> itemIds, @Param("coupleId") java.util.UUID coupleId);
@@ -496,10 +517,25 @@ public final class Repositories {
             and (cast(:platformId as bigint) is null or film.platform_id = cast(:platformId as bigint))
             and (cast(:watched as boolean) is null
                  or (film.watched_count > 0) = cast(:watched as boolean))
+            and (cast(:reviewStatus as text) is null
+                 or (cast(:reviewStatus as text) = 'REVIEWED' and exists (
+                     select 1 from film_views view_record
+                     join film_reviews review
+                       on review.view_id = view_record.id and review.couple_id = view_record.couple_id
+                     where view_record.film_id = film.id and view_record.couple_id = film.couple_id
+                       and review.film_id = film.id))
+                 or (cast(:reviewStatus as text) = 'UNREVIEWED' and exists (
+                     select 1 from film_views view_record
+                     where view_record.film_id = film.id and view_record.couple_id = film.couple_id
+                       and not exists (select 1 from film_reviews review
+                                       where review.view_id = view_record.id
+                                         and review.film_id = film.id
+                                         and review.couple_id = view_record.couple_id))))
             and (cast(:search as text) is null
                  or position(cast(:search as text) in lower(film.title)) > 0
                  or position(cast(:search as text) in lower(film.original_title)) > 0)
           order by
+            case when cast(:sort as text) = 'created-desc' then film.created_at end desc,
             case when cast(:sort as text) in ('date', 'date-desc') then film.updated_at end desc,
             case when cast(:sort as text) in ('date', 'date-desc') then film.created_at end desc,
             case when cast(:sort as text) = 'date-asc' then film.updated_at end asc,
@@ -515,11 +551,17 @@ public final class Repositories {
           @Param("genre") String genre,
           @Param("platformId") Long platformId, @Param("watched") Boolean watched,
           @Param("search") String search, @Param("sort") String sort,
+          @Param("reviewStatus") String reviewStatus,
           @Param("limit") int limit, @Param("offset") long offset);
   default List<Long> findPageIdsByCoupleId(java.util.UUID coupleId, Long ignoredZoneId,
           String genre, Long platformId, Boolean watched, String search, String sort,
           int limit, long offset) {
-    return findPageIdsByCoupleId(coupleId, genre, platformId, watched, search, sort, limit, offset);
+    return findPageIdsByCoupleId(coupleId, genre, platformId, watched, search, sort, null, limit, offset);
+  }
+  default List<Long> findPageIdsByCoupleId(java.util.UUID coupleId, Long ignoredZoneId,
+          String genre, Long platformId, Boolean watched, String search, String sort,
+          String reviewStatus, int limit, long offset) {
+    return findPageIdsByCoupleId(coupleId, genre, platformId, watched, search, sort, reviewStatus, limit, offset);
   }
   @EntityGraph(attributePaths = {"platform", "createdBy", "genres"})
   @Query("select film from Film film where film.id in :ids and film.coupleId = :coupleId")
@@ -630,8 +672,20 @@ public final class Repositories {
                   or exists (select 1 from why_fun_visits v
                              where v.couple_id = venue.couple_id and v.venue_id = venue.id)
                      = cast(:visited as boolean))
+             and (cast(:reviewStatus as text) is null
+                  or (cast(:reviewStatus as text) = 'REVIEWED' and exists (
+                      select 1 from why_fun_visits visit
+                      join why_fun_visit_reviews review
+                        on review.visit_id = visit.id and review.couple_id = visit.couple_id
+                      where visit.venue_id = venue.id and visit.couple_id = venue.couple_id))
+                  or (cast(:reviewStatus as text) = 'UNREVIEWED' and exists (
+                      select 1 from why_fun_visits visit
+                      where visit.venue_id = venue.id and visit.couple_id = venue.couple_id
+                        and not exists (select 1 from why_fun_visit_reviews review
+                                        where review.visit_id = visit.id and review.couple_id = visit.couple_id))))
            order by
              case when cast(:sort as text) = 'name' then lower(venue.name) end asc,
+             case when cast(:sort as text) = 'created-desc' then venue.created_at end desc,
              case when cast(:sort as text) in ('date', 'date-desc') then venue.updated_at end desc,
              case when cast(:sort as text) in ('date', 'date-desc') then venue.created_at end desc,
              case when cast(:sort as text) = 'date-asc' then venue.updated_at end asc,
@@ -648,10 +702,15 @@ public final class Repositories {
            @Param("zoneId") Long zoneId,
            @Param("categoryId") Long categoryId, @Param("subcategoryId") Long subcategoryId,
            @Param("search") String search, @Param("visited") Boolean visited, @Param("sort") String sort,
+           @Param("reviewStatus") String reviewStatus,
            @Param("limit") int limit, @Param("offset") long offset);
    default List<Long> findPageIdsByCoupleId(java.util.UUID coupleId, Long categoryId, Long subcategoryId,
            String search, Boolean visited, String sort, int limit, long offset) {
-     return findPageIdsByCoupleId(coupleId, null, categoryId, subcategoryId, search, visited, sort, limit, offset);
+     return findPageIdsByCoupleId(coupleId, null, categoryId, subcategoryId, search, visited, sort, null, limit, offset);
+   }
+   default List<Long> findPageIdsByCoupleId(java.util.UUID coupleId, Long categoryId, Long subcategoryId,
+           String search, Boolean visited, String sort, String reviewStatus, int limit, long offset) {
+     return findPageIdsByCoupleId(coupleId, null, categoryId, subcategoryId, search, visited, sort, reviewStatus, limit, offset);
    }
    @EntityGraph(attributePaths = {"category", "subcategory", "createdBy", "updatedBy", "schedules"})
    @Query("select venue from WhyFunVenue venue where venue.id in :ids and venue.coupleId = :coupleId")
@@ -682,7 +741,7 @@ public final class Repositories {
      Long getActivityId(); Long getVisitCount();
     }
 
-   public interface WhyFunVenueReviews extends CoupleScopedRepository<WhyFunVenueReview> {
+  public interface WhyFunVenueReviews extends CoupleScopedRepository<WhyFunVenueReview> {
    @Query("select r.id as id, r.venue.id as venueId, u.username as author, r.rating as rating, r.comment as comment, r.updatedAt as updatedAt from WhyFunVenueReview r join r.author u where r.venue.id=:venueId and r.coupleId=:coupleId order by u.username") List<WhyFunReviewSummary> summariesByVenueIdAndCoupleId(@Param("venueId") Long venueId, @Param("coupleId") java.util.UUID coupleId);
     @Query("select r.id as id, r.venue.id as venueId, u.username as author, r.rating as rating, r.comment as comment, r.updatedAt as updatedAt from WhyFunVenueReview r join r.author u where r.venue.id in :venueIds and r.coupleId=:coupleId order by r.venue.id asc, u.username") List<WhyFunReviewSummary> summariesByVenueIdInAndCoupleId(@Param("venueIds") Collection<Long> venueIds, @Param("coupleId") java.util.UUID coupleId);
    @EntityGraph(attributePaths = "author") Optional<WhyFunVenueReview> findByVenueIdAndAuthorIdAndCoupleId(Long venueId, Long authorId, java.util.UUID coupleId);
@@ -742,7 +801,19 @@ public final class Repositories {
                    or exists (select 1 from cookings cc
                               where cc.couple_id = r.couple_id and cc.recipe_id = r.id)
                       = cast(:cooked as boolean))
+              and (cast(:reviewStatus as text) is null
+                   or (cast(:reviewStatus as text) = 'REVIEWED' and exists (
+                       select 1 from cookings cooking
+                       join cooking_reviews review
+                         on review.cooking_id = cooking.id and review.couple_id = cooking.couple_id
+                       where cooking.recipe_id = r.id and cooking.couple_id = r.couple_id))
+                   or (cast(:reviewStatus as text) = 'UNREVIEWED' and exists (
+                       select 1 from cookings cooking
+                       where cooking.recipe_id = r.id and cooking.couple_id = r.couple_id
+                         and not exists (select 1 from cooking_reviews review
+                                         where review.cooking_id = cooking.id and review.couple_id = cooking.couple_id))))
             order by
+              case when cast(:sort as text) = 'created-desc' then r.created_at end desc,
               case when cast(:sort as text) in ('date', 'date-desc') then r.updated_at end desc,
               case when cast(:sort as text) in ('date', 'date-desc') then r.created_at end desc,
               case when cast(:sort as text) = 'date-asc' then r.updated_at end asc,
@@ -756,10 +827,15 @@ public final class Repositories {
             """, nativeQuery = true)
     List<Long> findPageIdsByCoupleId(@Param("coupleId") java.util.UUID coupleId,
             @Param("search") String search, @Param("home") String home, @Param("cooked") Boolean cooked,
-            @Param("sort") String sort, @Param("limit") int limit, @Param("offset") long offset);
+            @Param("sort") String sort, @Param("reviewStatus") String reviewStatus,
+            @Param("limit") int limit, @Param("offset") long offset);
+    default List<Long> findPageIdsByCoupleId(java.util.UUID coupleId, Long ignoredZoneId,
+            String search, String home, Boolean cooked, String sort, String reviewStatus, int limit, long offset) {
+      return findPageIdsByCoupleId(coupleId, search, home, cooked, sort, reviewStatus, limit, offset);
+    }
     default List<Long> findPageIdsByCoupleId(java.util.UUID coupleId, Long ignoredZoneId,
             String search, String home, Boolean cooked, String sort, int limit, long offset) {
-      return findPageIdsByCoupleId(coupleId, search, home, cooked, sort, limit, offset);
+      return findPageIdsByCoupleId(coupleId, search, home, cooked, sort, null, limit, offset);
     }
     @EntityGraph(attributePaths = {"createdBy", "updatedBy", "ingredients", "steps"})
     @Query("select r from Recipe r where r.id in :ids and r.coupleId = :coupleId")

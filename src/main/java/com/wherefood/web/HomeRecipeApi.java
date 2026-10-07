@@ -90,17 +90,20 @@ public class HomeRecipeApi {
   this.cookingService = cookingService; this.mediaService = mediaService;
  }
 
-  @GetMapping("/recipes") @Transactional(readOnly = true) Slice<RecipeDto> listRecipes(@RequestParam(required = false) Long zoneId, @RequestParam(required = false) String search, @RequestParam(required = false) Home home, @RequestParam(required = false) Boolean cooked, @RequestParam(required = false) String sort, @RequestParam(required = false) Long cursor, @RequestParam(defaultValue = "5") int size) {
+  @GetMapping("/recipes") @Transactional(readOnly = true) Slice<RecipeDto> listRecipes(@RequestParam(required = false) Long zoneId, @RequestParam(required = false) String search, @RequestParam(required = false) Home home, @RequestParam(required = false) Boolean cooked, @RequestParam(defaultValue = "ALL") ReviewStatusFilter reviewStatus, @RequestParam(required = false) String sort, @RequestParam(required = false) Long cursor, @RequestParam(defaultValue = "5") int size) {
    int limit = Math.max(1, Math.min(size, 30));
    long offset = cursor == null ? 0 : Math.max(0, cursor);
    if (offset > 1_000_000) throw badRequest("Cursor inválido");
    String normalizedSearch = search == null || search.isBlank() ? null : search.trim().toLowerCase(Locale.ROOT);
-   String normalizedSort = sort == null ? "date-desc" : sort.trim().toLowerCase(Locale.ROOT);
-   if (!Set.of("date", "date-desc", "date-asc", "rating", "rating-desc", "rating-asc").contains(normalizedSort)) {
+   String normalizedSort = sort == null ? "created-desc" : sort.trim().toLowerCase(Locale.ROOT);
+   if (!Set.of("created-desc", "date", "date-desc", "date-asc", "rating", "rating-desc", "rating-asc").contains(normalizedSort)) {
     throw badRequest("Orden inválido");
    }
-   List<Long> ids = recipes.findPageIdsByCoupleId(CoupleContext.current(), normalizedSearch,
-           home == null ? null : home.name(), cooked, normalizedSort, limit + 1, offset);
+   List<Long> ids = zoneId == null
+           ? recipes.findPageIdsByCoupleId(CoupleContext.current(), normalizedSearch,
+                   home == null ? null : home.name(), cooked, normalizedSort, reviewStatus.queryValue(), limit + 1, offset)
+           : recipes.findPageIdsByCoupleId(CoupleContext.current(), zoneId, normalizedSearch,
+                   home == null ? null : home.name(), cooked, normalizedSort, reviewStatus.queryValue(), limit + 1, offset);
    Long next = ids.size() > limit ? offset + limit : null;
    List<Long> pageIds = ids.stream().limit(limit).toList();
    if (pageIds.isEmpty()) return new Slice<>(List.of(), next);
@@ -111,8 +114,12 @@ public class HomeRecipeApi {
    Map<Long, RecipePhotoMetadata> photosByRecipe = recipePhotos(page);
    return new Slice<>(page.stream().map(recipe -> recipe(recipe, summaries.get(recipe.id), photosByRecipe.get(recipe.id))).toList(), next);
   }
+ Slice<RecipeDto> listRecipes(String search, Home home, Boolean cooked, ReviewStatusFilter reviewStatus,
+         String sort, Long cursor, int size) {
+  return listRecipes(null, search, home, cooked, reviewStatus, sort, cursor, size);
+ }
  Slice<RecipeDto> listRecipes(String search, Home home, Boolean cooked, String sort, Long cursor, int size) {
-  return listRecipes(null, search, home, cooked, sort, cursor, size);
+  return listRecipes(null, search, home, cooked, ReviewStatusFilter.ALL, sort, cursor, size);
  }
  @GetMapping("/recipes/{id}") @Transactional(readOnly = true) RecipeDto getRecipe(@PathVariable Long id) { return recipe(findRecipe(id)); }
  @PostMapping("/recipes") @ResponseStatus(HttpStatus.CREATED) RecipeDto addRecipe(@RequestBody @Valid RecipeRequest request, @AuthenticationPrincipal User author) {

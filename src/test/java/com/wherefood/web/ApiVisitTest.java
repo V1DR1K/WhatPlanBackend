@@ -216,7 +216,7 @@ class ApiVisitTest {
     User tomas = user(7L, "tomas");
     Place older = place(1L, tomas, Instant.parse("2026-07-21T00:00:00Z"));
     Place recent = place(2L, tomas, Instant.parse("2026-07-23T00:00:00Z"));
-    when(places.findPageIdsByCoupleId(null, null, null, null, null, "date-desc", 6, 0)).thenReturn(List.of(2L, 1L));
+    when(places.findPageIdsByCoupleId(null, null, null, null, null, "created-desc", null, 6, 0)).thenReturn(List.of(2L, 1L));
     when(places.findActiveByIdInAndCoupleId(List.of(2L, 1L), null)).thenReturn(List.of(recent, older));
     when(visits.findByPlaceIdInAndCoupleIdOrderByPlaceIdAscVisitedOnDescIdDesc(any(), isNull())).thenReturn(List.of());
     when(visitReviews.findByVisitIdInAndCoupleIdOrderByVisitIdAscAuthorUsername(any(), isNull())).thenReturn(List.of());
@@ -224,7 +224,7 @@ class ApiVisitTest {
     when(visitPhotos.findByVisitIdInAndCoupleIdOrderByVisitIdAscPositionAscIdAsc(any(), isNull())).thenReturn(List.of());
     when(placePhotos.findByPlaceIdInAndCoupleId(any(), isNull())).thenReturn(List.of());
 
-    Slice<PlaceDto> result = new Api(null, null, null, places, visits, null, null, null, placeReviews, placePhotos, visitPhotos, visitReviews, null).list(null, null, null, null, null, null, 5);
+    Slice<PlaceDto> result = new Api(null, null, null, places, visits, null, null, null, placeReviews, placePhotos, visitPhotos, visitReviews, null).list(null, null, null, ReviewStatusFilter.ALL, null, null, null, 5);
 
     assertEquals(List.of(2L, 1L), result.content().stream().map(PlaceDto::id).toList());
   }
@@ -249,18 +249,18 @@ class ApiVisitTest {
     UUID coupleId = UUID.randomUUID(); CoupleContext.set(coupleId);
     User tomas = user(7L, "tomas");
     Place place = place(31L, tomas, Instant.parse("2026-07-23T00:00:00Z"));
-    when(places.findPageIdsByCoupleId(coupleId, 4L, 9L, "REVIEWED", "café", "rating-desc", 2, 5))
+    when(places.findPageIdsByCoupleId(coupleId, 4L, 9L, "REVIEWED", "café", "rating-desc", null, 2, 5))
             .thenReturn(List.of(31L, 32L));
     when(places.findActiveByIdInAndCoupleId(List.of(31L), coupleId)).thenReturn(List.of(place));
 
     Api api = new Api(null, null, null, places, mock(PlaceVisits.class), null, null, null,
             mock(PlaceReviews.class), mock(PlacePhotos.class), mock(PlaceVisitPhotos.class),
             mock(PlaceVisitReviews.class), null);
-    Slice<PlaceDto> result = api.list(4L, 9L, PlaceStatus.REVIEWED, " Café ", "rating-desc", 5L, 1);
+    Slice<PlaceDto> result = api.list(4L, 9L, PlaceStatus.REVIEWED, ReviewStatusFilter.ALL, " Café ", "rating-desc", 5L, 1);
 
     assertEquals(List.of(31L), result.content().stream().map(PlaceDto::id).toList());
     assertEquals(6L, result.nextCursor());
-    verify(places).findPageIdsByCoupleId(coupleId, 4L, 9L, "REVIEWED", "café", "rating-desc", 2, 5);
+    verify(places).findPageIdsByCoupleId(coupleId, 4L, 9L, "REVIEWED", "café", "rating-desc", null, 2, 5);
     verify(places).findActiveByIdInAndCoupleId(List.of(31L), coupleId);
   }
 
@@ -274,7 +274,7 @@ class ApiVisitTest {
   User tomas = user(7L, "tomas");
   Place place = place(33L, tomas, Instant.parse("2026-07-23T00:00:00Z"));
   place.zoneId = 2L;
-  when(places.findPageIdsByCoupleId(coupleId, 2L, null, null, null, null, "date-desc", 6, 0))
+  when(places.findPageIdsByCoupleId(coupleId, 2L, null, null, null, "date-desc", null, 6, 0))
           .thenReturn(List.of(33L));
   when(places.findActiveByIdInAndCoupleId(List.of(33L), coupleId)).thenReturn(List.of(place));
   when(visits.findByPlaceIdInAndCoupleIdOrderByPlaceIdAscVisitedOnDescIdDesc(List.of(33L), coupleId)).thenReturn(List.of());
@@ -289,7 +289,7 @@ class ApiVisitTest {
 
   assertEquals(List.of(33L), result.content().stream().map(PlaceDto::id).toList());
   assertEquals(2L, result.content().getFirst().zoneId());
-  verify(places).findPageIdsByCoupleId(coupleId, 2L, null, null, null, null, "date-desc", 6, 0);
+  verify(places).findPageIdsByCoupleId(coupleId, 2L, null, null, null, "date-desc", null, 6, 0);
  }
 
   @Test
@@ -342,7 +342,7 @@ class ApiVisitTest {
     PlaceVisitReview second = review(older, avril, (short) 5, null, (short) 4);
     PlaceReviewSummary placeReview = placeReview(place.id, tomas.username, (short) 2, (short) 4);
     when(places.findDetailedByIdAndCoupleId(4L, null)).thenReturn(Optional.of(place));
-    when(places.findPageIdsByCoupleId(null, null, null, null, null, "date-desc", 13, 0)).thenReturn(List.of(4L));
+    when(places.findPageIdsByCoupleId(null, null, null, null, null, "created-desc", null, 13, 0)).thenReturn(List.of(4L));
     when(places.findActiveByIdInAndCoupleId(List.of(4L), null)).thenReturn(List.of(place));
     when(visits.findByPlaceIdInAndCoupleIdOrderByPlaceIdAscVisitedOnDescIdDesc(List.of(4L), null)).thenReturn(List.of(recent, older));
     when(visitPhotos.findByVisitIdInAndCoupleIdOrderByVisitIdAscPositionAscIdAsc(List.of(10L, 9L), null)).thenReturn(List.of(photo));
@@ -352,7 +352,7 @@ class ApiVisitTest {
 
     Api api = new Api(null, null, null, places, visits, null, null, null, placeReviews, placePhotos, visitPhotos, visitReviews, null);
     PlaceDto result = api.getPlace(4L);
-    PlaceDto listed = api.list(null, null, null, null, null, null, 12).content().getFirst();
+    PlaceDto listed = api.list(null, null, null, ReviewStatusFilter.ALL, null, null, null, 12).content().getFirst();
 
     assertEquals(3.3, result.rating());
     assertEquals(3, result.tasteAverage());

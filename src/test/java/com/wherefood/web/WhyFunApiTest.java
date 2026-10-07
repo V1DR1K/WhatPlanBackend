@@ -131,10 +131,10 @@ class WhyFunApiTest {
    WhyFunVenue best = activity(1L, "Museo de arte", category, subcategory, tomas, "2026-07-23T00:00:00Z");
    WhyFunVenue other = activity(2L, "Museo historico", category, subcategory, tomas, "2026-07-22T00:00:00Z");
     WhyFunVenue pending = activity(3L, "Archivo de arte", category, subcategory, tomas, "2026-07-21T00:00:00Z");
-   when(activities.findPageIdsByCoupleId(null, 1L, 2L, "museo", true, "rating-desc", 2, 0)).thenReturn(List.of(1L, 2L));
-   when(activities.findPageIdsByCoupleId(null, 1L, 2L, "museo", true, "rating-desc", 2, 1)).thenReturn(List.of(2L));
-   when(activities.findPageIdsByCoupleId(null, 1L, 2L, null, false, "date-desc", 6, 0)).thenReturn(List.of(3L));
-   when(activities.findPageIdsByCoupleId(null, 1L, 2L, null, null, "date-desc", 6, 0)).thenReturn(List.of(1L, 2L, 3L));
+   when(activities.findPageIdsByCoupleId(null, 1L, 2L, "museo", true, "rating-desc", null, 2, 0)).thenReturn(List.of(1L, 2L));
+   when(activities.findPageIdsByCoupleId(null, 1L, 2L, "museo", true, "rating-desc", null, 2, 1)).thenReturn(List.of(2L));
+   when(activities.findPageIdsByCoupleId(null, 1L, 2L, null, false, "date-desc", null, 6, 0)).thenReturn(List.of(3L));
+   when(activities.findPageIdsByCoupleId(null, 1L, 2L, null, null, "created-desc", null, 6, 0)).thenReturn(List.of(1L, 2L, 3L));
    when(activities.findAllByIdInAndCoupleId(List.of(1L), null)).thenReturn(List.of(best));
    when(activities.findAllByIdInAndCoupleId(List.of(2L), null)).thenReturn(List.of(other));
    when(activities.findAllByIdInAndCoupleId(List.of(3L), null)).thenReturn(List.of(pending));
@@ -143,10 +143,10 @@ class WhyFunApiTest {
    when(visits.countsByActivityIdInAndCoupleId(any(), isNull())).thenReturn(List.of(count(1L, 2L), count(2L, 1L)));
 
    WhyFunActivityApi api = new WhyFunActivityApi(null, activities, photos, visits, null, reviews, null);
-   Slice<ActivityDto> first = api.listActivities(1L, 2L, "museo", true, "rating-desc", null, 1);
-    Slice<ActivityDto> second = api.listActivities(1L, 2L, "museo", true, "rating-desc", first.nextCursor(), 1);
-    Slice<ActivityDto> unvisited = api.listActivities(1L, 2L, null, false, "date-desc", null, 5);
-    Slice<ActivityDto> defaultOrder = api.listActivities(1L, 2L, null, null, null, null, 5);
+   Slice<ActivityDto> first = api.listActivities(1L, 2L, "museo", true, ReviewStatusFilter.ALL, "rating-desc", null, 1);
+    Slice<ActivityDto> second = api.listActivities(1L, 2L, "museo", true, ReviewStatusFilter.ALL, "rating-desc", first.nextCursor(), 1);
+    Slice<ActivityDto> unvisited = api.listActivities(1L, 2L, null, false, ReviewStatusFilter.ALL, "date-desc", null, 5);
+    Slice<ActivityDto> defaultOrder = api.listActivities(1L, 2L, null, null, ReviewStatusFilter.ALL, null, null, 5);
 
    assertEquals(List.of(1L), first.content().stream().map(ActivityDto::id).toList());
    assertEquals(1L, first.nextCursor());
@@ -155,8 +155,8 @@ class WhyFunApiTest {
     assertEquals(null, second.nextCursor());
     assertEquals(List.of(3L), unvisited.content().stream().map(ActivityDto::id).toList());
     assertEquals(List.of(1L, 2L, 3L), defaultOrder.content().stream().map(ActivityDto::id).toList());
-    verify(activities).findPageIdsByCoupleId(null, 1L, 2L, "museo", true, "rating-desc", 2, 0);
-    verify(activities).findPageIdsByCoupleId(null, 1L, 2L, null, false, "date-desc", 6, 0);
+    verify(activities).findPageIdsByCoupleId(null, 1L, 2L, "museo", true, "rating-desc", null, 2, 0);
+    verify(activities).findPageIdsByCoupleId(null, 1L, 2L, null, false, "date-desc", null, 6, 0);
    }
 
   @Test
@@ -177,7 +177,7 @@ class WhyFunApiTest {
     WhyFunActivityApi api = new WhyFunActivityApi(categories, activities, null, null, null, null, null,
             new WhyFunVisitReviewService(null, null, authorization), activityService,
             new WhyFunVisitService(activities, null, authorization));
-    api.updateActivity(4L, new ActivityRequest("Museo", "Centro", 1L, 2L, List.of(new ActivityScheduleRequest(java.time.DayOfWeek.MONDAY, LocalTime.of(7, 0), LocalTime.of(12, 0)))), tomas);
+    api.updateActivity(4L, new ActivityRequest("Museo", "Centro", 1L, 2L, false, null, null, List.of(new ActivityScheduleRequest(java.time.DayOfWeek.MONDAY, LocalTime.of(7, 0), LocalTime.of(12, 0)))), tomas);
 
     verify(activities).flush();
     assertEquals(1, activity.schedules.size());

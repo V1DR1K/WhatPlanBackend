@@ -110,6 +110,9 @@ public class WhyFunActivityService {
         activity.address = request.address().trim();
         activity.category = category;
         activity.subcategory = subcategory;
+        activity.singleOccurrence = request.singleOccurrence();
+        activity.startDate = request.singleOccurrence() ? request.startDate() : null;
+        activity.endDate = request.singleOccurrence() ? request.endDate() : null;
         activity.schedules.clear();
         // Flush orphan removals before inserting replacement rows with the same unique schedule key.
         if (activity.id != null) activities.flush();

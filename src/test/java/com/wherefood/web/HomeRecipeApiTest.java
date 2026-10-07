@@ -62,10 +62,10 @@ class HomeRecipeApiTest {
   Recipes recipes = mock(Recipes.class); User tomas = user(7L, "tomas"); Recipe recipe = new Recipe(); recipe.id = 5L; recipe.name = "Tarta"; recipe.createdBy = recipe.updatedBy = tomas; recipe.updatedAt = Instant.parse("2026-07-23T00:00:00Z");
   RecipeIngredient ingredient = new RecipeIngredient(); ingredient.name = "Harina"; ingredient.quantity = BigDecimal.valueOf(250); ingredient.unit = "g"; ingredient.position = 0; recipe.ingredients.add(ingredient);
   RecipeStep step = new RecipeStep(); step.instruction = "Hornear."; step.position = 0; recipe.steps.add(step);
-  when(recipes.findPageIdsByCoupleId(null, null, null, null, "date-desc", 6, 0)).thenReturn(List.of(5L));
+  when(recipes.findPageIdsByCoupleId(null, null, null, null, "created-desc", null, 6, 0)).thenReturn(List.of(5L));
   when(recipes.findAllByIdInAndCoupleId(List.of(5L), null)).thenReturn(List.of(recipe));
 
-   Slice<RecipeDto> result = new HomeRecipeApi(recipes, mock(RecipePhotos.class), null, null, null).listRecipes(null, null, null, null, null, 5);
+   Slice<RecipeDto> result = new HomeRecipeApi(recipes, mock(RecipePhotos.class), null, null, null).listRecipes(null, null, null, ReviewStatusFilter.ALL, null, null, 5);
 
    assertEquals("Harina", result.content().getFirst().ingredients().getFirst().name()); assertEquals("Hornear.", result.content().getFirst().steps().getFirst().instruction());
   assertEquals("position", Recipe.class.getDeclaredField("ingredients").getAnnotation(OrderColumn.class).name());
@@ -87,10 +87,10 @@ class HomeRecipeApiTest {
   void projectsTheRecipeProfileSeparatelyFromCookings() {
    Recipes recipes = mock(Recipes.class); RecipePhotos profilePhotos = mock(RecipePhotos.class); User tomas = user(7L, "tomas");
    Recipe recipe = new Recipe(); recipe.id = 5L; recipe.name = "Tarta"; recipe.createdBy = recipe.updatedBy = tomas; recipe.updatedAt = Instant.parse("2026-07-23T00:00:00Z");
-   when(recipes.findPageIdsByCoupleId(null, null, null, null, "date-desc", 6, 0)).thenReturn(List.of(5L));
+   when(recipes.findPageIdsByCoupleId(null, null, null, null, "created-desc", null, 6, 0)).thenReturn(List.of(5L));
    when(recipes.findAllByIdInAndCoupleId(List.of(5L), null)).thenReturn(List.of(recipe)); when(profilePhotos.metadataByRecipeIdInAndCoupleId(any(), isNull())).thenReturn(List.of(photo(12L, 5L, 1200, 800)));
 
-   RecipeDto result = new HomeRecipeApi(recipes, profilePhotos, null, null, null).listRecipes(null, null, null, null, null, 5).content().getFirst();
+   RecipeDto result = new HomeRecipeApi(recipes, profilePhotos, null, null, null).listRecipes(null, null, null, ReviewStatusFilter.ALL, null, null, 5).content().getFirst();
 
    assertEquals("/how-cook/recipes/5/photo?v=12", result.photoUrl());
    assertEquals("/how-cook/recipes/5/photo?thumbnail=true&v=12", result.thumbnailUrl());
@@ -103,15 +103,15 @@ class HomeRecipeApiTest {
    Recipes recipes = mock(Recipes.class);
    Recipe recipe = recipe(8L, "Guiso", user(7L, "tomas"), "2026-07-23T00:00:00Z");
    UUID coupleId = UUID.randomUUID(); CoupleContext.set(coupleId);
-   when(recipes.findPageIdsByCoupleId(coupleId, null, null, null, "date-desc", 2, 30)).thenReturn(List.of(8L, 9L));
+   when(recipes.findPageIdsByCoupleId(coupleId, null, null, null, "created-desc", null, 2, 30)).thenReturn(List.of(8L, 9L));
    when(recipes.findAllByIdInAndCoupleId(List.of(8L), coupleId)).thenReturn(List.of(recipe));
 
    Slice<RecipeDto> result = new HomeRecipeApi(recipes, mock(RecipePhotos.class), null, null, null)
-           .listRecipes(null, null, null, null, 30L, 1);
+           .listRecipes(null, null, null, ReviewStatusFilter.ALL, null, 30L, 1);
 
    assertEquals(List.of(8L), result.content().stream().map(RecipeDto::id).toList());
    assertEquals(31L, result.nextCursor());
-   verify(recipes).findPageIdsByCoupleId(coupleId, null, null, null, "date-desc", 2, 30);
+   verify(recipes).findPageIdsByCoupleId(coupleId, null, null, null, "created-desc", null, 2, 30);
    verify(recipes).findAllByIdInAndCoupleId(List.of(8L), coupleId);
   }
 
@@ -122,9 +122,9 @@ class HomeRecipeApiTest {
    Recipe best = recipe(1L, "Pastas", tomas, "2026-07-23T00:00:00Z");
    Recipe other = recipe(2L, "Pizza", tomas, "2026-07-22T00:00:00Z");
    Recipe pending = recipe(3L, "Pan", tomas, "2026-07-21T00:00:00Z");
-   when(recipes.findPageIdsByCoupleId(null, null, "TOMAS", true, "rating-desc", 2, 0)).thenReturn(List.of(1L, 2L));
-   when(recipes.findPageIdsByCoupleId(null, null, "TOMAS", true, "rating-desc", 2, 1)).thenReturn(List.of(2L));
-   when(recipes.findPageIdsByCoupleId(null, "pan", null, false, "date-desc", 6, 0)).thenReturn(List.of(3L));
+   when(recipes.findPageIdsByCoupleId(null, null, "TOMAS", true, "rating-desc", null, 2, 0)).thenReturn(List.of(1L, 2L));
+   when(recipes.findPageIdsByCoupleId(null, null, "TOMAS", true, "rating-desc", null, 2, 1)).thenReturn(List.of(2L));
+   when(recipes.findPageIdsByCoupleId(null, "pan", null, false, "date-desc", null, 6, 0)).thenReturn(List.of(3L));
    when(recipes.findAllByIdInAndCoupleId(List.of(1L), null)).thenReturn(List.of(best));
    when(recipes.findAllByIdInAndCoupleId(List.of(2L), null)).thenReturn(List.of(other));
    when(recipes.findAllByIdInAndCoupleId(List.of(3L), null)).thenReturn(List.of(pending));
@@ -133,9 +133,9 @@ class HomeRecipeApiTest {
    when(reviews.ratingsByRecipeIdInAndCoupleId(any(), isNull())).thenReturn(List.of(rating(1L, 5.0), rating(2L, 3.0)));
 
    HomeRecipeApi api = new HomeRecipeApi(recipes, photos, cookings, reviews, null);
-   Slice<RecipeDto> first = api.listRecipes(null, Home.TOMAS, true, "rating-desc", null, 1);
-   Slice<RecipeDto> second = api.listRecipes(null, Home.TOMAS, true, "rating-desc", first.nextCursor(), 1);
-   Slice<RecipeDto> uncooked = api.listRecipes("pan", null, false, "date-desc", null, 5);
+   Slice<RecipeDto> first = api.listRecipes(null, Home.TOMAS, true, ReviewStatusFilter.ALL, "rating-desc", null, 1);
+   Slice<RecipeDto> second = api.listRecipes(null, Home.TOMAS, true, ReviewStatusFilter.ALL, "rating-desc", first.nextCursor(), 1);
+   Slice<RecipeDto> uncooked = api.listRecipes("pan", null, false, ReviewStatusFilter.ALL, "date-desc", null, 5);
 
    assertEquals(List.of(1L), first.content().stream().map(RecipeDto::id).toList());
    assertEquals(1L, first.nextCursor());
@@ -145,8 +145,8 @@ class HomeRecipeApiTest {
    assertEquals(List.of(2L), second.content().stream().map(RecipeDto::id).toList());
    assertEquals(null, second.nextCursor());
    assertEquals(List.of(3L), uncooked.content().stream().map(RecipeDto::id).toList());
-   verify(recipes).findPageIdsByCoupleId(null, null, "TOMAS", true, "rating-desc", 2, 0);
-   verify(recipes).findPageIdsByCoupleId(null, "pan", null, false, "date-desc", 6, 0);
+   verify(recipes).findPageIdsByCoupleId(null, null, "TOMAS", true, "rating-desc", null, 2, 0);
+   verify(recipes).findPageIdsByCoupleId(null, "pan", null, false, "date-desc", null, 6, 0);
   }
 
   @Test
