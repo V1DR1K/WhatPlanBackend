@@ -90,21 +90,4 @@ class CoupleScopedRepositoryContractTest {
         return query != null && (query.value().contains("coupleId") || query.countQuery().contains("coupleId"));
     }
 
-    @Test
-    void everyCustomPrivateRepositoryMethodDeclaresCoupleScope() {
-        PRIVATE_REPOSITORIES.forEach(repository -> Arrays.stream(repository.getDeclaredMethods()).forEach(method ->
-                assertEquals(true, declaresCoupleScope(method),
-                        () -> repository.getSimpleName() + "." + method.getName()
-                                + " must constrain access to a couple")));
-    }
-
-    private static boolean declaresCoupleScope(Method method) {
-        if (method.getName().contains("CoupleId")) return true;
-        if (Arrays.stream(method.getParameterAnnotations()).flatMap(Arrays::stream)
-                .anyMatch(annotation -> annotation instanceof Param param && param.value().equals("coupleId"))) {
-            return true;
-        }
-        Query query = method.getAnnotation(Query.class);
-        return query != null && (query.value().contains("coupleId") || query.countQuery().contains("coupleId"));
-    }
 }

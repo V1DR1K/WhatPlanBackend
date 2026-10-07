@@ -216,7 +216,7 @@ class ApiVisitTest {
     User tomas = user(7L, "tomas");
     Place older = place(1L, tomas, Instant.parse("2026-07-21T00:00:00Z"));
     Place recent = place(2L, tomas, Instant.parse("2026-07-23T00:00:00Z"));
-    when(places.findPageIdsByCoupleId(null, null, null, null, null, "created-desc", null, 6, 0)).thenReturn(List.of(2L, 1L));
+    when(places.findPageIdsByCoupleId(null, null, null, (String) null, null, "created-desc", null, 6, 0)).thenReturn(List.of(2L, 1L));
     when(places.findActiveByIdInAndCoupleId(List.of(2L, 1L), null)).thenReturn(List.of(recent, older));
     when(visits.findByPlaceIdInAndCoupleIdOrderByPlaceIdAscVisitedOnDescIdDesc(any(), isNull())).thenReturn(List.of());
     when(visitReviews.findByVisitIdInAndCoupleIdOrderByVisitIdAscAuthorUsername(any(), isNull())).thenReturn(List.of());
@@ -274,7 +274,7 @@ class ApiVisitTest {
   User tomas = user(7L, "tomas");
   Place place = place(33L, tomas, Instant.parse("2026-07-23T00:00:00Z"));
   place.zoneId = 2L;
-  when(places.findPageIdsByCoupleId(coupleId, 2L, null, null, null, "date-desc", null, 6, 0))
+  when(places.findPageIdsByCoupleId(coupleId, 2L, null, (String) null, null, "date-desc", null, 6, 0))
           .thenReturn(List.of(33L));
   when(places.findActiveByIdInAndCoupleId(List.of(33L), coupleId)).thenReturn(List.of(place));
   when(visits.findByPlaceIdInAndCoupleIdOrderByPlaceIdAscVisitedOnDescIdDesc(List.of(33L), coupleId)).thenReturn(List.of());
@@ -289,7 +289,7 @@ class ApiVisitTest {
 
   assertEquals(List.of(33L), result.content().stream().map(PlaceDto::id).toList());
   assertEquals(2L, result.content().getFirst().zoneId());
-  verify(places).findPageIdsByCoupleId(coupleId, 2L, null, null, null, "date-desc", null, 6, 0);
+  verify(places).findPageIdsByCoupleId(coupleId, 2L, null, (String) null, null, "date-desc", null, 6, 0);
  }
 
   @Test
@@ -342,7 +342,7 @@ class ApiVisitTest {
     PlaceVisitReview second = review(older, avril, (short) 5, null, (short) 4);
     PlaceReviewSummary placeReview = placeReview(place.id, tomas.username, (short) 2, (short) 4);
     when(places.findDetailedByIdAndCoupleId(4L, null)).thenReturn(Optional.of(place));
-    when(places.findPageIdsByCoupleId(null, null, null, null, null, "created-desc", null, 13, 0)).thenReturn(List.of(4L));
+    when(places.findPageIdsByCoupleId(null, null, null, (String) null, null, "created-desc", null, 13, 0)).thenReturn(List.of(4L));
     when(places.findActiveByIdInAndCoupleId(List.of(4L), null)).thenReturn(List.of(place));
     when(visits.findByPlaceIdInAndCoupleIdOrderByPlaceIdAscVisitedOnDescIdDesc(List.of(4L), null)).thenReturn(List.of(recent, older));
     when(visitPhotos.findByVisitIdInAndCoupleIdOrderByVisitIdAscPositionAscIdAsc(List.of(10L, 9L), null)).thenReturn(List.of(photo));
