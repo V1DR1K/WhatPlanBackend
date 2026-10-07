@@ -285,7 +285,7 @@ class ApiVisitTest {
           reviews, placePhotos, mock(PlaceVisitPhotos.class),
           mock(PlaceVisitReviews.class), null);
 
-  Slice<PlaceDto> result = api.list(2L, null, null, null, null, null, null, 5);
+  Slice<PlaceDto> result = api.list(2L, null, null, ReviewStatusFilter.ALL, null, null, null, 5);
 
   assertEquals(List.of(33L), result.content().stream().map(PlaceDto::id).toList());
   assertEquals(2L, result.content().getFirst().zoneId());
