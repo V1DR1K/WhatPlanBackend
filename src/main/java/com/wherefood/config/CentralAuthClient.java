@@ -15,6 +15,8 @@ import java.util.concurrent.Semaphore;
 
 @Component
 public class CentralAuthClient {
+    private static final String CLIENT_APP = "whatplan";
+
     private final RestClient client;
     private final Semaphore concurrentRequests;
 
@@ -37,7 +39,7 @@ public class CentralAuthClient {
     }
 
     public TokenResponse login(String username, String password) {
-        return post("/api/login", new LoginRequest(username, password), null, TokenResponse.class);
+        return post("/api/login", new LoginRequest(username, password, CLIENT_APP), null, TokenResponse.class);
     }
 
     public TokenResponse register(String username, String password) {
@@ -45,19 +47,19 @@ public class CentralAuthClient {
     }
 
     public TokenResponse refresh(String refreshToken) {
-        return post("/api/refresh", new RefreshRequest(refreshToken), null, TokenResponse.class);
+        return post("/api/refresh", new RefreshRequest(refreshToken, CLIENT_APP), null, TokenResponse.class);
     }
 
     public void logout(String refreshToken) {
-        post("/api/logout", new RefreshRequest(refreshToken), null, MessageResponse.class);
+        post("/api/logout", new LogoutRequest(refreshToken, CLIENT_APP), null, MessageResponse.class);
     }
 
     public MeResponse me(String authorization) {
-        return get("/api/me", authorization, MeResponse.class);
+        return get("/api/me?clientApp=" + CLIENT_APP, authorization, MeResponse.class);
     }
 
     public MessageResponse changePassword(String authorization, String currentPassword, String newPassword) {
-        return post("/api/change-password", new ChangePasswordRequest(currentPassword, newPassword), authorization, MessageResponse.class);
+        return post("/api/change-password", new ChangePasswordRequest(currentPassword, newPassword, CLIENT_APP), authorization, MessageResponse.class);
     }
 
     private <T> T get(String path, String authorization, Class<T> responseType) {
@@ -106,10 +108,11 @@ public class CentralAuthClient {
                 "Central authentication service is temporarily unavailable");
     }
 
-    public record LoginRequest(String username, String password) {}
+    public record LoginRequest(String username, String password, String clientApp) {}
     public record RegisterRequest(String username, String password) {}
-    public record RefreshRequest(String refreshToken) {}
-    public record ChangePasswordRequest(String currentPassword, String newPassword) {}
+    public record RefreshRequest(String refreshToken, String clientApp) {}
+    public record LogoutRequest(String refreshToken, String clientApp) {}
+    public record ChangePasswordRequest(String currentPassword, String newPassword, String clientApp) {}
     public record TokenResponse(String accessToken, String refreshToken, String tokenType, long expiresIn, CentralUser user) {}
     public record CentralUser(UUID id, String username, String status, Instant created, Instant lastLogin, boolean mustChangePassword) {}
     public record MeResponse(UUID id, String username, boolean mustChangePassword) {}
