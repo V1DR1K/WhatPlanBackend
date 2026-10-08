@@ -1,0 +1,165 @@
+--- a/src/main/java/com/avianto/auth/api/ApiDtos.java
++++ b/src/main/java/com/avianto/auth/api/ApiDtos.java
+@@ -9,6 +9,8 @@
+     private ApiDtos() {}
+ 
+     public record LoginRequest(@NotBlank String username, @NotBlank String password) {}
++    public record RegisterRequest(@NotBlank @Size(min = 3, max = 80) String username,
++                                  @NotBlank @Size(min = 10, max = 128) String password) {}
+     public record RefreshRequest(@NotBlank String refreshToken) {}
+     public record LogoutRequest(@NotBlank String refreshToken) {}
+     public record ChangePasswordRequest(@NotBlank String currentPassword,
+--- a/src/main/java/com/avianto/auth/api/AuthController.java
++++ b/src/main/java/com/avianto/auth/api/AuthController.java
+@@ -21,6 +21,15 @@
+         return authService.login(request);
+     }
+ 
++    @PostMapping("/register")
++    @org.springframework.web.bind.annotation.ResponseStatus(org.springframework.http.HttpStatus.CREATED)
++    public ApiDtos.TokenResponse register(@Valid @RequestBody ApiDtos.RegisterRequest request,
++                                          jakarta.servlet.http.HttpServletResponse response) {
++        response.setHeader("Cache-Control", "no-store");
++        response.setHeader("Pragma", "no-cache");
++        return authService.register(request);
++    }
++
+     @PostMapping("/refresh")
+     public ApiDtos.TokenResponse refresh(@Valid @RequestBody ApiDtos.RefreshRequest request) {
+         return authService.refresh(request.refreshToken());
+--- a/src/main/java/com/avianto/auth/auth/AuthService.java
++++ b/src/main/java/com/avianto/auth/auth/AuthService.java
+@@ -6,6 +6,7 @@
+ import com.avianto.auth.security.JwtService;
+ import com.avianto.auth.user.User;
+ import com.avianto.auth.user.UserRepository;
++import com.avianto.auth.user.UserService;
+ import java.nio.charset.StandardCharsets;
+ import java.security.MessageDigest;
+ import java.security.SecureRandom;
+@@ -25,15 +26,24 @@
+     private final PasswordEncoder passwordEncoder;
+     private final JwtService jwtService;
+     private final AuthProperties properties;
++    private final UserService userService;
+ 
++    @org.springframework.beans.factory.annotation.Autowired
+     public AuthService(UserRepository users, RefreshTokenRepository refreshTokens,
+                        PasswordEncoder passwordEncoder, JwtService jwtService,
+-                       AuthProperties properties) {
++                       AuthProperties properties, UserService userService) {
+         this.users = users;
+         this.refreshTokens = refreshTokens;
+         this.passwordEncoder = passwordEncoder;
+         this.jwtService = jwtService;
+         this.properties = properties;
++        this.userService = userService;
++    }
++
++    public AuthService(UserRepository users, RefreshTokenRepository refreshTokens,
++                       PasswordEncoder passwordEncoder, JwtService jwtService, AuthProperties properties) {
++        this(users, refreshTokens, passwordEncoder, jwtService, properties,
++                new UserService(users, passwordEncoder, refreshTokens));
+     }
+ 
+     @Transactional
+@@ -48,6 +58,11 @@
+     }
+ 
+     @Transactional
++    public ApiDtos.TokenResponse register(ApiDtos.RegisterRequest request) {
++        return issue(userService.register(request.username(), request.password()));
++    }
++
++    @Transactional
+     public ApiDtos.TokenResponse refresh(String rawToken) {
+         var token = refreshTokens.findByTokenHash(hash(rawToken)).orElseThrow(this::invalidRefresh);
+         if (!token.usable() || !token.getUser().isEnabled() || token.getUser().getDeletedAt() != null) {
+--- a/src/main/java/com/avianto/auth/user/UserService.java
++++ b/src/main/java/com/avianto/auth/user/UserService.java
+@@ -40,6 +40,15 @@
+     }
+ 
+     @Transactional
++    public User register(String requestedUsername, String password) {
++        var username = normalizeUsername(requestedUsername);
++        if (users.existsByUsernameIgnoreCase(username)) {
++            throw new ApiException(HttpStatus.CONFLICT, "No se pudo completar el registro");
++        }
++        return users.save(User.create(username, passwordEncoder.encode(password)));
++    }
++
++    @Transactional
+     public ApiDtos.UserResponse update(String username, ApiDtos.UpdateUserRequest request) {
+         var user = find(username);
+         if (request.username() != null && !request.username().isBlank()) {
+--- a/src/main/java/com/avianto/auth/config/SecurityConfig.java
++++ b/src/main/java/com/avianto/auth/config/SecurityConfig.java
+@@ -20,7 +20,7 @@
+                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
+                 .authorizeHttpRequests(auth -> auth
+                         .requestMatchers("/", "/index.html", "/styles.css", "/app.js", "/favicon.ico",
+-                                "/api/health", "/api/jwks", "/api/login", "/api/refresh", "/api/logout").permitAll()
++                                "/api/health", "/api/jwks", "/api/login", "/api/register", "/api/refresh", "/api/logout").permitAll()
+                         .requestMatchers("/api/**").authenticated()
+                         .anyRequest().permitAll())
+                 .addFilterBefore(bearerTokenFilter, UsernamePasswordAuthenticationFilter.class)
+--- /dev/null
++++ b/src/test/java/com/avianto/auth/user/UserServiceRegistrationTest.java
+@@ -0,0 +1,56 @@
++package com.avianto.auth.user;
++
++import static org.assertj.core.api.Assertions.assertThat;
++import static org.assertj.core.api.Assertions.assertThatThrownBy;
++import static org.mockito.ArgumentMatchers.any;
++import static org.mockito.Mockito.mock;
++import static org.mockito.Mockito.verify;
++import static org.mockito.Mockito.when;
++
++import com.avianto.auth.api.ApiException;
++import com.avianto.auth.auth.RefreshTokenRepository;
++import org.junit.jupiter.api.Test;
++import org.springframework.security.crypto.password.PasswordEncoder;
++
++class UserServiceRegistrationTest {
++    @Test
++    void normalizesUsernameAndStoresOnlyAnEncodedPassword() {
++        var users = mock(UserRepository.class);
++        var passwords = mock(PasswordEncoder.class);
++        var refreshTokens = mock(RefreshTokenRepository.class);
++        when(users.existsByUsernameIgnoreCase("new.user")).thenReturn(false);
++        when(passwords.encode("a-long-password")).thenReturn("{bcrypt}encoded-password");
++        when(users.save(any(User.class))).thenAnswer(invocation -> invocation.getArgument(0));
++        var service = new UserService(users, passwords, refreshTokens);
++
++        User created = service.register(" New.User ", "a-long-password");
++
++        assertThat(created.getUsername()).isEqualTo("new.user");
++        assertThat(created.getPasswordHash()).isEqualTo("{bcrypt}encoded-password");
++        assertThat(created.isEnabled()).isTrue();
++        assertThat(created.isMustChangePassword()).isFalse();
++        assertThat(created.getStatus()).isEqualTo("ACTIVE");
++        verify(users).existsByUsernameIgnoreCase("new.user");
++    }
++
++    @Test
++    void rejectsDuplicateUsernameWithoutRevealingWhetherItExists() {
++        var users = mock(UserRepository.class);
++        when(users.existsByUsernameIgnoreCase("new.user")).thenReturn(true);
++        var service = new UserService(users, mock(PasswordEncoder.class), mock(RefreshTokenRepository.class));
++
++        assertThatThrownBy(() -> service.register("NEW.USER", "a-long-password"))
++                .isInstanceOf(ApiException.class)
++                .hasMessage("No se pudo completar el registro");
++        verify(users).existsByUsernameIgnoreCase("new.user");
++    }
++
++    @Test
++    void rejectsInvalidUsernamesBeforeAnyAccountLookup() {
++        var users = mock(UserRepository.class);
++        var service = new UserService(users, mock(PasswordEncoder.class), mock(RefreshTokenRepository.class));
++
++        assertThatThrownBy(() -> service.register("x", "a-long-password"))
++                .isInstanceOf(ApiException.class);
++    }
++}

@@ -50,6 +50,29 @@ class AuthApiTest {
     }
 
     @Test
+    void registersThroughCentralAuthAndCreatesARenewableLocalSession() {
+        UUID userId = UUID.randomUUID();
+        when(central.register("new-user", "a-long-password")).thenReturn(new CentralAuthClient.TokenResponse(
+                "access", "refresh", "Bearer", 300,
+                new CentralAuthClient.CentralUser(userId, "new-user", "ACTIVE", null, null, false)));
+        when(jwt.subject("access")).thenReturn(userId);
+        User local = new User();
+        local.username = "new-user";
+        local.role = Role.USER;
+        when(provisioner.provision(userId, "new-user")).thenReturn(local);
+
+        MockHttpServletResponse response = new MockHttpServletResponse();
+        AuthResponse result = api.register(new RegisterRequest("new-user", "a-long-password"), response);
+
+        verify(central).register("new-user", "a-long-password");
+        verify(provisioner).provision(userId, "new-user");
+        org.junit.jupiter.api.Assertions.assertEquals("new-user", result.username());
+        org.junit.jupiter.api.Assertions.assertNull(result.refreshToken());
+        org.junit.jupiter.api.Assertions.assertTrue(response.getHeader("Set-Cookie").contains("HttpOnly"));
+        org.junit.jupiter.api.Assertions.assertEquals("no-store", response.getHeader("Cache-Control"));
+    }
+
+    @Test
     void blocksLoginBeforeCallingCentralAuthWhenAccountBudgetIsExhausted() {
         org.mockito.Mockito.doThrow(new com.wherefood.config.RetryAfterResponseStatusException(
                 HttpStatus.TOO_MANY_REQUESTS, "too many", 900))

@@ -29,6 +29,8 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 record LoginRequest(@NotBlank @jakarta.validation.constraints.Size(max = 80) String username, @NotBlank @jakarta.validation.constraints.Size(max = 200) String password) {}
+record RegisterRequest(@NotBlank @jakarta.validation.constraints.Size(min = 3, max = 80) String username,
+                       @NotBlank @jakarta.validation.constraints.Size(min = 10, max = 128) String password) {}
 record ChangePasswordRequest(@NotBlank @jakarta.validation.constraints.Size(max = 200) String currentPassword, @NotBlank @jakarta.validation.constraints.Size(max = 200) String newPassword) {}
 record LocalUserInfo(Long id, UUID authUserId, String username, String role, boolean mustChangePassword) {}
 record AuthResponse(String token, String username, String role, String accessToken, String refreshToken,
@@ -74,6 +76,14 @@ public class AuthApi {
         noStore(servletResponse);
         loginAttemptProtection.checkAccount(request.username());
         TokenResponse tokenResponse = central.login(request.username(), request.password());
+        return authenticatedResponse(tokenResponse, servletResponse);
+    }
+
+    @PostMapping("/register")
+    @org.springframework.web.bind.annotation.ResponseStatus(org.springframework.http.HttpStatus.CREATED)
+    AuthResponse register(@Valid @RequestBody RegisterRequest request, HttpServletResponse servletResponse) {
+        noStore(servletResponse);
+        TokenResponse tokenResponse = central.register(request.username(), request.password());
         return authenticatedResponse(tokenResponse, servletResponse);
     }
 

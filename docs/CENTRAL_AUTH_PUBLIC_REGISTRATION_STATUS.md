@@ -1,34 +1,17 @@
-# Central authentication: public registration release gate
+# Estado del registro público
 
-## What this repository verifies
+## Contrato implementado
 
-WhatPlan delegates credential handling to the external central-auth service. The backend client currently calls these upstream paths:
+WhatPlan mantiene las contraseñas exclusivamente en central-auth. El backend expone `POST /api/auth/register`, limita los intentos por IP y delega la creación mediante `POST /api/register`. El servicio central normaliza el usuario a minúsculas, acepta entre 3 y 80 caracteres ASCII (`a-z`, números, punto, guion y guion bajo), exige contraseña de 10 a 128 caracteres, devuelve una respuesta genérica ante usuarios duplicados y crea cuentas comunes sin opción de asignar rol. La respuesta emite la sesión habitual; WhatPlan conserva el refresh token en una cookie `HttpOnly`, `Secure`, `SameSite=Lax` y marca la respuesta como `no-store`.
 
-| WhatPlan operation | Central-auth path currently called |
-| --- | --- |
-| Login | `POST /api/login` |
-| Refresh | `POST /api/refresh` |
-| Logout | `POST /api/logout` |
-| Current account | `GET /api/me` |
-| Change password | `POST /api/change-password` |
+## Código y validación
 
-The local `User` stores no password hash. Automatic local provisioning is restricted to `USER`; configuring `AUTH_DEFAULT_ROLE=ADMIN` now prevents startup. Login and refresh fail closed unless the central response identifies the account as `ACTIVE`. The role remains sourced from the local account for existing users; a privileged role must be granted by an explicit, audited administrative operation.
+El código central está en `/opt/projects/auth-service/back/auth-service-backend` en el VPS. Se agregó `POST /api/register` y su prueba de servicio. La carpeta central no tiene metadatos Git; el parche versionado que reproduce el cambio está en [`central-auth-public-registration.patch`](central-auth-public-registration.patch). La copia aislada compiló con Java 21/Maven y pasaron sus pruebas unitarias.
 
-## Not verified / not implemented
+El backend WhatPlan crea el registro local con rol `USER`, deja que el usuario cree o acepte una pareja durante el onboarding y no habilita el panel admin. El límite público de registro es de cinco intentos por IP cada treinta minutos.
 
-No central-auth source repository, release/version, OpenAPI document, or integration environment is present in the WhatPlan workspace. The client has no registration, email-verification, password-recovery, account-deactivation, or account-deletion operation. The required request/response schemas, username/password rules, verification states, reset-token semantics, account lifecycle, and refresh revocation on account closure therefore cannot be safely inferred. No integration test against the real issuer can be written or run from the available artifacts.
+## Estado del host
 
-Do not expose a public registration endpoint, fabricate upstream routes, or treat this item as complete until the central service contract is verified. Adding a proxy with guessed paths would create an apparently working but unverified security boundary.
+Se actualizó el código fuente canónico, pero no se reconstruyó ni reinició el servicio central en ejecución. El endpoint todavía no está disponible en producción hasta publicar ese código en el flujo de despliegue de auth. La carpeta no está versionada, por lo que el parche adjunto conserva el cambio para aplicarlo y versionarlo cuando auth tenga un repositorio Git. Se guardó una copia previa de esos archivos en `/tmp/whatplan-central-auth-backup-01a11c16.tar` en el VPS.
 
-## Evidence needed to close C11
-
-Obtain from the central-auth service owner:
-
-1. Repository and immutable release/commit identifier, plus a staging endpoint and test credentials/flow.
-2. Versioned contract for registration, optional email verification, login, refresh, logout, current-account status, password recovery/change, and account deactivation/deletion.
-3. Documented username/password constraints, anti-enumeration behavior, rate-limit expectations, and exact account states; unverified or disabled accounts must not receive usable WhatPlan access tokens.
-4. Proof that user self-registration cannot select a role and that administrative grants are explicit and audited.
-5. Proof that account closure and password recovery revoke or rotate active refresh sessions, and a defined policy for the user's WhatPlan content/couple membership on closure.
-6. Integration evidence that the actual issuer satisfies `docs/JWT_AUTH_CONTRACT.md`, including status transitions and refresh-token revocation.
-
-Once supplied, implement a thin `CentralAuthClient` adapter with bounded timeouts, route-specific rate limits, sanitized errors, and tests against a controllable staging contract. Keep password verification and reset secrets exclusively in central auth. C11 remains an external release blocker until that verification passes.
+No se incorporaron recuperación de contraseña, verificación por email ni baja de cuenta: el servicio actual no tiene correo registrado ni esos contratos, y no son necesarios para crear la cuenta solicitada. El cambio no incluye despliegue.

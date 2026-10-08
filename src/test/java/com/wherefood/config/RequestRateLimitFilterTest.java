@@ -61,6 +61,20 @@ class RequestRateLimitFilterTest {
     }
 
     @Test
+    void limitsPublicRegistrationByClientAddress() throws Exception {
+        when(limiter.allow(eq("register"), eq("203.0.113.8"), eq(5), any(Duration.class))).thenReturn(false);
+        RequestRateLimitFilter filter = new RequestRateLimitFilter(limiter, "");
+        MockHttpServletRequest request = new MockHttpServletRequest("POST", "/api/auth/register");
+        request.setRemoteAddr("203.0.113.8");
+        MockHttpServletResponse response = new MockHttpServletResponse();
+
+        filter.doFilter(request, response, (req, res) -> {});
+
+        assertEquals(429, response.getStatus());
+        verify(limiter).allow(eq("register"), eq("203.0.113.8"), eq(5), eq(Duration.ofMinutes(30)));
+    }
+
+    @Test
     void appliesBothIndividualAndSharedCoupleUploadLimits() throws Exception {
         UUID coupleId = UUID.fromString("00000000-0000-0000-0000-000000000008");
         CoupleContext.set(coupleId);

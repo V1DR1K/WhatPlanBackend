@@ -40,6 +40,10 @@ public class CentralAuthClient {
         return post("/api/login", new LoginRequest(username, password), null, TokenResponse.class);
     }
 
+    public TokenResponse register(String username, String password) {
+        return post("/api/register", new RegisterRequest(username, password), null, TokenResponse.class);
+    }
+
     public TokenResponse refresh(String refreshToken) {
         return post("/api/refresh", new RefreshRequest(refreshToken), null, TokenResponse.class);
     }
@@ -103,6 +107,7 @@ public class CentralAuthClient {
     }
 
     public record LoginRequest(String username, String password) {}
+    public record RegisterRequest(String username, String password) {}
     public record RefreshRequest(String refreshToken) {}
     public record ChangePasswordRequest(String currentPassword, String newPassword) {}
     public record TokenResponse(String accessToken, String refreshToken, String tokenType, long expiresIn, CentralUser user) {}
