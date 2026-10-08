@@ -28,7 +28,20 @@ public class SecurityConfig {
     }
 
     @Bean
-    SecurityFilterChain security(HttpSecurity http, CentralJwtFilter filter, RequestRateLimitFilter rateLimit) throws Exception {
+    AdminAuditFilter adminAuditFilter(com.wherefood.web.AdminAuditService audit) {
+        return new AdminAuditFilter(audit);
+    }
+
+    @Bean
+    FilterRegistrationBean<AdminAuditFilter> disableServletAdminAuditRegistration(AdminAuditFilter filter) {
+        FilterRegistrationBean<AdminAuditFilter> registration = new FilterRegistrationBean<>(filter);
+        registration.setEnabled(false);
+        return registration;
+    }
+
+    @Bean
+    SecurityFilterChain security(HttpSecurity http, CentralJwtFilter filter, RequestRateLimitFilter rateLimit,
+            AdminAuditFilter adminAudit) throws Exception {
         return http.csrf(org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer::disable)
                 .httpBasic(basic -> basic.disable())
                 .formLogin(login -> login.disable())
@@ -41,11 +54,12 @@ public class SecurityConfig {
                                 ProblemDetailsSupport.write(response, HttpStatus.FORBIDDEN,
                                         "FORBIDDEN", "La solicitud no está permitida.", null)))
                 .authorizeHttpRequests(auth -> auth
-                        .requestMatchers("/api/auth/login", "/api/auth/refresh", "/api/auth/logout", "/api/actuator/health", "/api/actuator/health/**").permitAll()
+                        .requestMatchers("/api/auth/login", "/api/auth/register", "/api/auth/refresh", "/api/auth/logout", "/api/actuator/health", "/api/actuator/health/**").permitAll()
                         .requestMatchers("/api/actuator/prometheus").hasRole("ADMIN")
                         .anyRequest().authenticated())
                 .addFilterBefore(filter, UsernamePasswordAuthenticationFilter.class)
                 .addFilterAfter(rateLimit, CentralJwtFilter.class)
+                .addFilterAfter(adminAudit, RequestRateLimitFilter.class)
                 .build();
     }
 

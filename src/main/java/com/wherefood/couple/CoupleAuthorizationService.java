@@ -1,6 +1,7 @@
 package com.wherefood.couple;
 
 import com.wherefood.config.CoupleContext;
+import com.wherefood.config.AdminCoupleContext;
 import com.wherefood.domain.User;
 import com.wherefood.repo.Repositories.CoupleMembers;
 import java.util.Optional;
@@ -28,6 +29,11 @@ public class CoupleAuthorizationService {
     @Transactional(readOnly = true)
     public UUID requireActiveMember(User user) {
         UUID contextCoupleId = CoupleContext.current();
+        UUID adminCoupleId = AdminCoupleContext.current();
+        if (user != null && user.role == com.wherefood.domain.Role.ADMIN
+                && adminCoupleId != null && adminCoupleId.equals(contextCoupleId)) {
+            return adminCoupleId;
+        }
         UUID activeCoupleId = resolvePrivateCouple(user)
                 .filter(id -> id.equals(contextCoupleId))
                 .orElseThrow(CoupleAuthorizationService::notFound);
@@ -39,6 +45,7 @@ public class CoupleAuthorizationService {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, resourceName + " no encontrada");
         }
         requireActiveMember(actor);
+        if (AdminCoupleContext.current() != null) return;
         if (!ownerId.equals(actor.id)) throw new ResponseStatusException(HttpStatus.NOT_FOUND, resourceName + " no encontrada");
     }
 

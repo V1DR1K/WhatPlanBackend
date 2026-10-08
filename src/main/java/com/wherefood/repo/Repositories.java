@@ -34,6 +34,8 @@ public final class Repositories {
    @Query("select u from User u where lower(u.username) = lower(:username)")
    Optional<User> findByUsernameIgnoreCase(@Param("username") String username);
    Optional<User> findByAuthUserId(java.util.UUID authUserId);
+   List<User> findAllByOrderByCreatedAtDesc();
+   long countByRole(Role role);
    @Modifying
    @Query("update User u set u.defaultZoneId = null where u.defaultZoneId = :zoneId")
    int clearDefaultZone(@Param("zoneId") Long zoneId);
@@ -43,6 +45,8 @@ public final class Repositories {
    @Lock(LockModeType.PESSIMISTIC_WRITE)
    @Query("select c from Couple c where c.id = :id")
    Optional<Couple> findLockedById(@Param("id") java.util.UUID id);
+   List<Couple> findAllByOrderByCreatedAtDesc();
+   long countByStatus(CoupleStatus status);
  }
 
  public interface CoupleMembers extends JpaRepository<CoupleMember, Long> {
@@ -62,6 +66,28 @@ public final class Repositories {
            @Param("userId") Long userId, @Param("status") CoupleMemberStatus status);
 
    long countByCoupleIdAndStatus(java.util.UUID coupleId, CoupleMemberStatus status);
+   long countByStatus(CoupleMemberStatus status);
+
+   @EntityGraph(attributePaths = {"couple", "user"})
+   @Query("select m from CoupleMember m where m.status = :status order by m.couple.createdAt desc, m.slot")
+   List<CoupleMember> findAllDetailedByStatus(@Param("status") CoupleMemberStatus status);
+
+   @EntityGraph(attributePaths = {"couple", "user"})
+   @Query("select m from CoupleMember m order by m.couple.createdAt desc, m.slot")
+   List<CoupleMember> findAllDetailed();
+
+   @EntityGraph(attributePaths = {"couple", "user"})
+   @Query("select m from CoupleMember m where m.couple.id = :coupleId order by m.slot, m.joinedAt")
+   List<CoupleMember> findAllDetailedByCoupleIdOrderBySlot(@Param("coupleId") java.util.UUID coupleId);
+
+ }
+
+ public interface AdminAuditEvents extends JpaRepository<AdminAuditEvent, Long> {
+   @EntityGraph(attributePaths = "actor")
+   @Query("select e from AdminAuditEvent e where (:coupleId is null or e.coupleId = :coupleId) "
+           + "and (:actorId is null or e.actor.id = :actorId)")
+   org.springframework.data.domain.Page<AdminAuditEvent> search(@Param("coupleId") java.util.UUID coupleId,
+           @Param("actorId") Long actorId, org.springframework.data.domain.Pageable pageable);
  }
 
  public interface CoupleInvitations extends JpaRepository<CoupleInvitation, Long> {
