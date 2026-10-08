@@ -1016,6 +1016,12 @@ class CoupleHttpIsolationIntegrationTest {
         return http.exchange(url(path), HttpMethod.GET, new HttpEntity<>(headers), String.class);
     }
 
+    private ResponseEntity<String> getAdminScoped(String path, UUID subject, UUID coupleId) {
+        HttpHeaders headers = authHeaders(subject);
+        headers.set("X-WhatPlan-Admin-Couple", coupleId.toString());
+        return http.exchange(url(path), HttpMethod.GET, new HttpEntity<>(headers), String.class);
+    }
+
     private ResponseEntity<String> delete(String path, UUID subject) {
         return http.exchange(url(path), HttpMethod.DELETE, new HttpEntity<>(authHeaders(subject)), String.class);
     }
@@ -1371,6 +1377,11 @@ class CoupleHttpIsolationIntegrationTest {
             assertThat(location.path("homeLabels").get(0).path("displayName").asText()).isEqualTo("Member A1");
             assertThat(location.path("homeLabels").get(1).path("displayName").asText()).isEqualTo("Member A2");
             assertThat(context.getBody()).contains("Rosario");
+
+            ResponseEntity<String> scopedAdmin = getAdminScoped("/api/places", USER_A1_AUTH_ID, COUPLE_B_ID);
+            assertThat(scopedAdmin.getStatusCode().value()).isEqualTo(200);
+            assertThat(scopedAdmin.getBody()).contains("Private place B").doesNotContain("Private place A");
+            assertProblem(getAdminScoped("/api/places", USER_A2_AUTH_ID, COUPLE_B_ID), 403, "FORBIDDEN");
 
             for (var catalog : java.util.Map.of(
                     "/api/places", "Private place A",
