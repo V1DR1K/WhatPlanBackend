@@ -19,6 +19,7 @@ import org.springframework.stereotype.Component;
 
 @Component
 public class CentralJwt {
+    private static final String CLIENT_APP = "whatplan";
     private static final String ACCESS_TOKEN_TYPE = "access";
     private static final long CLOCK_SKEW_SECONDS = 60;
     private static final int MAX_PUBLIC_KEYS = 3;
@@ -57,6 +58,10 @@ public class CentralJwt {
         }
 
         Claims claims = parsed.getPayload();
+        String clientApp = claims.get("client_app", String.class);
+        if (clientApp != null && !CLIENT_APP.equals(clientApp)) {
+            throw new IllegalArgumentException("Central JWT is scoped to another application");
+        }
         Date issuedAt = claims.getIssuedAt();
         Date expiresAt = claims.getExpiration();
         if (claims.getSubject() == null || issuedAt == null || expiresAt == null) {

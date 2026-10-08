@@ -27,6 +27,16 @@ class CentralJwtTest {
     }
 
     @Test
+    void acceptsWhatPlanTokensAndRejectsTokensScopedToOtherApplications() throws Exception {
+        KeyPair keys = rsaKeys();
+        CentralJwt jwt = jwt(keys);
+
+        assertEquals(USER_ID, jwt.subject(token(keys, Claims.valid().withClientApp("whatplan"))));
+        assertInvalid(jwt, token(keys, Claims.valid().withClientApp("notes")));
+        assertInvalid(jwt, token(keys, Claims.valid().withClientApp("scalegrams")));
+    }
+
+    @Test
     void rejectsIssuerAudienceAndTokenTypeMismatches() throws Exception {
         KeyPair keys = rsaKeys();
         CentralJwt jwt = jwt(keys);
@@ -103,6 +113,7 @@ class CentralJwtTest {
         var builder = Jwts.builder().subject(claims.subject()).issuer(claims.issuer());
         if (claims.audience() != null) builder.audience().add(claims.audience()).and();
         if (claims.type() != null) builder.claim("token_type", claims.type());
+        if (claims.clientApp() != null) builder.claim("client_app", claims.clientApp());
         if (claims.issuedAt() != null) builder.issuedAt(Date.from(claims.issuedAt()));
         if (claims.notBefore() != null) builder.notBefore(Date.from(claims.notBefore()));
         if (claims.expiration() != null) builder.expiration(Date.from(claims.expiration()));
@@ -123,23 +134,24 @@ class CentralJwtTest {
     }
 
     private record Claims(String subject, String issuer, String audience, String type,
-                          Instant issuedAt, Instant notBefore, Instant expiration) {
+                          Instant issuedAt, Instant notBefore, Instant expiration, String clientApp) {
         static Claims valid() {
             Instant now = Instant.now();
             return new Claims(USER_ID.toString(), ISSUER, AUDIENCE, "access",
-                    now.minusSeconds(5), now.minusSeconds(5), now.plusSeconds(300));
+                    now.minusSeconds(5), now.minusSeconds(5), now.plusSeconds(300), null);
         }
-        Claims withIssuer(String value) { return new Claims(subject, value, audience, type, issuedAt, notBefore, expiration); }
-        Claims withAudience(String value) { return new Claims(subject, issuer, value, type, issuedAt, notBefore, expiration); }
-        Claims withoutAudience() { return new Claims(subject, issuer, null, type, issuedAt, notBefore, expiration); }
-        Claims withType(String value) { return new Claims(subject, issuer, audience, value, issuedAt, notBefore, expiration); }
-        Claims withoutType() { return new Claims(subject, issuer, audience, null, issuedAt, notBefore, expiration); }
-        Claims withSubject(String value) { return new Claims(value, issuer, audience, type, issuedAt, notBefore, expiration); }
-        Claims withoutIssuedAt() { return new Claims(subject, issuer, audience, type, null, notBefore, expiration); }
-        Claims withoutNotBefore() { return new Claims(subject, issuer, audience, type, issuedAt, null, expiration); }
-        Claims withoutExpiration() { return new Claims(subject, issuer, audience, type, issuedAt, notBefore, null); }
-        Claims withNotBefore(Instant value) { return new Claims(subject, issuer, audience, type, issuedAt, value, expiration); }
-        Claims withExpiration(Instant value) { return new Claims(subject, issuer, audience, type, issuedAt, notBefore, value); }
-        Claims withLifetime(long seconds) { return new Claims(subject, issuer, audience, type, issuedAt, notBefore, issuedAt.plusSeconds(seconds)); }
+        Claims withIssuer(String value) { return new Claims(subject, value, audience, type, issuedAt, notBefore, expiration, clientApp); }
+        Claims withAudience(String value) { return new Claims(subject, issuer, value, type, issuedAt, notBefore, expiration, clientApp); }
+        Claims withoutAudience() { return new Claims(subject, issuer, null, type, issuedAt, notBefore, expiration, clientApp); }
+        Claims withType(String value) { return new Claims(subject, issuer, audience, value, issuedAt, notBefore, expiration, clientApp); }
+        Claims withoutType() { return new Claims(subject, issuer, audience, null, issuedAt, notBefore, expiration, clientApp); }
+        Claims withSubject(String value) { return new Claims(value, issuer, audience, type, issuedAt, notBefore, expiration, clientApp); }
+        Claims withoutIssuedAt() { return new Claims(subject, issuer, audience, type, null, notBefore, expiration, clientApp); }
+        Claims withoutNotBefore() { return new Claims(subject, issuer, audience, type, issuedAt, null, expiration, clientApp); }
+        Claims withoutExpiration() { return new Claims(subject, issuer, audience, type, issuedAt, notBefore, null, clientApp); }
+        Claims withNotBefore(Instant value) { return new Claims(subject, issuer, audience, type, issuedAt, value, expiration, clientApp); }
+        Claims withExpiration(Instant value) { return new Claims(subject, issuer, audience, type, issuedAt, notBefore, value, clientApp); }
+        Claims withLifetime(long seconds) { return new Claims(subject, issuer, audience, type, issuedAt, notBefore, issuedAt.plusSeconds(seconds), clientApp); }
+        Claims withClientApp(String value) { return new Claims(subject, issuer, audience, type, issuedAt, notBefore, expiration, value); }
     }
 }

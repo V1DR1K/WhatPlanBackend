@@ -5,12 +5,13 @@ WhatPlan solo acepta un JWT firmado como bearer cuando cumple todas estas condic
 - firma RSA `RS256` con una clave pública RSA de al menos 2048 bits;
 - `iss` coincide exactamente con `AUTH_JWT_ISSUER`;
 - `aud` contiene `AUTH_JWT_AUDIENCE` (el emisor central desplegado usa `central-auth`);
+- si `client_app` está presente, debe ser exactamente `whatplan`; tokens de `notes` o `scalegrams` se rechazan;
 - si `token_type` está presente, es exactamente `access`; para el contrato legado del emisor central debe faltar `token_type` y estar presentes `uid` igual a `sub` y `username` no vacío;
 - `sub` es un UUID en formato canónico;
 - están presentes `iat` y `exp`; los tokens modernos con `token_type=access` también deben incluir `nbf`, mientras que el contrato legado no lo emite;
 - el emisor no fija `iat` más de 60 segundos en el futuro y la vigencia `exp - iat` no excede `AUTH_MAX_ACCESS_TOKEN_TTL_SECONDS` (por defecto 900, máximo configurable 3600).
 
-El parser aplica 60 segundos de tolerancia a los límites temporales. El emisor central desplegado usa access JWT firmados con `uid`/`username`; los refresh tokens son valores aleatorios opacos, no JWT. El contrato moderno requiere `token_type=access` y `nbf`; la forma anterior solo se acepta si el token firmado contiene `uid` igual a `sub` y `username` no vacío. Un token inválido deja la petición anónima y las rutas protegidas devuelven 401 RFC 9457. La búsqueda del usuario local y la resolución de membresía ocurren fuera del bloque que captura fallos criptográficos; errores de PostgreSQL no se silencian como si el token fuera inválido.
+El parser aplica 60 segundos de tolerancia a los límites temporales. El emisor central actual agrega `client_app` y WhatPlan rechaza cualquier valor de otra aplicación. Los tokens anteriores que todavía no traen ese claim se aceptan durante la transición; una vez vencidos, todos los accesos quedan limitados por aplicación. El emisor usa access JWT firmados con `uid`/`username`; los refresh tokens son valores aleatorios opacos, no JWT. El contrato moderno requiere `token_type=access` y `nbf`; la forma anterior solo se acepta si el token firmado contiene `uid` igual a `sub` y `username` no vacío. Un token inválido deja la petición anónima y las rutas protegidas devuelven 401 RFC 9457. La búsqueda del usuario local y la resolución de membresía ocurren fuera del bloque que captura fallos criptográficos; errores de PostgreSQL no se silencian como si el token fuera inválido.
 
 ## Configuración
 
