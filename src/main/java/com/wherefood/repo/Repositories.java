@@ -31,6 +31,9 @@ public final class Repositories {
    @Lock(LockModeType.PESSIMISTIC_WRITE)
    @Query("select u from User u where u.id = :id")
    Optional<User> findLockedById(@Param("id") Long id);
+   @Lock(LockModeType.PESSIMISTIC_WRITE)
+   @Query("select u from User u where u.role = :role order by u.id")
+   List<User> findLockedByRole(@Param("role") Role role);
    @Query("select u from User u where lower(u.username) = lower(:username)")
    Optional<User> findByUsernameIgnoreCase(@Param("username") String username);
    Optional<User> findByAuthUserId(java.util.UUID authUserId);

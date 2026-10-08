@@ -169,6 +169,9 @@ public class AdminService {
         } catch (RuntimeException invalidRole) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "El rol debe ser USER o ADMIN");
         }
+        // Serialize role changes against the current admin rows so concurrent demotions
+        // cannot both observe a second admin and remove the last administrator.
+        users.findLockedByRole(Role.ADMIN);
         User target = users.findLockedById(userId).orElseThrow(() -> notFound("Usuario"));
         if (target.role == Role.ADMIN && role != Role.ADMIN && users.countByRole(Role.ADMIN) <= 1) {
             throw conflict("Debe quedar al menos un administrador activo");

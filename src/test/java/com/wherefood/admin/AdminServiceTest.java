@@ -70,5 +70,6 @@ class AdminServiceTest {
 
         assertEquals(HttpStatus.CONFLICT, failure.getStatusCode());
         assertEquals(Role.ADMIN, lastAdmin.role);
+        verify(users).findLockedByRole(Role.ADMIN);
     }
 }
