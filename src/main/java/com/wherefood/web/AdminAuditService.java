@@ -45,17 +45,18 @@ public class AdminAuditService {
     }
 
     @Transactional(readOnly = true)
-    public AuditPage search(UUID coupleId, Long actorId, int requestedLimit) {
+    public AuditPage search(UUID coupleId, Long actorId, int requestedPage, int requestedLimit) {
+        int page = Math.max(0, requestedPage);
         int limit = Math.max(1, Math.min(requestedLimit, 100));
         var rows = events.search(coupleId, actorId,
-                PageRequest.of(0, limit, Sort.by(Sort.Order.desc("occurredAt"), Sort.Order.desc("id"))));
+                PageRequest.of(page, limit, Sort.by(Sort.Order.desc("occurredAt"), Sort.Order.desc("id"))));
         return new AuditPage(rows.getContent().stream().map(value -> new AuditEntry(
                 value.id, value.actor.id, value.actorUsername, value.coupleId, value.action,
                 value.httpMethod, value.requestPath, value.responseStatus, value.occurredAt)).toList(),
-                rows.getTotalElements(), limit);
+                rows.getTotalElements(), rows.getNumber(), limit, rows.getTotalPages());
     }
 
     public record AuditEntry(Long id, Long actorUserId, String actorUsername, UUID coupleId,
                              String action, String method, String path, short status, Instant occurredAt) {}
-    public record AuditPage(java.util.List<AuditEntry> entries, long total, int limit) {}
+    public record AuditPage(java.util.List<AuditEntry> entries, long total, int page, int limit, int totalPages) {}
 }

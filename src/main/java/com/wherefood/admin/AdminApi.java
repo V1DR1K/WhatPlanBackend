@@ -94,8 +94,9 @@ public class AdminApi {
     @GetMapping("/audit")
     AdminAuditService.AuditPage audit(@RequestParam(required = false) UUID coupleId,
             @RequestParam(required = false) Long actorId,
+            @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "50") int limit) {
-        return audit.search(coupleId, actorId, limit);
+        return audit.search(coupleId, actorId, page, limit);
     }
 
     public record CreateCoupleRequest(@NotNull Long firstMemberUserId) {}
