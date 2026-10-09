@@ -110,6 +110,9 @@ public final class JourneyRepositories {
     public interface Movements extends Scoped<JourneyMovement> {
         List<JourneyMovement> findByJourneyIdAndCoupleId(UUID journeyId, UUID coupleId);
 
+        List<JourneyMovement> findByJourneyIdAndCoupleIdAndPointId(
+                UUID journeyId, UUID coupleId, UUID pointId);
+
         boolean existsByJourneyIdAndCoupleId(UUID journeyId, UUID coupleId);
     }
 
@@ -143,6 +146,9 @@ public final class JourneyRepositories {
 
     public interface Files extends Scoped<JourneyFile> {
         List<FileSummary> findSummariesByJourneyIdAndCoupleId(UUID journeyId, UUID coupleId);
+
+        List<JourneyFile> findByJourneyIdAndCoupleIdAndPointId(
+                UUID journeyId, UUID coupleId, UUID pointId);
 
         boolean existsByJourneyIdAndCoupleId(UUID journeyId, UUID coupleId);
 

@@ -471,8 +471,12 @@ public class JourneyService {
         SourceRef old = ref(p);
         if (old != null
                 && old.experienceId() != null
-                && (!Objects.equals(old, r.source()) || !p.stageId.equals(r.stageId())))
+                && !p.stageId.equals(r.stageId()))
             throw conflict("Reubicá la experiencia desde su sección antes de cambiar el punto");
+        if (old != null
+                && old.experienceId() != null
+                && !Objects.equals(old, r.source()))
+            detachExperienceFromJourney(old);
         p.journeyId = tripId;
         p.stageId = s.id;
         p.title = r.title().trim();
@@ -560,6 +564,12 @@ public class JourneyService {
         }
     }
 
+    private void detachExperienceFromJourney(SourceRef source) {
+        ExperienceDto experience =
+                sources.experience(source.section(), source.entityId(), source.experienceId());
+        sources.locate(source.section(), experience.id(), experience.cityId(), null);
+    }
+
     private void ensureUnused(SourceRef source, UUID pointId) {
         if (source.experienceId() == null) return;
         Long count =
@@ -586,13 +596,20 @@ public class JourneyService {
     public void deletePoint(UUID id) {
         JourneyPoint p = owned(points, id);
         trip(p.journeyId, true);
-        if (ref(p) != null && ref(p).experienceId() != null)
-            throw conflict("Desvinculá la experiencia antes de borrar el punto");
-        if (movements.findByJourneyIdAndCoupleId(p.journeyId, couple()).stream()
-                        .anyMatch(m -> id.equals(m.pointId))
-                || files.findSummariesByJourneyIdAndCoupleId(p.journeyId, couple()).stream()
-                        .anyMatch(f -> id.equals(f.getPointId())))
-            throw conflict("Reubicá los archivos y gastos antes de borrar el punto");
+        SourceRef source = ref(p);
+        if (source != null && source.experienceId() != null)
+            detachExperienceFromJourney(source);
+        for (JourneyMovement movement :
+                movements.findByJourneyIdAndCoupleIdAndPointId(p.journeyId, couple(), id)) {
+            movement.pointId = null;
+            if (movement.stageId == null) movement.stageId = p.stageId;
+            movements.save(movement);
+        }
+        for (JourneyFile file : files.findByJourneyIdAndCoupleIdAndPointId(p.journeyId, couple(), id)) {
+            file.pointId = null;
+            if (file.stageId == null) file.stageId = p.stageId;
+            files.save(file);
+        }
         points.delete(p);
     }
 
