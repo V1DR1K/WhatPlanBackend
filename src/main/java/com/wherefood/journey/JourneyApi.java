@@ -71,12 +71,6 @@ public class JourneyApi {
         return dayService.day(id, day);
     }
 
-    @PutMapping("/{id}/days/{day}/story")
-    public JourneyDayDto saveStory(@PathVariable UUID id, @PathVariable java.time.LocalDate day,
-            @RequestBody @Valid JourneyDayStoryRequest request) {
-        return dayService.saveStory(id, day, request);
-    }
-
     @PutMapping("/{id}/days/{day}/reviews/me")
     public JourneyDayReviewDto saveDayReview(@PathVariable UUID id,
             @PathVariable java.time.LocalDate day,

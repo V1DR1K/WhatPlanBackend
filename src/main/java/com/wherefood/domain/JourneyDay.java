@@ -9,5 +9,4 @@ import java.util.UUID;
 public class JourneyDay extends JourneyEntity {
     public UUID journeyId;
     public LocalDate day;
-    public String story;
 }

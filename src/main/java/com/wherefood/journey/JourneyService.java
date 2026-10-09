@@ -32,7 +32,6 @@ public class JourneyService {
     private final Movements movements;
     private final Files files;
     private final Reviews reviews;
-    private final Days journeyDays;
     private final DayReviews journeyDayReviews;
     private final com.wherefood.repo.Repositories.SpecialDates dateTemplates;
     private final com.wherefood.repo.Repositories.SpecialDateOccurrences dateOccurrences;
@@ -52,7 +51,6 @@ public class JourneyService {
             Movements movements,
             Files files,
             Reviews reviews,
-            Days journeyDays,
             DayReviews journeyDayReviews,
             LocationService locations,
             JourneySourceRepository sources,
@@ -70,7 +68,6 @@ public class JourneyService {
         this.movements = movements;
         this.files = files;
         this.reviews = reviews;
-        this.journeyDays = journeyDays;
         this.journeyDayReviews = journeyDayReviews;
         this.dateTemplates = dateTemplates;
         this.dateOccurrences = dateOccurrences;
@@ -241,10 +238,15 @@ public class JourneyService {
                 || !requestedStage.endsOn().equals(request.endsOn()))
             throw bad("El destino debe cubrir todo el período del viaje");
         Journey t = id == null ? new Journey() : trip(id, true);
-        if (id != null && journeyDays.findByJourneyIdAndCoupleIdOrderByDay(id, couple()).stream()
-                .anyMatch(day -> day.day.isBefore(request.startsOn())
-                        || day.day.isAfter(request.endsOn())))
-            throw conflict("Hay relatos, fotos o reseñas diarias fuera del nuevo período");
+        if (id != null && (files.existsByJourneyIdAndCoupleIdAndPurposeAndDayBefore(
+                        id, couple(), "DAY", request.startsOn())
+                || files.existsByJourneyIdAndCoupleIdAndPurposeAndDayAfter(
+                        id, couple(), "DAY", request.endsOn())
+                || journeyDayReviews.existsByJourneyIdAndCoupleIdAndDayBefore(
+                        id, couple(), request.startsOn())
+                || journeyDayReviews.existsByJourneyIdAndCoupleIdAndDayAfter(
+                        id, couple(), request.endsOn())))
+            throw conflict("Hay fotos o reseñas diarias fuera del nuevo período");
         t.name = request.name().trim();
         t.startsOn = request.startsOn();
         t.endsOn = request.endsOn();
@@ -331,7 +333,6 @@ public class JourneyService {
                 || movements.existsByJourneyIdAndCoupleId(id, couple())
                 || files.existsByJourneyIdAndCoupleId(id, couple())
                 || reviews.existsByJourneyIdAndCoupleId(id, couple())
-                || journeyDays.existsByJourneyIdAndCoupleId(id, couple())
                 || journeyDayReviews.existsByJourneyIdAndCoupleId(id, couple())
                 || stages.findByJourneyIdAndCoupleId(id, couple()).stream()
                         .anyMatch(s -> sources.stageHasExperiences(s.id)))
@@ -1031,15 +1032,6 @@ public class JourneyService {
             }
         em.flush();
         files.delete(f);
-        if ("DAY".equals(f.purpose) && f.day != null) {
-            journeyDays.findByJourneyIdAndCoupleIdAndDay(f.journeyId, couple(), f.day)
-                    .filter(day -> day.story == null
-                            && files.countByJourneyIdAndCoupleIdAndPurposeAndDay(
-                                    f.journeyId, couple(), "DAY", f.day) == 0
-                            && journeyDayReviews.findByJourneyIdAndCoupleIdAndDayOrderByUpdatedAtAsc(
-                                    f.journeyId, couple(), f.day).isEmpty())
-                    .ifPresent(journeyDays::delete);
-        }
     }
 
     public List<SourceDto> catalog(String section, Long city, String search) {

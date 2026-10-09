@@ -86,7 +86,7 @@ public class JourneyDayService {
 
     public JourneyDayDto day(UUID journeyId, LocalDate date) {
         Journey journey = trip(journeyId, false);
-        JourneyDay stored = within(journey, date);
+        within(journey, date);
         List<JourneyStage> stages = journeyStages(journeyId);
         List<JourneySpecialDateDto> dateLinks = specialDates
                 .findAllByCoupleIdOrderByDateAscLabelAscIdAsc(couple()).stream()
@@ -100,11 +100,11 @@ public class JourneyDayService {
         List<JourneyPhotoDto> dayPhotos = files
                 .findByJourneyIdAndCoupleIdAndPurposeAndDayOrderByCreatedAtAscIdAsc(
                         journeyId, couple(), "DAY", date).stream().map(this::photoDto).toList();
-        List<JourneyDayReviewDto> reviews = stored == null ? List.of() : dayReviews
+        List<JourneyDayReviewDto> reviews = dayReviews
                 .findByJourneyIdAndCoupleIdAndDayOrderByUpdatedAtAsc(journeyId, couple(), date)
                 .stream().map(this::reviewDto).toList();
-        return new JourneyDayDto(date, stored == null ? null : stored.story,
-                sources.journeyDayEntries(journeyId, date), dateLinks, dayPhotos, reviews);
+        return new JourneyDayDto(date, sources.journeyDayEntries(journeyId, date),
+                dateLinks, dayPhotos, reviews);
     }
 
     public List<JourneyDayIndexDto> days(UUID journeyId) {
@@ -122,18 +122,6 @@ public class JourneyDayService {
     public List<JourneyGalleryEntryDto> gallery(UUID journeyId) {
         Journey journey = trip(journeyId, false);
         return sources.journeyGalleryEntries(journeyId, journey.startsOn, journey.endsOn);
-    }
-
-    @Transactional
-    public JourneyDayDto saveStory(UUID journeyId, LocalDate date, JourneyDayStoryRequest request) {
-        Journey journey = trip(journeyId, true);
-        within(journey, date);
-        JourneyDay value = getOrCreateDay(journey, date);
-        value.story = request.story() == null || request.story().isBlank()
-                ? null : request.story().trim();
-        days.save(value);
-        if (value.story == null) pruneEmptyDay(journeyId, date);
-        return day(journeyId, date);
     }
 
     @Transactional
@@ -170,7 +158,6 @@ public class JourneyDayService {
                 .orElse(null);
         if (review != null) {
             dayReviews.delete(review);
-            pruneEmptyDay(journeyId, date);
         }
     }
 
@@ -278,13 +265,4 @@ public class JourneyDayService {
         return SpecialDateOccurrenceWindow.forDate(template, date).isPresent();
     }
 
-    private void pruneEmptyDay(UUID journeyId, LocalDate date) {
-        days.findByJourneyIdAndCoupleIdAndDay(journeyId, couple(), date).ifPresent(value -> {
-            boolean hasPhoto = files.countByJourneyIdAndCoupleIdAndPurposeAndDay(
-                    journeyId, couple(), "DAY", date) > 0;
-            boolean hasReview = !dayReviews.findByJourneyIdAndCoupleIdAndDayOrderByUpdatedAtAsc(
-                    journeyId, couple(), date).isEmpty();
-            if (value.story == null && !hasPhoto && !hasReview) days.delete(value);
-        });
-    }
 }

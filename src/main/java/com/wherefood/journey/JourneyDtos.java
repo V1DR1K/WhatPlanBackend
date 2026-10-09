@@ -329,11 +329,9 @@ public final class JourneyDtos {
             UUID id, Long userId, String author, Short rating, String comment) {}
 
     public record JourneyDayDto(
-            LocalDate date, String story, List<JourneyDayEntryDto> entries,
+            LocalDate date, List<JourneyDayEntryDto> entries,
             List<JourneySpecialDateDto> specialDates, List<JourneyPhotoDto> photos,
             List<JourneyDayReviewDto> reviews) {}
-
-    public record JourneyDayStoryRequest(@Size(max = 4000) String story) {}
 
     public record JourneyDayReviewRequest(
             @Min(1) @Max(5) Short rating, @Size(max = 2000) String comment) {}

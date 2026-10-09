@@ -150,6 +150,12 @@ public final class JourneyRepositories {
 
         long countByJourneyIdAndCoupleIdAndPurposeAndDay(UUID journeyId, UUID coupleId, String purpose, java.time.LocalDate day);
 
+        boolean existsByJourneyIdAndCoupleIdAndPurposeAndDayBefore(UUID journeyId, UUID coupleId,
+                String purpose, java.time.LocalDate day);
+
+        boolean existsByJourneyIdAndCoupleIdAndPurposeAndDayAfter(UUID journeyId, UUID coupleId,
+                String purpose, java.time.LocalDate day);
+
         List<JourneyFile> findByJourneyIdAndCoupleIdAndPurposeAndDayOrderByCreatedAtAscIdAsc(UUID journeyId, UUID coupleId, String purpose, java.time.LocalDate day);
 
         List<JourneyFile> findByJourneyIdAndCoupleIdAndPurposeOrderByCreatedAtAscIdAsc(UUID journeyId, UUID coupleId, String purpose);
@@ -157,14 +163,16 @@ public final class JourneyRepositories {
 
     public interface Days extends Scoped<JourneyDay> {
         Optional<JourneyDay> findByJourneyIdAndCoupleIdAndDay(UUID journeyId, UUID coupleId, java.time.LocalDate day);
-
-        List<JourneyDay> findByJourneyIdAndCoupleIdOrderByDay(UUID journeyId, UUID coupleId);
-
-        boolean existsByJourneyIdAndCoupleId(UUID journeyId, UUID coupleId);
     }
 
     public interface DayReviews extends Scoped<JourneyDayReview> {
         List<JourneyDayReview> findByJourneyIdAndCoupleIdAndDayOrderByUpdatedAtAsc(UUID journeyId, UUID coupleId, java.time.LocalDate day);
+
+        boolean existsByJourneyIdAndCoupleIdAndDayBefore(UUID journeyId, UUID coupleId,
+                java.time.LocalDate day);
+
+        boolean existsByJourneyIdAndCoupleIdAndDayAfter(UUID journeyId, UUID coupleId,
+                java.time.LocalDate day);
 
         Optional<JourneyDayReview> findByJourneyIdAndCoupleIdAndDayAndUserId(UUID journeyId, UUID coupleId, java.time.LocalDate day, Long userId);
 
